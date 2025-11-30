@@ -1,0 +1,92 @@
+# ============================================================================
+# ESP8266/Arduino Project - Build Artifacts
+# ============================================================================
+
+# Build output directory
+firmware/build/
+firmware/build/**
+
+# Compiled binaries and artifacts
+*.bin
+*.elf
+*.map
+*.hex
+*.eep
+
+# ============================================================================
+# Arduino CLI
+# ============================================================================
+
+# Arduino CLI data directory (from arduino-cli.yaml)
+firmware/.arduino15/
+firmware/.arduino15/**
+
+# Arduino CLI staging/downloads
+firmware/.arduino15/staging/
+firmware/.arduino15/staging/**
+
+# Arduino CLI cache
+firmware/.arduino15/cache/
+
+# ============================================================================
+# Libraries (downloaded dependencies)
+# ============================================================================
+
+# Library dependencies (keep library source if you maintain it)
+firmware/libraries/
+firmware/libraries/**
+
+# ============================================================================
+# IDE and Editor Files
+# ============================================================================
+
+# VS Code
+.vscode/
+.vscode/**
+*.code-workspace
+
+# Arduino IDE
+*.prefs
+*.bak
+
+
+# ============================================================================
+# OS Files
+# ============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# ============================================================================
+# Temporary and Log Files
+# ============================================================================
+
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# ============================================================================
+# Configuration Overrides (if any)
+# ============================================================================
+
+# Local config overrides
+config.mk.local
+*.local

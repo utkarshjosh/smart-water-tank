@@ -1,0 +1,25 @@
+# Build artifacts
+build/
+*.bin
+*.elf
+
+# arduino-cli data
+.arduino15/
+
+# IDE files
+.vscode/
+*.code-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*~
+
+# Credentials (don't commit these!)
+secrets.h
+credentials.h
+

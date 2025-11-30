@@ -1,0 +1,54 @@
+# ============================================================================
+# WATER TANK FIRMWARE - Library Dependencies
+# ============================================================================
+# Format: library_name@version (or just library_name for latest)
+# Lines starting with # are comments
+# ============================================================================
+
+# --- Core WiFi & Networking ---
+ArduinoJson@7.0.4
+PubSubClient@2.8
+WiFiManager@2.0.17
+
+# --- Sensors ---
+# Ultrasonic sensor support
+NewPing@1.9.7
+
+# Temperature sensor (DS18B20)
+OneWire@2.3.8
+DallasTemperature@3.9.0
+
+# --- Time & RTC ---
+NTPClient@3.2.1
+Time@1.6.1
+
+# --- Storage ---
+# LittleFS is included in ESP8266 core
+
+# --- OTA Updates ---
+# ArduinoOTA is included in ESP8266 core
+
+# --- Audio/Alerts ---
+# ESP8266Audio for better audio (optional, uncomment if needed)
+# ESP8266Audio@1.9.7
+
+# --- Debug & Logging ---
+# ArduinoLog@1.1.1
+
+# ============================================================================
+# Future Libraries (uncomment when needed)
+# ============================================================================
+
+# Pressure sensor (I2C)
+# Adafruit_BMP280@2.6.8
+
+# OLED Display
+# Adafruit_SSD1306@2.5.9
+# Adafruit_GFX@1.11.9
+
+# HTTP Client improvements
+# ArduinoHttpClient@0.6.1
+
+# Secure WiFi
+# WiFiClientSecure is included in ESP8266 core
+
