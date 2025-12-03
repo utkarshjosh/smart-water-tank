@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "Water Tank Monitor",
+    "slug": "water-tank-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.watertank.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.watertank.mobile"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [],
+    "extra": {
+      "apiUrl": "http://localhost:3000",
+      "firebaseApiKey": "AIzaSyC1MrN63kks77BAuDF9WumZo4tSsKljHxY",
+      "firebaseAuthDomain": "watertank-7c30e.firebaseapp.com",
+      "firebaseProjectId": "watertank-7c30e",
+      "firebaseStorageBucket": "watertank-7c30e.firebasestorage.app",
+      "firebaseMessagingSenderId": "871703391662",
+      "firebaseAppId": "1:871703391662:web:e0e91dc1dd1853c1e2ac3f",
+      "eas": {
+        "projectId": "8fdff070-5b63-4d4f-8a47-bb82b74745b9"
+      }
+    }
+  }
+}

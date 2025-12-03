@@ -1,92 +1,114 @@
 # ============================================================================
-# ESP8266/Arduino Project - Build Artifacts
+# Root Level - Common Files
 # ============================================================================
 
-# Build output directory
-firmware/build/
-firmware/build/**
+# Environment files
+.env
+.env.local
+.env.*.local
 
-# Compiled binaries and artifacts
-*.bin
-*.elf
-*.map
-*.hex
-*.eep
-
-# ============================================================================
-# Arduino CLI
-# ============================================================================
-
-# Arduino CLI data directory (from arduino-cli.yaml)
-firmware/.arduino15/
-firmware/.arduino15/**
-
-# Arduino CLI staging/downloads
-firmware/.arduino15/staging/
-firmware/.arduino15/staging/**
-
-# Arduino CLI cache
-firmware/.arduino15/cache/
-
-# ============================================================================
-# Libraries (downloaded dependencies)
-# ============================================================================
-
-# Library dependencies (keep library source if you maintain it)
-firmware/libraries/
-firmware/libraries/**
-
-# ============================================================================
 # IDE and Editor Files
-# ============================================================================
-
-# VS Code
 .vscode/
-.vscode/**
+.idea/
 *.code-workspace
+*.swp
+*.swo
+*~
 
-# Arduino IDE
-*.prefs
-*.bak
+# Language Servers
+.clangd/
 
+# Arduino CLI (root level - should be in firmware/)
+.arduino15/
+.arduino15/**
 
-# ============================================================================
 # OS Files
-# ============================================================================
-
-# macOS
 .DS_Store
 .AppleDouble
 .LSOverride
 ._*
-
-# Windows
 Thumbs.db
 ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 *.lnk
-
-# Linux
-*~
 .directory
 .Trash-*
 
-# ============================================================================
 # Temporary and Log Files
-# ============================================================================
-
 *.log
 *.tmp
 *.temp
-*.swp
-*.swo
-*~
+*.bak
 
 # ============================================================================
-# Configuration Overrides (if any)
+# Firmware (Arduino/ESP8266)
 # ============================================================================
+
+# Build output
+firmware/build/
+firmware/build/**
+
+# Compiled binaries
+firmware/*.bin
+firmware/*.elf
+firmware/*.map
+firmware/*.hex
+firmware/*.eep
+
+# Arduino CLI
+firmware/.arduino15/
+firmware/.arduino15/**
+
+# Libraries (downloaded dependencies)
+firmware/libraries/
+firmware/libraries/**
+
+# Arduino IDE
+firmware/*.prefs
 
 # Local config overrides
-config.mk.local
-*.local
+firmware/config.mk.local
+firmware/*.local
+
+# ============================================================================
+# Backend (Node.js/TypeScript)
+# ============================================================================
+
+backend/node_modules/
+backend/dist/
+backend/.env
+backend/*.log
+backend/storage/
+backend/.DS_Store
+
+# ============================================================================
+# Admin Panel (Next.js)
+# ============================================================================
+
+admin-panel/node_modules/
+admin-panel/.next/
+admin-panel/out/
+admin-panel/build/
+admin-panel/.env
+admin-panel/.env*.local
+admin-panel/.vercel/
+admin-panel/*.tsbuildinfo
+admin-panel/next-env.d.ts
+
+# ============================================================================
+# Mobile App (React Native/Expo)
+# ============================================================================
+
+mobile-app/node_modules/
+mobile-app/.expo/
+mobile-app/.expo-shared/
+mobile-app/dist/
+mobile-app/web-build/
+mobile-app/.env
+mobile-app/*.jks
+mobile-app/*.p8
+mobile-app/*.p12
+mobile-app/*.key
+mobile-app/*.mobileprovision
+mobile-app/*.orig.*

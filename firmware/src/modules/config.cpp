@@ -3,6 +3,7 @@
  */
 
 #include "config.h"
+#include <Arduino.h>
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 

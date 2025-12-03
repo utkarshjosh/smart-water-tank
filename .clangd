@@ -1,0 +1,54 @@
+CompileFlags:
+  Add:
+    # ESP8266 Core includes
+    - -I/home/utkarsh/WATER_TANK/firmware/.arduino15/packages/esp8266/hardware/esp8266/3.1.2/cores/esp8266
+    - -I/home/utkarsh/WATER_TANK/firmware/.arduino15/packages/esp8266/hardware/esp8266/3.1.2/variants/nodemcu
+    - -I/home/utkarsh/WATER_TANK/firmware/.arduino15/packages/esp8266/hardware/esp8266/3.1.2/tools/sdk/include
+    - -I/home/utkarsh/WATER_TANK/firmware/.arduino15/packages/esp8266/hardware/esp8266/3.1.2/tools/sdk/lwip2/include
+    - -I/home/utkarsh/WATER_TANK/firmware/.arduino15/packages/esp8266/hardware/esp8266/3.1.2/tools/sdk/libc/xtensa-lx106-elf/include
+    
+    # ESP8266 Built-in Libraries
+    - -I/home/utkarsh/WATER_TANK/firmware/.arduino15/packages/esp8266/hardware/esp8266/3.1.2/libraries/ESP8266WiFi/src
+    - -I/home/utkarsh/WATER_TANK/firmware/.arduino15/packages/esp8266/hardware/esp8266/3.1.2/libraries/LittleFS/src
+    - -I/home/utkarsh/WATER_TANK/firmware/.arduino15/packages/esp8266/hardware/esp8266/3.1.2/libraries/ESP8266HTTPClient/src
+    - -I/home/utkarsh/WATER_TANK/firmware/.arduino15/packages/esp8266/hardware/esp8266/3.1.2/libraries/ArduinoOTA
+    - -I/home/utkarsh/WATER_TANK/firmware/.arduino15/packages/esp8266/hardware/esp8266/3.1.2/libraries/ESP8266httpUpdate/src
+    
+    # User Libraries (from libraries.txt)
+    - -I/home/utkarsh/WATER_TANK/firmware/libraries/ArduinoJson/src
+    - -I/home/utkarsh/WATER_TANK/firmware/libraries/PubSubClient/src
+    - -I/home/utkarsh/WATER_TANK/firmware/libraries/WiFiManager
+    - -I/home/utkarsh/WATER_TANK/firmware/libraries/NewPing/src
+    - -I/home/utkarsh/WATER_TANK/firmware/libraries/NewPing
+    - -I/home/utkarsh/WATER_TANK/firmware/libraries/OneWire
+    - -I/home/utkarsh/WATER_TANK/firmware/libraries/DallasTemperature
+    - -I/home/utkarsh/WATER_TANK/firmware/libraries/NTPClient
+    - -I/home/utkarsh/WATER_TANK/firmware/libraries/Time
+    
+    # Project source directories
+    - -I/home/utkarsh/WATER_TANK/firmware/src
+    - -I/home/utkarsh/WATER_TANK/firmware/src/modules
+    
+    # Arduino defines for ESP8266
+    - -DESP8266
+    - -DARDUINO=10607
+    - -DARDUINO_ESP8266_NODEMCU_ESP12E
+    - -DARDUINO_ARCH_ESP8266
+    - -DARDUINO_BOARD="ESP8266_NODEMCU_ESP12E"
+    - -DF_CPU=80000000L
+    - -DLED_BUILTIN=2
+    - -DMMU_IRAM_SIZE=0x8000
+    - -DMMU_ICACHE_SIZE=0x8000
+    
+    # C++ standard
+    - -std=gnu++17
+    
+    # Suppress some warnings that are common in Arduino code
+    - -Wno-unknown-attributes
+    - -Wno-attributes
+
+Diagnostics:
+  Suppress:
+    - unknown_typename
+    - undeclared_var_use
+

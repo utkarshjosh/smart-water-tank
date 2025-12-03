@@ -1,25 +1,46 @@
 # Build artifacts
 build/
+build/**
 *.bin
 *.elf
+*.map
+*.hex
+*.eep
 
-# arduino-cli data
+# Arduino CLI
 .arduino15/
+.arduino15/**
+
+# Libraries (downloaded dependencies)
+libraries/
+libraries/**
 
 # IDE files
 .vscode/
+.idea/
 *.code-workspace
+*.prefs
 
 # OS files
 .DS_Store
 Thumbs.db
+.AppleDouble
+.LSOverride
+._*
 
 # Temporary files
 *.tmp
+*.temp
 *.bak
+*.swp
+*.swo
 *~
 
 # Credentials (don't commit these!)
 secrets.h
 credentials.h
+config.h.local
+*.local
 
+# Logs
+*.log
