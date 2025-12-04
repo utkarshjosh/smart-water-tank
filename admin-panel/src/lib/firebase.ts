@@ -1,5 +1,5 @@
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
-import { getAuth, Auth } from 'firebase/auth';
+import { getAuth, Auth, setPersistence, browserLocalPersistence } from 'firebase/auth';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -18,6 +18,14 @@ if (getApps().length === 0) {
 }
 
 export const auth = getAuth(app);
+
+// Set persistence to local storage to ensure auth state persists across page refreshes
+if (typeof window !== 'undefined') {
+  setPersistence(auth, browserLocalPersistence).catch((error) => {
+    console.error('Error setting auth persistence:', error);
+  });
+}
+
 export default app;
 
 

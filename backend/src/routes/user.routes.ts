@@ -2,11 +2,104 @@ import express from 'express';
 import { authenticateFirebase, AuthRequest, requireRole } from '../middleware/auth.middleware';
 import { enforceTenantAccess, validateDeviceAccess } from '../middleware/tenant.middleware';
 import { query } from '../config/database';
+import { getAuth } from '../config/firebase';
 import { z } from 'zod';
 
 const router = express.Router();
 
-// All user routes require Firebase authentication
+// POST /api/v1/user/register - Self-registration (requires Firebase auth but no tenant yet)
+const registerSchema = z.object({
+  name: z.string().min(1).max(255),
+  tenant_id: z.string().uuid().optional(), // Optional - admin can assign later
+});
+
+router.post('/register', authenticateFirebase, async (req: AuthRequest, res) => {
+  try {
+    if (!req.firebaseUid) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    // Validate request body
+    const validationResult = registerSchema.safeParse(req.body);
+    if (!validationResult.success) {
+      return res.status(400).json({ 
+        error: 'Validation failed', 
+        details: validationResult.error.errors 
+      });
+    }
+
+    const { name, tenant_id } = validationResult.data;
+
+    // Get Firebase user info
+    const auth = getAuth();
+    const firebaseUser = await auth.getUser(req.firebaseUid);
+
+    // Check if user already exists
+    const existingUser = await query(
+      'SELECT id FROM users WHERE firebase_uid = $1',
+      [req.firebaseUid]
+    );
+
+    if (existingUser.rows.length > 0) {
+      // Update existing user
+      await query(
+        `UPDATE users 
+         SET name = $1, email = $2, updated_at = NOW()
+         WHERE firebase_uid = $3`,
+        [name, firebaseUser.email || '', req.firebaseUid]
+      );
+
+      const updatedUser = await query(
+        `SELECT u.*, t.name as tenant_name
+         FROM users u
+         LEFT JOIN tenants t ON t.id = u.tenant_id
+         WHERE u.firebase_uid = $1`,
+        [req.firebaseUid]
+      );
+
+      return res.json({
+        user: updatedUser.rows[0],
+        message: 'User profile updated',
+      });
+    }
+
+    // If tenant_id provided, verify it exists
+    if (tenant_id) {
+      const tenantResult = await query(
+        'SELECT id FROM tenants WHERE id = $1',
+        [tenant_id]
+      );
+
+      if (tenantResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Tenant not found' });
+      }
+    }
+
+    // Create new user
+    const result = await query(
+      `INSERT INTO users (firebase_uid, email, name, tenant_id, role)
+       VALUES ($1, $2, $3, $4, 'user')
+       RETURNING *`,
+      [req.firebaseUid, firebaseUser.email || '', name, tenant_id || null]
+    );
+
+    res.status(201).json({
+      user: result.rows[0],
+      message: 'User registered successfully',
+    });
+  } catch (error: any) {
+    console.error('Error registering user:', error);
+    
+    // Handle unique constraint violation
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'User already exists' });
+    }
+    
+    res.status(500).json({ error: 'Failed to register user' });
+  }
+});
+
+// All other user routes require Firebase authentication and tenant
 router.use(authenticateFirebase);
 router.use(enforceTenantAccess);
 

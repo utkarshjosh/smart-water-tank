@@ -40,7 +40,7 @@
 #define SERVER_HOST         "your-server.com"
 #define SERVER_PORT         443
 #define SERVER_ENDPOINT     "/api/v1/measurements"
-#define DEVICE_TOKEN        "your-device-token"
+#define DEVICE_TOKEN        "688bb1924d4a0f43d1ace8eaf9d4475d86841761c280fc4bf3650b51a32b8043"
 
 // Use HTTPS (recommended)
 #define USE_HTTPS           true

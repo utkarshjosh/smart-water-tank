@@ -25,7 +25,7 @@ try {
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3001',
+  origin:  '*', //process.env.CORS_ORIGIN || 'http://localhost:3001',
   credentials: true,
 }));
 app.use(express.json());
@@ -71,5 +71,6 @@ process.on('SIGTERM', async () => {
   await pool.end();
   process.exit(0);
 });
+
 
 

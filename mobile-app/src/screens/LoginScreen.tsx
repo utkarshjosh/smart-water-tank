@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { auth } from '../config/firebase';
+import api from '../config/api';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
 
@@ -15,10 +17,37 @@ export default function LoginScreen() {
       return;
     }
 
+    if (isSignUp && !name.trim()) {
+      Alert.alert('Error', 'Please enter your name');
+      return;
+    }
+
     setLoading(true);
     try {
       if (isSignUp) {
-        await createUserWithEmailAndPassword(auth, email, password);
+        // Create Firebase user
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        // Update Firebase user profile with displayName
+        if (name.trim()) {
+          await updateProfile(user, {
+            displayName: name.trim(),
+          });
+        }
+
+        // Register user in backend database
+        try {
+          await api.post('/api/v1/user/register', {
+            name: name.trim(),
+          });
+        } catch (apiError: any) {
+          // If user already exists in backend, that's okay
+          if (apiError.response?.status !== 409) {
+            console.error('Failed to register user in backend:', apiError);
+            // Don't fail the registration, but log the error
+          }
+        }
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
@@ -30,11 +59,21 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Water Tank Monitor</Text>
       <Text style={styles.subtitle}>
         {isSignUp ? 'Create an account' : 'Sign in to continue'}
       </Text>
+
+      {isSignUp && (
+        <TextInput
+          style={styles.input}
+          placeholder="Full Name"
+          value={name}
+          onChangeText={setName}
+          autoCapitalize="words"
+        />
+      )}
 
       <TextInput
         style={styles.input}
@@ -65,7 +104,13 @@ export default function LoginScreen() {
 
       <TouchableOpacity
         style={styles.switchButton}
-        onPress={() => setIsSignUp(!isSignUp)}
+        onPress={() => {
+          setIsSignUp(!isSignUp);
+          // Clear name when switching modes
+          if (!isSignUp) {
+            setName('');
+          }
+        }}
       >
         <Text style={styles.switchText}>
           {isSignUp
@@ -73,13 +118,13 @@ export default function LoginScreen() {
             : "Don't have an account? Sign up"}
         </Text>
       </TouchableOpacity>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: 'center',
     padding: 20,
     backgroundColor: '#f5f5f5',

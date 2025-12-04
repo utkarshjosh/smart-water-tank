@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import { setAuthToken, getAuthToken } from '@/lib/cookies';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -12,14 +13,31 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Check if user is already logged in
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        // User is already logged in, redirect to dashboard
+        const token = await user.getIdToken();
+        setAuthToken(token);
+        router.push('/admin/dashboard');
+      }
+    });
+
+    return () => unsubscribe();
+  }, [router]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      router.push('/dashboard');
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      // Get the ID token and store it in cookies
+      const token = await userCredential.user.getIdToken();
+      setAuthToken(token);
+      router.push('/admin/dashboard');
     } catch (err: any) {
       setError(err.message || 'Failed to login');
     } finally {

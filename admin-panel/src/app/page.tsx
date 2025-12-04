@@ -11,11 +11,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!loading) {
-      if (user) {
-        router.push('/dashboard');
-      } else {
-        router.push('/login');
-      }
+      router.push('/welcome');
     }
   }, [user, loading, router]);
 
@@ -27,5 +23,6 @@ export default function Home() {
     </div>
   );
 }
+
 
 

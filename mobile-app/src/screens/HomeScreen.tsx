@@ -7,8 +7,8 @@ interface Device {
   id: string;
   name: string;
   status: string;
-  current_volume: number;
-  last_measurement: string;
+  current_volume: number | null;
+  last_measurement: string | null;
 }
 
 export default function HomeScreen() {
@@ -62,8 +62,8 @@ export default function HomeScreen() {
           <Text style={styles.deviceName}>{primaryDevice.name || primaryDevice.id}</Text>
           <View style={styles.volumeContainer}>
             <Text style={styles.volumeValue}>
-              {primaryDevice.current_volume !== null
-                ? `${primaryDevice.current_volume.toFixed(1)}L`
+              {primaryDevice.current_volume !== null && primaryDevice.current_volume !== undefined
+                ? `${Number(primaryDevice.current_volume).toFixed(1)}L`
                 : 'N/A'}
             </Text>
             <Text style={styles.volumeLabel}>Current Volume</Text>
@@ -198,5 +198,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
 });
+
 
 

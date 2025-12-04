@@ -1,17 +1,56 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuthState } from 'react-firebase-hooks/auth';
-import { signOut } from 'firebase/auth';
+import { signOut, onAuthStateChanged, onIdTokenChanged } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import { getAuthToken, setAuthToken, removeAuthToken } from '@/lib/cookies';
 import Link from 'next/link';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [user, loading] = useAuthState(auth);
+
+  // Sync Firebase auth state with cookies
+  useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        // User is signed in, update cookie with fresh token
+        try {
+          const token = await user.getIdToken();
+          setAuthToken(token);
+        } catch (error) {
+          console.error('Error getting token:', error);
+        }
+      } else {
+        // User is signed out, remove cookie
+        removeAuthToken();
+      }
+    });
+
+    // Listen for token refresh events and update cookie
+    const unsubscribeToken = onIdTokenChanged(auth, async (user) => {
+      if (user) {
+        try {
+          const token = await user.getIdToken();
+          setAuthToken(token);
+        } catch (error) {
+          console.error('Error refreshing token:', error);
+        }
+      }
+    });
+
+    return () => {
+      unsubscribeAuth();
+      unsubscribeToken();
+    };
+  }, []);
 
   const handleLogout = async () => {
     await signOut(auth);
+    removeAuthToken();
     router.push('/login');
   };
 
@@ -39,32 +78,52 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </div>
               <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
                 <Link
-                  href="/dashboard"
-                  className="border-blue-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                  href="/admin/dashboard"
+                  className={`${
+                    pathname === '/admin/dashboard'
+                      ? 'border-blue-500 text-gray-900'
+                      : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                  } inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
                 >
                   Dashboard
                 </Link>
                 <Link
-                  href="/devices"
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                  href="/admin/devices"
+                  className={`${
+                    pathname?.startsWith('/admin/devices')
+                      ? 'border-blue-500 text-gray-900'
+                      : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                  } inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
                 >
                   Devices
                 </Link>
                 <Link
-                  href="/firmware"
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                  href="/admin/firmware"
+                  className={`${
+                    pathname === '/admin/firmware'
+                      ? 'border-blue-500 text-gray-900'
+                      : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                  } inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
                 >
                   Firmware
                 </Link>
                 <Link
-                  href="/analytics"
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                  href="/admin/analytics"
+                  className={`${
+                    pathname === '/admin/analytics'
+                      ? 'border-blue-500 text-gray-900'
+                      : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                  } inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
                 >
                   Analytics
                 </Link>
                 <Link
-                  href="/tenants"
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                  href="/admin/tenants"
+                  className={`${
+                    pathname === '/admin/tenants'
+                      ? 'border-blue-500 text-gray-900'
+                      : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                  } inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
                 >
                   Tenants
                 </Link>

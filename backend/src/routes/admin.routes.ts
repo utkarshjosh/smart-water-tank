@@ -8,6 +8,7 @@ import * as crypto from 'crypto';
 import { createDeviceToken } from '../middleware/deviceAuth.middleware';
 import { z } from 'zod';
 import { Device, FirmwareBinary } from '../database/models';
+import { getAuth } from '../config/firebase';
 
 const router = express.Router();
 
@@ -86,6 +87,82 @@ router.get('/devices', async (req: AuthRequest, res) => {
   } catch (error: any) {
     console.error('Error fetching devices:', error);
     res.status(500).json({ error: 'Failed to fetch devices' });
+  }
+});
+
+// POST /api/v1/admin/devices - Create new device
+const createDeviceSchema = z.object({
+  device_id: z.string().min(1).max(255),
+  tenant_id: z.string().uuid(),
+  name: z.string().max(255).optional(),
+});
+
+router.post('/devices', async (req: AuthRequest, res) => {
+  try {
+    // Validate request body
+    const validationResult = createDeviceSchema.safeParse(req.body);
+    if (!validationResult.success) {
+      return res.status(400).json({ 
+        error: 'Validation failed', 
+        details: validationResult.error.errors 
+      });
+    }
+
+    const { device_id, tenant_id, name } = validationResult.data;
+
+    // Check if device_id already exists
+    const existingDevice = await query(
+      'SELECT id FROM devices WHERE device_id = $1',
+      [device_id]
+    );
+
+    if (existingDevice.rows.length > 0) {
+      return res.status(409).json({ error: 'Device ID already exists' });
+    }
+
+    // Verify tenant exists
+    const tenantResult = await query(
+      'SELECT id FROM tenants WHERE id = $1',
+      [tenant_id]
+    );
+
+    if (tenantResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Tenant not found' });
+    }
+
+    // Insert device record
+    const deviceResult = await query(
+      `INSERT INTO devices (device_id, tenant_id, name, status)
+       VALUES ($1, $2, $3, 'offline')
+       RETURNING id, device_id, tenant_id, name, status, created_at`,
+      [device_id, tenant_id, name || null]
+    );
+
+    const device = deviceResult.rows[0];
+
+    // Generate device token
+    const token = await createDeviceToken(device_id);
+
+    res.status(201).json({
+      device: {
+        id: device.id,
+        device_id: device.device_id,
+        tenant_id: device.tenant_id,
+        name: device.name,
+        status: device.status,
+        created_at: device.created_at,
+      },
+      token,
+    });
+  } catch (error: any) {
+    console.error('Error creating device:', error);
+    
+    // Handle unique constraint violation
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'Device ID already exists' });
+    }
+    
+    res.status(500).json({ error: 'Failed to create device' });
   }
 });
 
@@ -462,6 +539,199 @@ router.get('/tenants', async (req: AuthRequest, res) => {
   }
 });
 
+// POST /api/v1/admin/tenants - Create new tenant
+const createTenantSchema = z.object({
+  name: z.string().min(1).max(255),
+});
+
+router.post('/tenants', async (req: AuthRequest, res) => {
+  try {
+    // Validate request body
+    const validationResult = createTenantSchema.safeParse(req.body);
+    if (!validationResult.success) {
+      return res.status(400).json({ 
+        error: 'Validation failed', 
+        details: validationResult.error.errors 
+      });
+    }
+
+    const { name } = validationResult.data;
+
+    // Check if tenant name already exists
+    const existingTenant = await query(
+      'SELECT id FROM tenants WHERE name = $1',
+      [name]
+    );
+
+    if (existingTenant.rows.length > 0) {
+      return res.status(409).json({ error: 'Tenant name already exists' });
+    }
+
+    // Insert tenant
+    const result = await query(
+      `INSERT INTO tenants (name)
+       VALUES ($1)
+       RETURNING id, name, created_at, updated_at`,
+      [name]
+    );
+
+    const tenant = result.rows[0];
+
+    res.status(201).json({
+      tenant: {
+        id: tenant.id,
+        name: tenant.name,
+        created_at: tenant.created_at,
+        updated_at: tenant.updated_at,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error creating tenant:', error);
+    res.status(500).json({ error: 'Failed to create tenant' });
+  }
+});
+
+// PUT /api/v1/admin/tenants/:tenantId - Update tenant
+const updateTenantSchema = z.object({
+  name: z.string().min(1).max(255),
+});
+
+router.put('/tenants/:tenantId', async (req: AuthRequest, res) => {
+  try {
+    const tenantId = req.params.tenantId;
+    
+    // Validate request body
+    const validationResult = updateTenantSchema.safeParse(req.body);
+    if (!validationResult.success) {
+      return res.status(400).json({ 
+        error: 'Validation failed', 
+        details: validationResult.error.errors 
+      });
+    }
+
+    const { name } = validationResult.data;
+
+    // Check if tenant exists
+    const existingTenant = await query(
+      'SELECT id FROM tenants WHERE id = $1',
+      [tenantId]
+    );
+
+    if (existingTenant.rows.length === 0) {
+      return res.status(404).json({ error: 'Tenant not found' });
+    }
+
+    // Check if name is already taken by another tenant
+    const nameCheck = await query(
+      'SELECT id FROM tenants WHERE name = $1 AND id != $2',
+      [name, tenantId]
+    );
+
+    if (nameCheck.rows.length > 0) {
+      return res.status(409).json({ error: 'Tenant name already exists' });
+    }
+
+    // Update tenant
+    const result = await query(
+      `UPDATE tenants 
+       SET name = $1, updated_at = NOW()
+       WHERE id = $2
+       RETURNING id, name, created_at, updated_at`,
+      [name, tenantId]
+    );
+
+    res.json({
+      tenant: result.rows[0],
+    });
+  } catch (error: any) {
+    console.error('Error updating tenant:', error);
+    res.status(500).json({ error: 'Failed to update tenant' });
+  }
+});
+
+// POST /api/v1/admin/users - Create or link user to tenant
+const createUserSchema = z.object({
+  firebase_uid: z.string().min(1),
+  email: z.string().email(),
+  name: z.string().optional(),
+  tenant_id: z.string().uuid(),
+  role: z.enum(['user', 'admin', 'super_admin']).default('user'),
+});
+
+router.post('/users', async (req: AuthRequest, res) => {
+  try {
+    // Validate request body
+    const validationResult = createUserSchema.safeParse(req.body);
+    if (!validationResult.success) {
+      return res.status(400).json({ 
+        error: 'Validation failed', 
+        details: validationResult.error.errors 
+      });
+    }
+
+    const { firebase_uid, email, name, tenant_id, role } = validationResult.data;
+
+    // Verify tenant exists
+    const tenantResult = await query(
+      'SELECT id FROM tenants WHERE id = $1',
+      [tenant_id]
+    );
+
+    if (tenantResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Tenant not found' });
+    }
+
+    // Check if user already exists
+    const existingUser = await query(
+      'SELECT id, tenant_id FROM users WHERE firebase_uid = $1',
+      [firebase_uid]
+    );
+
+    if (existingUser.rows.length > 0) {
+      // Update existing user
+      const user = existingUser.rows[0];
+      await query(
+        `UPDATE users 
+         SET email = $1, name = $2, tenant_id = $3, role = $4, updated_at = NOW()
+         WHERE id = $5`,
+        [email, name || null, tenant_id, role, user.id]
+      );
+
+      const updatedUser = await query(
+        'SELECT * FROM users WHERE id = $1',
+        [user.id]
+      );
+
+      return res.json({
+        user: updatedUser.rows[0],
+        message: 'User updated and linked to tenant',
+      });
+    }
+
+    // Create new user
+    const result = await query(
+      `INSERT INTO users (firebase_uid, email, name, tenant_id, role)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [firebase_uid, email, name || null, tenant_id, role]
+    );
+
+    res.status(201).json({
+      user: result.rows[0],
+      message: 'User created and linked to tenant',
+    });
+  } catch (error: any) {
+    console.error('Error creating/linking user:', error);
+    
+    // Handle unique constraint violation
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'User already exists' });
+    }
+    
+    res.status(500).json({ error: 'Failed to create/link user' });
+  }
+});
+
 // POST /api/v1/admin/devices/:deviceId/token - Generate device token
 router.post('/devices/:deviceId/token', async (req: AuthRequest, res) => {
   try {
@@ -476,6 +746,205 @@ router.post('/devices/:deviceId/token', async (req: AuthRequest, res) => {
   } catch (error: any) {
     console.error('Error generating device token:', error);
     res.status(500).json({ error: 'Failed to generate device token' });
+  }
+});
+
+// GET /api/v1/admin/users - List all users from database
+router.get('/users', async (req: AuthRequest, res) => {
+  try {
+    const tenantId = req.query.tenant_id as string | undefined;
+    const search = req.query.search as string | undefined;
+
+    let queryStr = `
+      SELECT u.*, t.name as tenant_name
+      FROM users u
+      LEFT JOIN tenants t ON t.id = u.tenant_id
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+    let paramCount = 0;
+
+    if (tenantId) {
+      paramCount++;
+      queryStr += ` AND u.tenant_id = $${paramCount}`;
+      params.push(tenantId);
+    }
+
+    if (search) {
+      paramCount++;
+      queryStr += ` AND (u.email ILIKE $${paramCount} OR u.name ILIKE $${paramCount} OR u.firebase_uid ILIKE $${paramCount})`;
+      params.push(`%${search}%`);
+    }
+
+    queryStr += ' ORDER BY u.created_at DESC';
+
+    const result = await query(queryStr, params);
+
+    res.json({
+      users: result.rows.map((user: any) => ({
+        id: user.id,
+        firebase_uid: user.firebase_uid,
+        email: user.email,
+        name: user.name,
+        tenant_id: user.tenant_id,
+        tenant_name: user.tenant_name,
+        role: user.role,
+        fcm_token: user.fcm_token ? '***' : null, // Don't expose full token
+        created_at: user.created_at,
+        updated_at: user.updated_at,
+      })),
+    });
+  } catch (error: any) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+// GET /api/v1/admin/users/firebase - Search/list users from Firebase
+router.get('/users/firebase', async (req: AuthRequest, res) => {
+  try {
+    const search = req.query.search as string | undefined;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const maxResults = Math.min(limit, 100); // Cap at 100 for performance
+
+    const auth = getAuth();
+    let listUsersResult;
+
+    if (search) {
+      // Search by email (Firebase Admin SDK doesn't have direct search, so we list and filter)
+      // Note: Firebase Admin SDK listUsers doesn't support search, so we'll list and filter client-side
+      listUsersResult = await auth.listUsers(maxResults);
+    } else {
+      listUsersResult = await auth.listUsers(maxResults);
+    }
+
+    const firebaseUsers = listUsersResult.users;
+
+    // Filter by search term if provided
+    let filteredUsers = firebaseUsers;
+    if (search) {
+      const searchLower = search.toLowerCase();
+      filteredUsers = firebaseUsers.filter(
+        (user) =>
+          user.email?.toLowerCase().includes(searchLower) ||
+          user.displayName?.toLowerCase().includes(searchLower) ||
+          user.uid.toLowerCase().includes(searchLower)
+      );
+    }
+
+    // Get existing users from database to check which are already linked
+    const existingUsersResult = await query(
+      'SELECT firebase_uid, tenant_id FROM users WHERE firebase_uid = ANY($1)',
+      [filteredUsers.map((u) => u.uid)]
+    );
+
+    const existingUsersMap = new Map(
+      existingUsersResult.rows.map((row: any) => [row.firebase_uid, row.tenant_id])
+    );
+
+    // Get tenant names for linked users
+    const tenantIds = Array.from(new Set(existingUsersResult.rows.map((row: any) => row.tenant_id).filter(Boolean)));
+    let tenantMap = new Map();
+    if (tenantIds.length > 0) {
+      const tenantsResult = await query(
+        'SELECT id, name FROM tenants WHERE id = ANY($1)',
+        [tenantIds]
+      );
+      tenantMap = new Map(tenantsResult.rows.map((row: any) => [row.id, row.name]));
+    }
+
+    res.json({
+      users: filteredUsers.map((user) => {
+        const tenantId = existingUsersMap.get(user.uid);
+        return {
+          uid: user.uid,
+          email: user.email || null,
+          displayName: user.displayName || null,
+          photoURL: user.photoURL || null,
+          emailVerified: user.emailVerified,
+          disabled: user.disabled,
+          metadata: {
+            creationTime: user.metadata.creationTime,
+            lastSignInTime: user.metadata.lastSignInTime,
+          },
+          tenant_id: tenantId || null,
+          tenant_name: tenantId ? tenantMap.get(tenantId) : null,
+          is_linked: !!tenantId,
+        };
+      }),
+      total: filteredUsers.length,
+    });
+  } catch (error: any) {
+    console.error('Error fetching Firebase users:', error);
+    res.status(500).json({ error: 'Failed to fetch Firebase users' });
+  }
+});
+
+// PUT /api/v1/admin/users/:userId/tenant - Update user's tenant
+const updateUserTenantSchema = z.object({
+  tenant_id: z.string().uuid(),
+});
+
+router.put('/users/:userId/tenant', async (req: AuthRequest, res) => {
+  try {
+    const userId = req.params.userId;
+    
+    // Validate request body
+    const validationResult = updateUserTenantSchema.safeParse(req.body);
+    if (!validationResult.success) {
+      return res.status(400).json({ 
+        error: 'Validation failed', 
+        details: validationResult.error.errors 
+      });
+    }
+
+    const { tenant_id } = validationResult.data;
+
+    // Verify tenant exists
+    const tenantResult = await query(
+      'SELECT id FROM tenants WHERE id = $1',
+      [tenant_id]
+    );
+
+    if (tenantResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Tenant not found' });
+    }
+
+    // Check if user exists (by database ID or Firebase UID)
+    const userResult = await query(
+      'SELECT id, firebase_uid FROM users WHERE id = $1 OR firebase_uid = $1',
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found in database' });
+    }
+
+    const user = userResult.rows[0];
+
+    // Update user's tenant
+    await query(
+      `UPDATE users 
+       SET tenant_id = $1, updated_at = NOW()
+       WHERE id = $2`,
+      [tenant_id, user.id]
+    );
+
+    const updatedUser = await query(
+      `SELECT u.*, t.name as tenant_name
+       FROM users u
+       LEFT JOIN tenants t ON t.id = u.tenant_id
+       WHERE u.id = $1`,
+      [user.id]
+    );
+
+    res.json({
+      user: updatedUser.rows[0],
+      message: 'User tenant updated successfully',
+    });
+  } catch (error: any) {
+    console.error('Error updating user tenant:', error);
+    res.status(500).json({ error: 'Failed to update user tenant' });
   }
 });
 

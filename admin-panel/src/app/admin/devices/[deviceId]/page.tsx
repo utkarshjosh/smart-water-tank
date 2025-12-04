@@ -17,7 +17,14 @@ interface DeviceDetail {
   last_seen: string;
   created_at: string;
   config: any;
-  latest_measurement: any;
+  latest_measurement: {
+    volume_l: number;
+    level_cm: number;
+    temperature_c?: number | null;
+    battery_v?: number | null;
+    rssi?: number | null;
+    timestamp: string;
+  } | null;
   recent_alerts: any[];
 }
 
@@ -82,7 +89,7 @@ export default function DeviceDetailPage() {
     <Layout>
       <div className="px-4 py-6 sm:px-0">
         <button
-          onClick={() => router.back()}
+          onClick={() => router.push('/admin/devices')}
           className="mb-4 text-blue-600 hover:text-blue-800"
         >
           ← Back to Devices
@@ -221,5 +228,4 @@ export default function DeviceDetailPage() {
     </Layout>
   );
 }
-
 

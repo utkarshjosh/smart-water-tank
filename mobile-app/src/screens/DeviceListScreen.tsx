@@ -7,8 +7,8 @@ interface Device {
   id: string;
   name: string;
   status: string;
-  current_volume: number;
-  last_measurement: string;
+  current_volume: number | null;
+  last_measurement: string | null;
 }
 
 export default function DeviceListScreen() {
@@ -46,8 +46,8 @@ export default function DeviceListScreen() {
         />
       </View>
       <Text style={styles.volumeText}>
-        {item.current_volume !== null
-          ? `${item.current_volume.toFixed(1)}L`
+        {item.current_volume !== null && item.current_volume !== undefined
+          ? `${Number(item.current_volume).toFixed(1)}L`
           : 'No data'}
       </Text>
     </TouchableOpacity>
@@ -119,5 +119,6 @@ const styles = StyleSheet.create({
     color: '#007AFF',
   },
 });
+
 
 
