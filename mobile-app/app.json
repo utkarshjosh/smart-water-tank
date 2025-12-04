@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Water Tank Monitor",
-    "slug": "water-tank-mobile",
+    "name": "AquaMind",
+    "slug": "aquamind",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

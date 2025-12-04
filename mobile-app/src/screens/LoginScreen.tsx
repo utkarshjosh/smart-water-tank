@@ -60,7 +60,7 @@ export default function LoginScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Water Tank Monitor</Text>
+      <Text style={styles.title}>AquaMind</Text>
       <Text style={styles.subtitle}>
         {isSignUp ? 'Create an account' : 'Sign in to continue'}
       </Text>

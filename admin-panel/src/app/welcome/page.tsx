@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { Droplets, Activity, ShieldCheck, Zap, BarChart3, Waves, Smartphone, Download, ArrowRight, Info } from 'lucide-react';
 import GlassTank from '@/components/GlassTank';
@@ -47,8 +48,13 @@ export default function LandingPage() {
       <nav className="fixed top-0 w-full z-50 px-6 py-6">
         <div className="max-w-7xl mx-auto flex justify-between items-center bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl px-6 py-4 shadow-lg ring-1 ring-white/5">
           <div className="flex items-center gap-2">
-            <div className="p-2 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-lg shadow-inner">
-              <Droplets className="w-6 h-6 text-white" />
+            <div className="relative w-10 h-10">
+              <Image
+                src="/logo.png"
+                alt="AquaMind Logo"
+                fill
+                className="object-contain"
+              />
             </div>
             <span className="text-xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
               AquaMind

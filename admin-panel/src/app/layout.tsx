@@ -5,8 +5,8 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Water Tank Admin Panel',
-  description: 'Admin panel for Water Tank Monitoring System',
+  title: 'AquaMind Admin',
+  description: 'Admin panel for AquaMind Water Monitoring System',
 };
 
 export default function RootLayout({

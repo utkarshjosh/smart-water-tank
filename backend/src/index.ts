@@ -25,7 +25,9 @@ try {
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin:  '*', //process.env.CORS_ORIGIN || 'http://localhost:3001',
+  origin: process.env.NODE_ENV === 'production'
+    ? (process.env.CORS_ORIGIN || 'https://aquamind.utkarshjoshi.com')
+    : (process.env.CORS_ORIGIN || '*'),
   credentials: true,
 }));
 app.use(express.json());
@@ -59,7 +61,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  
+
   // Start background jobs
   startCronJobs();
 });

@@ -74,56 +74,51 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex justify-between h-16">
             <div className="flex">
               <div className="flex-shrink-0 flex items-center">
-                <h1 className="text-xl font-bold">Water Tank Admin</h1>
+                <h1 className="text-xl font-bold">AquaMind Admin</h1>
               </div>
               <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
                 <Link
                   href="/admin/dashboard"
-                  className={`${
-                    pathname === '/admin/dashboard'
+                  className={`${pathname === '/admin/dashboard'
                       ? 'border-blue-500 text-gray-900'
                       : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-                  } inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
+                    } inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
                 >
                   Dashboard
                 </Link>
                 <Link
                   href="/admin/devices"
-                  className={`${
-                    pathname?.startsWith('/admin/devices')
+                  className={`${pathname?.startsWith('/admin/devices')
                       ? 'border-blue-500 text-gray-900'
                       : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-                  } inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
+                    } inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
                 >
                   Devices
                 </Link>
                 <Link
                   href="/admin/firmware"
-                  className={`${
-                    pathname === '/admin/firmware'
+                  className={`${pathname === '/admin/firmware'
                       ? 'border-blue-500 text-gray-900'
                       : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-                  } inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
+                    } inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
                 >
                   Firmware
                 </Link>
                 <Link
                   href="/admin/analytics"
-                  className={`${
-                    pathname === '/admin/analytics'
+                  className={`${pathname === '/admin/analytics'
                       ? 'border-blue-500 text-gray-900'
                       : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-                  } inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
+                    } inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
                 >
                   Analytics
                 </Link>
                 <Link
                   href="/admin/tenants"
-                  className={`${
-                    pathname === '/admin/tenants'
+                  className={`${pathname === '/admin/tenants'
                       ? 'border-blue-500 text-gray-900'
                       : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-                  } inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
+                    } inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
                 >
                   Tenants
                 </Link>
