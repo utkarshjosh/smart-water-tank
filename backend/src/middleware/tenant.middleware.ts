@@ -41,16 +41,50 @@ export async function userHasDeviceAccess(
   userId: string,
   tenantId: string
 ): Promise<boolean> {
-  const result = await query(
-    `SELECT d.id, d.tenant_id
-     FROM devices d
-     LEFT JOIN user_device_mappings udm ON udm.device_id = d.id
-     WHERE d.device_id = $1
-     AND (d.tenant_id = $2 OR udm.user_id = $3)`,
-    [deviceId, tenantId, userId]
-  );
+  try {
+    // First, get the device to check if it exists
+    const deviceResult = await query(
+      `SELECT d.id, d.tenant_id, d.device_id
+       FROM devices d
+       WHERE d.device_id = $1`,
+      [deviceId]
+    );
 
-  return result.rows.length > 0;
+    if (deviceResult.rows.length === 0) {
+      console.log(`[validateDeviceAccess] Device not found: ${deviceId}`);
+      return false;
+    }
+
+    const device = deviceResult.rows[0];
+
+    // Normalize UUIDs to strings for comparison (handle both UUID and string types)
+    const deviceTenantId = device.tenant_id ? String(device.tenant_id) : null;
+    const userTenantId = tenantId ? String(tenantId) : null;
+
+    // Check if device belongs to user's tenant
+    if (deviceTenantId && userTenantId && deviceTenantId === userTenantId) {
+      console.log(`[validateDeviceAccess] Device ${deviceId} accessible via tenant ${tenantId}`);
+      return true;
+    }
+
+    // Check if user has direct mapping to this device
+    const mappingResult = await query(
+      `SELECT id FROM user_device_mappings 
+       WHERE device_id = $1 AND user_id = $2`,
+      [device.id, userId]
+    );
+
+    if (mappingResult.rows.length > 0) {
+      console.log(`[validateDeviceAccess] Device ${deviceId} accessible via user mapping for user ${userId}`);
+      return true;
+    }
+
+    console.log(`[validateDeviceAccess] Device ${deviceId} NOT accessible - device.tenant_id: ${deviceTenantId}, user.tenant_id: ${userTenantId}, user_id: ${userId}, device.id: ${device.id}`);
+    return false;
+  } catch (error: any) {
+    console.error('[validateDeviceAccess] Error checking device access:', error);
+    return false;
+  }
 }
 
 // Middleware to validate device access for a specific tenant
@@ -62,14 +96,38 @@ export async function validateDeviceAccess(
   const deviceId = req.params.deviceId;
   const tenantId = (req as any).tenantId;
   const userId = req.user?.id;
+  const userRole = req.user?.role;
 
-  if (!deviceId || !tenantId) {
-    res.status(400).json({ error: 'Missing device ID or tenant ID' });
+  if (!deviceId) {
+    res.status(400).json({ error: 'Missing device ID' });
     return;
   }
 
   if (!userId) {
     res.status(401).json({ error: 'User not authenticated' });
+    return;
+  }
+
+  // Admins and super_admins can access any device
+  if (userRole === 'admin' || userRole === 'super_admin') {
+    // Just verify device exists
+    const deviceResult = await query(
+      'SELECT id FROM devices WHERE device_id = $1',
+      [deviceId]
+    );
+    
+    if (deviceResult.rows.length === 0) {
+      res.status(404).json({ error: 'Device not found' });
+      return;
+    }
+    
+    next();
+    return;
+  }
+
+  // Regular users need tenant access
+  if (!tenantId) {
+    res.status(403).json({ error: 'User tenant not found' });
     return;
   }
 
