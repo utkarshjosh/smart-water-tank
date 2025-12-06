@@ -18,6 +18,14 @@ namespace Config {
     float batteryLowThreshold = BATTERY_LOW_THRESHOLD_V;
     float levelEmptyCm = LEVEL_EMPTY_CM;
     float levelFullCm = LEVEL_FULL_CM;
+    
+    // WiFi credentials (defaults from config.h)
+    String wifiSsid = WIFI_SSID_DEFAULT;
+    String wifiPassword = WIFI_PASSWORD_DEFAULT;
+    
+    // Device identification (defaults from config.h)
+    String deviceId = DEVICE_ID_DEFAULT;
+    String deviceToken = DEVICE_TOKEN_DEFAULT;
 
     void load() {
         Serial.println(F("[Config] Loading from flash..."));
@@ -38,7 +46,7 @@ namespace Config {
             return;
         }
         
-        JsonDocument doc;
+        StaticJsonDocument<1024> doc;
         DeserializationError error = deserializeJson(doc, file);
         file.close();
         
@@ -55,6 +63,22 @@ namespace Config {
         batteryLowThreshold = doc["battery_low_threshold"] | BATTERY_LOW_THRESHOLD_V;
         levelEmptyCm = doc["level_empty_cm"] | LEVEL_EMPTY_CM;
         levelFullCm = doc["level_full_cm"] | LEVEL_FULL_CM;
+        
+        // Load WiFi credentials
+        if (doc.containsKey("wifi_ssid")) {
+            wifiSsid = doc["wifi_ssid"].as<String>();
+        }
+        if (doc.containsKey("wifi_password")) {
+            wifiPassword = doc["wifi_password"].as<String>();
+        }
+        
+        // Load device identification
+        if (doc.containsKey("device_id")) {
+            deviceId = doc["device_id"].as<String>();
+        }
+        if (doc.containsKey("device_token")) {
+            deviceToken = doc["device_token"].as<String>();
+        }
         
         Serial.println(F("[Config] Loaded successfully"));
     }
@@ -73,7 +97,7 @@ namespace Config {
             return;
         }
         
-        JsonDocument doc;
+        StaticJsonDocument<1024> doc;
         doc["measurement_interval"] = measurementIntervalMs;
         doc["report_interval"] = reportIntervalMs;
         doc["tank_full_threshold"] = tankFullThreshold;
@@ -81,6 +105,10 @@ namespace Config {
         doc["battery_low_threshold"] = batteryLowThreshold;
         doc["level_empty_cm"] = levelEmptyCm;
         doc["level_full_cm"] = levelFullCm;
+        doc["wifi_ssid"] = wifiSsid;
+        doc["wifi_password"] = wifiPassword;
+        doc["device_id"] = deviceId;
+        doc["device_token"] = deviceToken;
         
         serializeJson(doc, file);
         file.close();
@@ -98,6 +126,10 @@ namespace Config {
         batteryLowThreshold = BATTERY_LOW_THRESHOLD_V;
         levelEmptyCm = LEVEL_EMPTY_CM;
         levelFullCm = LEVEL_FULL_CM;
+        wifiSsid = WIFI_SSID_DEFAULT;
+        wifiPassword = WIFI_PASSWORD_DEFAULT;
+        deviceId = DEVICE_ID_DEFAULT;
+        deviceToken = DEVICE_TOKEN_DEFAULT;
         
         // Delete config file
         if (LittleFS.begin()) {
@@ -108,7 +140,7 @@ namespace Config {
     }
 
     bool applyFromJson(const char* json) {
-        JsonDocument doc;
+        StaticJsonDocument<1024> doc;
         DeserializationError error = deserializeJson(doc, json);
         
         if (error) {
@@ -138,9 +170,25 @@ namespace Config {
         if (doc.containsKey("level_full_cm")) {
             levelFullCm = doc["level_full_cm"];
         }
+        if (doc.containsKey("wifi_ssid")) {
+            wifiSsid = doc["wifi_ssid"].as<String>();
+        }
+        if (doc.containsKey("wifi_password")) {
+            wifiPassword = doc["wifi_password"].as<String>();
+        }
+        if (doc.containsKey("device_id")) {
+            deviceId = doc["device_id"].as<String>();
+        }
+        if (doc.containsKey("device_token")) {
+            deviceToken = doc["device_token"].as<String>();
+        }
         
         save();
         return true;
+    }
+    
+    String getOtaHostname() {
+        return deviceId;
     }
 }
 

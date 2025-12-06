@@ -42,7 +42,7 @@ namespace DataReporter {
         
         // Build JSON payload
         JsonDocument doc;
-        doc["device_id"] = OTA_HOSTNAME;
+        doc["device_id"] = Config::deviceId;
         doc["firmware_version"] = FIRMWARE_VERSION;
         doc["timestamp"] = millis();  // Server should use its own timestamp
         doc["level_cm"] = levelCm;
@@ -64,7 +64,7 @@ namespace DataReporter {
         #endif
         
         http.addHeader("Content-Type", "application/json");
-        http.addHeader("Authorization", "Bearer " DEVICE_TOKEN);
+        http.addHeader("Authorization", "Bearer " + Config::deviceToken);
         
         int httpCode = http.POST(payload);
         
@@ -109,7 +109,7 @@ namespace DataReporter {
         #endif
         
         http.addHeader("Content-Type", "application/json");
-        http.addHeader("Authorization", "Bearer " DEVICE_TOKEN);
+        http.addHeader("Authorization", "Bearer " + Config::deviceToken);
         http.addHeader("X-Buffered", "true");
         
         int httpCode = http.POST(jsonData);
@@ -123,7 +123,7 @@ namespace DataReporter {
         
         String url = String(USE_HTTPS ? "https://" : "http://") +
                      serverHost + ":" + String(serverPort) + 
-                     "/api/v1/devices/" + OTA_HOSTNAME + "/config";
+                     "/api/v1/devices/" + Config::deviceId + "/config";
         
         #if USE_HTTPS
         http.begin(wifiClientSecure, url);
@@ -131,7 +131,7 @@ namespace DataReporter {
         http.begin(wifiClient, url);
         #endif
         
-        http.addHeader("Authorization", "Bearer " DEVICE_TOKEN);
+        http.addHeader("Authorization", "Bearer " + Config::deviceToken);
         
         int httpCode = http.GET();
         

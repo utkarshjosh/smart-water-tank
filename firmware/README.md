@@ -135,6 +135,24 @@ BOARD_FQBN := esp8266:esp8266:esp01_1m
 
 ## Troubleshooting
 
+**Permission denied / Cannot monitor port:**
+```bash
+# Check if you're in the dialout group
+groups | grep dialout
+
+# If not, add yourself to the dialout group:
+sudo usermod -a -G dialout $USER
+
+# Then either:
+# Option 1: Log out and log back in (recommended)
+# Option 2: Use newgrp in current terminal:
+newgrp dialout
+
+# Verify it worked:
+groups
+make monitor
+```
+
 **Port not detected:**
 ```bash
 # List connected boards

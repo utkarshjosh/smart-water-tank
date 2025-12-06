@@ -62,10 +62,14 @@ void setup() {
     Sensor::init();
     Alerts::init();
     
-    // Connect to WiFi
+    // Initialize state timers
+    state.lastOtaCheck = 0;  // Will check on first loop after WiFi connects
+    
+    // Connect to WiFi (will check for 3 restarts and start config portal if needed)
     Serial.println(F("[WiFi] Connecting..."));
     WifiManager::init();
     
+    // Connect (will automatically check for 3 restarts and start config portal if needed)
     if (WifiManager::connect()) {
         state.wifiConnected = true;
         state.wifiRssi = WiFi.RSSI();
@@ -77,7 +81,15 @@ void setup() {
         
         // Initialize data reporter
         DataReporter::init();
+        
+        // Check for OTA updates immediately after connecting
+        // (will also check periodically in loop)
+        Serial.println(F("[OTA] Checking for updates on startup..."));
+        OTAHandler::checkForUpdate();
+        state.lastOtaCheck = millis();
     } else {
+        // If connect() returns false, it might have started config portal
+        // Config portal will restart the device when done, so we won't reach here
         Serial.println(F("[WiFi] Connection failed, will retry..."));
         state.wifiConnected = false;
     }
@@ -127,6 +139,13 @@ void loop() {
             Storage::bufferMeasurement(state);
         }
         state.lastReport = now;
+    }
+    
+    // Check for OTA updates at configured interval
+    if (state.wifiConnected && (now - state.lastOtaCheck >= OTA_CHECK_INTERVAL_MS)) {
+        Serial.println(F("[OTA] Periodic update check..."));
+        OTAHandler::checkForUpdate();
+        state.lastOtaCheck = now;
     }
     
     // Check alert conditions

@@ -21,6 +21,7 @@ struct SystemState {
     int wifiRssi;
     unsigned long lastMeasurement;
     unsigned long lastReport;
+    unsigned long lastOtaCheck;
     bool wifiConnected;
     bool alertActive;
 };

@@ -7,13 +7,14 @@
 #include <ArduinoOTA.h>
 #include <ESP8266httpUpdate.h>
 #include <ArduinoJson.h>
+#include <WiFiClientSecure.h>
 
 namespace OTAHandler {
     void init() {
         Serial.println(F("[OTA] Initializing..."));
         
         // Set hostname
-        ArduinoOTA.setHostname(OTA_HOSTNAME);
+        ArduinoOTA.setHostname(Config::getOtaHostname().c_str());
         
         // Set password if configured
         #ifdef OTA_PASSWORD
@@ -61,7 +62,7 @@ namespace OTAHandler {
         });
         
         ArduinoOTA.begin();
-        Serial.printf("[OTA] Ready at %s.local:%d\n", OTA_HOSTNAME, OTA_PORT);
+        Serial.printf("[OTA] Ready at %s.local:%d\n", Config::getOtaHostname().c_str(), OTA_PORT);
     }
 
     void handle() {
@@ -71,14 +72,16 @@ namespace OTAHandler {
     bool checkForUpdate() {
         Serial.println(F("[OTA] Checking for updates..."));
         
-        WiFiClient client;
+        // Use secure client for HTTPS
+        WiFiClientSecure clientSecure;
+        clientSecure.setInsecure();  // Accept any certificate (for now)
         HTTPClient http;
         
-        String url = String(OTA_UPDATE_URL) + "?device=" + OTA_HOSTNAME + 
-                     "&version=" + FIRMWARE_VERSION;
+        // Construct URL: /api/v1/devices/{deviceId}/ota/latest
+        String url = String(OTA_UPDATE_URL_BASE) + "/" + Config::deviceId + "/ota/latest";
         
-        http.begin(client, url);
-        http.addHeader("Authorization", "Bearer " DEVICE_TOKEN);
+        http.begin(clientSecure, url);
+        http.addHeader("Authorization", "Bearer " + Config::deviceToken);
         
         int httpCode = http.GET();
         
@@ -86,20 +89,28 @@ namespace OTAHandler {
             String response = http.getString();
             
             // Parse response for update info
-            // Expected: {"update_available": true, "url": "...", "version": "..."}
+            // Expected: {"update_available": true, "download_url": "...", "latest_version": "..."}
             JsonDocument doc;
             if (deserializeJson(doc, response) == DeserializationError::Ok) {
                 if (doc["update_available"] == true) {
-                    const char* updateUrl = doc["url"];
-                    const char* newVersion = doc["version"];
+                    const char* updateUrl = doc["download_url"];
+                    const char* newVersion = doc["latest_version"];
                     
-                    Serial.printf("[OTA] Update available: v%s\n", newVersion);
-                    Serial.printf("[OTA] URL: %s\n", updateUrl);
-                    
-                    http.end();
-                    return updateFromUrl(updateUrl);
+                    if (updateUrl && newVersion) {
+                        Serial.printf("[OTA] Update available: v%s\n", newVersion);
+                        Serial.printf("[OTA] URL: %s\n", updateUrl);
+                        
+                        http.end();
+                        return updateFromUrl(updateUrl);
+                    } else {
+                        Serial.println(F("[OTA] Update available but missing URL or version"));
+                    }
                 }
+            } else {
+                Serial.println(F("[OTA] Failed to parse response JSON"));
             }
+        } else {
+            Serial.printf("[OTA] HTTP error: %d\n", httpCode);
         }
         
         http.end();
@@ -110,15 +121,20 @@ namespace OTAHandler {
     bool updateFromUrl(const char* url) {
         Serial.printf("[OTA] Downloading from %s\n", url);
         
-        WiFiClient client;
+        // Use secure client for HTTPS URLs
+        WiFiClientSecure clientSecure;
+        clientSecure.setInsecure();  // Accept any certificate (for now)
         
         // Configure LED indicator
         ESPhttpUpdate.setLedPin(PIN_STATUS_LED, LOW);
         
+        // Set authorization header for device authentication (same pattern as metrics)
+        ESPhttpUpdate.setAuthorization("Bearer " + Config::deviceToken);
+        
         // Reboot after update
         ESPhttpUpdate.rebootOnUpdate(true);
         
-        t_httpUpdate_return ret = ESPhttpUpdate.update(client, url);
+        t_httpUpdate_return ret = ESPhttpUpdate.update(clientSecure, url);
         
         switch (ret) {
             case HTTP_UPDATE_FAILED:

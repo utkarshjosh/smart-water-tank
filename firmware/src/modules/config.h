@@ -9,6 +9,8 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#include <Arduino.h>
+
 // ============================================================================
 // Firmware Version
 // ============================================================================
@@ -21,11 +23,11 @@
 // WiFi Configuration
 // ============================================================================
 
-// Primary WiFi credentials
-#define WIFI_SSID           "Champs"
-#define WIFI_PASSWORD       "@susChamps@11"
+// Default WiFi credentials (can be overridden via config portal)
+#define WIFI_SSID_DEFAULT           "Champs"
+#define WIFI_PASSWORD_DEFAULT       "@susChamps@11"
 
-// Fallback AP mode for configuration
+// AP mode for configuration (do not change - used for setup portal)
 #define AP_SSID             "WaterTank-Setup"
 #define AP_PASSWORD         "watertank123"
 
@@ -37,10 +39,13 @@
 // Server Configuration
 // ============================================================================
 
-#define SERVER_HOST         "your-server.com"
+#define SERVER_HOST         "aquamind-api.utkarshjoshi.com"
 #define SERVER_PORT         443
 #define SERVER_ENDPOINT     "/api/v1/measurements"
-#define DEVICE_TOKEN        "688bb1924d4a0f43d1ace8eaf9d4475d86841761c280fc4bf3650b51a32b8043"
+
+// Default device ID and token (can be overridden via config portal)
+#define DEVICE_ID_DEFAULT   "watertank"
+#define DEVICE_TOKEN_DEFAULT "688bb1924d4a0f43d1ace8eaf9d4475d86841761c280fc4bf3650b51a32b8043"
 
 // Use HTTPS (recommended)
 #define USE_HTTPS           true
@@ -119,6 +124,9 @@
 // How often to report to server (milliseconds)
 #define REPORT_INTERVAL_MS          300000  // 5 minutes
 
+// How often to check for OTA updates (milliseconds)
+#define OTA_CHECK_INTERVAL_MS       3600000  // 1 hour
+
 // Sensor stabilization delay
 #define SENSOR_WARMUP_MS            100
 
@@ -126,12 +134,12 @@
 // OTA Configuration
 // ============================================================================
 
-#define OTA_HOSTNAME            "watertank"
 #define OTA_PASSWORD            ""  // Leave empty for no password
 #define OTA_PORT                8266
 
-// Remote OTA update URL (for server-pushed updates)
-#define OTA_UPDATE_URL          "https://your-server.com/api/v1/devices/ota"
+// Remote OTA update URL base (deviceId will be appended in code)
+// Final URL format: {OTA_UPDATE_URL_BASE}/{deviceId}/ota/latest
+#define OTA_UPDATE_URL_BASE     "https://aquamind-api.utkarshjoshi.com/api/v1/devices"
 
 // ============================================================================
 // Runtime Config Class
@@ -147,6 +155,14 @@ namespace Config {
     extern float levelEmptyCm;
     extern float levelFullCm;
     
+    // WiFi credentials (configurable via portal)
+    extern String wifiSsid;
+    extern String wifiPassword;
+    
+    // Device identification (configurable via portal)
+    extern String deviceId;
+    extern String deviceToken;
+    
     // Load config from flash
     void load();
     
@@ -158,6 +174,9 @@ namespace Config {
     
     // Apply config from JSON (for remote updates)
     bool applyFromJson(const char* json);
+    
+    // Get OTA hostname (uses deviceId)
+    String getOtaHostname();
 }
 
 #endif // CONFIG_H

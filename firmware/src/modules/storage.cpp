@@ -65,7 +65,7 @@ namespace Storage {
         
         // Create JSON for this measurement
         JsonDocument doc;
-        doc["device_id"] = OTA_HOSTNAME;
+        doc["device_id"] = Config::deviceId;
         doc["firmware_version"] = FIRMWARE_VERSION;
         doc["timestamp"] = millis();
         doc["level_cm"] = state.waterLevelCm;

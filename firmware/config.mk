@@ -14,7 +14,8 @@ PLATFORM_URL    := https://arduino.esp8266.com/stable/package_esp8266com_index.j
 # Serial Port (auto-detect or override)
 # Leave empty for auto-detection, or set manually:
 # SERIAL_PORT   := /dev/ttyUSB0
-SERIAL_PORT     ?= $(shell ls /dev/ttyUSB* 2>/dev/null | head -1)
+# Auto-detect: tries ttyUSB first, then ttyACM
+SERIAL_PORT     ?= $(shell { ls /dev/ttyUSB* 2>/dev/null || ls /dev/ttyACM* 2>/dev/null; } | head -1)
 
 # Upload Settings
 UPLOAD_SPEED    := 921600

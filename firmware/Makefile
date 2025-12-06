@@ -78,9 +78,43 @@ clean:
 	@echo "$(GREEN)✓ Clean complete$(NC)"
 
 ## Serial monitor
-monitor:
+monitor: check-permissions
+	@if [ -z "$(SERIAL_PORT)" ]; then \
+		echo "$(RED)Error: No serial port detected!$(NC)"; \
+		echo "$(YELLOW)  Run 'make list-boards' to see available ports$(NC)"; \
+		echo "$(YELLOW)  Or set SERIAL_PORT manually in config.mk$(NC)"; \
+		exit 1; \
+	fi
 	@echo "$(CYAN)→ Opening serial monitor on $(SERIAL_PORT)...$(NC)"
+	@echo "$(YELLOW)  Press Ctrl+Q to quit$(NC)"
 	$(CLI) monitor --port $(SERIAL_PORT) --config baudrate=115200
+
+## Check serial port permissions
+check-permissions:
+	@if [ -z "$(SERIAL_PORT)" ]; then \
+		echo "$(YELLOW)Warning: No serial port detected$(NC)"; \
+		exit 0; \
+	fi
+	@if [ ! -e "$(SERIAL_PORT)" ]; then \
+		echo "$(RED)Error: Port $(SERIAL_PORT) does not exist!$(NC)"; \
+		echo "$(YELLOW)  Run 'make list-boards' to see available ports$(NC)"; \
+		exit 1; \
+	fi
+	@if [ ! -r "$(SERIAL_PORT)" ] || [ ! -w "$(SERIAL_PORT)" ]; then \
+		echo "$(RED)✗ Permission denied accessing $(SERIAL_PORT)$(NC)"; \
+		echo ""; \
+		echo "$(YELLOW)You need to be in the 'dialout' group to access serial ports.$(NC)"; \
+		echo "$(CYAN)Fix this by running:$(NC)"; \
+		echo "  sudo usermod -a -G dialout $$USER"; \
+		echo ""; \
+		echo "$(YELLOW)Then either:$(NC)"; \
+		echo "  • Log out and log back in"; \
+		echo "  • Or run: newgrp dialout"; \
+		echo ""; \
+		echo "$(CYAN)Current groups: $(shell groups)$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)✓ Port $(SERIAL_PORT) is accessible$(NC)"
 
 ## Build and upload in one step
 run: upload monitor
