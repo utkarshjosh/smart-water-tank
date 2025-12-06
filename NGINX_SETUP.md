@@ -188,3 +188,4 @@ After making changes to the admin panel:
 | MQTT TLS | 8883 | TCP/TLS | MQTT over TLS (direct or proxied) |
 | MQTT WS | 9001 | WebSocket | MQTT WebSocket (proxied via nginx) |
 
+

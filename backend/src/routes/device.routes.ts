@@ -24,7 +24,7 @@ router.post('/measurements', authenticateDevice, async (req: DeviceAuthRequest, 
   try {
     // Validate request body
     const validated = measurementSchema.parse(req.body);
-    
+
     if (!req.device) {
       return res.status(401).json({ error: 'Device not authenticated' });
     }
@@ -144,7 +144,7 @@ router.get('/devices/:deviceId/ota/latest', authenticateDevice, async (req: Devi
       return res.status(401).json({ error: 'Device not authenticated' });
     }
 
-    const currentVersion = req.device.firmware_version || '0.0.0';
+    const currentVersion = (req.headers['x-firmware-version'] as string) || req.device.firmware_version || '0.0.0';
 
     // Get active firmware assignment for this device
     const assignmentResult = await query(
@@ -166,7 +166,7 @@ router.get('/devices/:deviceId/ota/latest', authenticateDevice, async (req: Devi
     }
 
     const firmware = assignmentResult.rows[0];
-    
+
     // Simple version comparison (you might want to use semver library)
     if (firmware.version !== currentVersion) {
       // Construct download URL using device-authenticated endpoint

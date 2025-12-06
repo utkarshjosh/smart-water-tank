@@ -8,6 +8,8 @@
 #include <ESP8266httpUpdate.h>
 #include <ArduinoJson.h>
 #include <WiFiClientSecure.h>
+#include <ESP8266HTTPClient.h>
+#include <Updater.h>
 
 namespace OTAHandler {
     void init() {
@@ -72,48 +74,65 @@ namespace OTAHandler {
     bool checkForUpdate() {
         Serial.println(F("[OTA] Checking for updates..."));
         
-        // Use secure client for HTTPS
-        WiFiClientSecure clientSecure;
-        clientSecure.setInsecure();  // Accept any certificate (for now)
-        HTTPClient http;
+        String downloadUrl = "";
+        String latestVersion = "";
+        bool updateFound = false;
         
-        // Construct URL: /api/v1/devices/{deviceId}/ota/latest
-        String url = String(OTA_UPDATE_URL_BASE) + "/" + Config::deviceId + "/ota/latest";
-        
-        http.begin(clientSecure, url);
-        http.addHeader("Authorization", "Bearer " + Config::deviceToken);
-        
-        int httpCode = http.GET();
-        
-        if (httpCode == HTTP_CODE_OK) {
-            String response = http.getString();
+        // Scope for the update check components (Client, JSON, etc.)
+        // This ensures they are destroyed and memory freed before we try to download
+        {
+            // Use secure client for HTTPS
+            WiFiClientSecure clientSecure;
+            clientSecure.setInsecure();  // Accept any certificate (for now)
+            HTTPClient http;
             
-            // Parse response for update info
-            // Expected: {"update_available": true, "download_url": "...", "latest_version": "..."}
-            JsonDocument doc;
-            if (deserializeJson(doc, response) == DeserializationError::Ok) {
-                if (doc["update_available"] == true) {
-                    const char* updateUrl = doc["download_url"];
-                    const char* newVersion = doc["latest_version"];
-                    
-                    if (updateUrl && newVersion) {
-                        Serial.printf("[OTA] Update available: v%s\n", newVersion);
-                        Serial.printf("[OTA] URL: %s\n", updateUrl);
+            // Construct URL: /api/v1/devices/{deviceId}/ota/latest
+            String url = String(OTA_UPDATE_URL_BASE) + "/" + Config::deviceId + "/ota/latest";
+            
+            http.begin(clientSecure, url);
+            http.addHeader("Authorization", "Bearer " + Config::deviceToken);
+            http.addHeader("X-Firmware-Version", FIRMWARE_VERSION);
+            
+            int httpCode = http.GET();
+            
+            if (httpCode == HTTP_CODE_OK) {
+                String response = http.getString();
+                
+                // Parse response for update info
+                // Expected: {"update_available": true, "download_url": "...", "latest_version": "..."}
+                JsonDocument doc;
+                if (deserializeJson(doc, response) == DeserializationError::Ok) {
+                    if (doc["update_available"] == true) {
+                        const char* url = doc["download_url"];
+                        const char* ver = doc["latest_version"];
                         
-                        http.end();
-                        return updateFromUrl(updateUrl);
-                    } else {
-                        Serial.println(F("[OTA] Update available but missing URL or version"));
+                        if (url && ver) {
+                            downloadUrl = String(url);
+                            latestVersion = String(ver);
+                            updateFound = true;
+                        } else {
+                            Serial.println(F("[OTA] Update available but missing URL or version"));
+                        }
                     }
+                } else {
+                    Serial.println(F("[OTA] Failed to parse response JSON"));
                 }
             } else {
-                Serial.println(F("[OTA] Failed to parse response JSON"));
+                Serial.printf("[OTA] HTTP error: %d\n", httpCode);
             }
-        } else {
-            Serial.printf("[OTA] HTTP error: %d\n", httpCode);
+            
+            http.end();
+            // End of scope: clientSecure, http, and doc are destroyed here
         }
         
-        http.end();
+        if (updateFound) {
+            Serial.printf("[OTA] Update available: v%s\n", latestVersion.c_str());
+            Serial.printf("[OTA] URL: %s\n", downloadUrl.c_str());
+            
+            // Now we can safely start the download with freed memory
+            return updateFromUrl(downloadUrl.c_str());
+        }
+        
         Serial.println(F("[OTA] No updates available"));
         return false;
     }
@@ -124,36 +143,94 @@ namespace OTAHandler {
         // Use secure client for HTTPS URLs
         WiFiClientSecure clientSecure;
         clientSecure.setInsecure();  // Accept any certificate (for now)
+        HTTPClient http;
         
-        // Configure LED indicator
-        ESPhttpUpdate.setLedPin(PIN_STATUS_LED, LOW);
+        http.begin(clientSecure, url);
+        http.addHeader("Authorization", "Bearer " + Config::deviceToken);
         
-        // Set authorization header for device authentication (same pattern as metrics)
-        ESPhttpUpdate.setAuthorization("Bearer " + Config::deviceToken);
+        int httpCode = http.GET();
         
-        // Reboot after update
-        ESPhttpUpdate.rebootOnUpdate(true);
-        
-        t_httpUpdate_return ret = ESPhttpUpdate.update(clientSecure, url);
-        
-        switch (ret) {
-            case HTTP_UPDATE_FAILED:
-                Serial.printf("[OTA] Update failed (%d): %s\n",
-                    ESPhttpUpdate.getLastError(),
-                    ESPhttpUpdate.getLastErrorString().c_str()
-                );
-                return false;
-                
-            case HTTP_UPDATE_NO_UPDATES:
-                Serial.println(F("[OTA] No update needed"));
-                return false;
-                
-            case HTTP_UPDATE_OK:
-                Serial.println(F("[OTA] Update OK (will reboot)"));
-                return true;
+        if (httpCode != HTTP_CODE_OK) {
+            Serial.printf("[OTA] HTTP error: %d - %s\n", httpCode, http.errorToString(httpCode).c_str());
+            http.end();
+            return false;
         }
         
-        return false;
+        // Get content length
+        int contentLength = http.getSize();
+        if (contentLength <= 0) {
+            Serial.println(F("[OTA] Invalid content length"));
+            http.end();
+            return false;
+        }
+        
+        Serial.printf("[OTA] Firmware size: %d bytes\n", contentLength);
+        
+        // Check if enough space is available
+        size_t contentSize = (size_t)contentLength;
+        if (contentSize > (ESP.getFreeSketchSpace() - 0x1000)) {
+            Serial.printf("[OTA] Not enough space. Available: %d, Required: %d\n",
+                ESP.getFreeSketchSpace() - 0x1000, contentLength);
+            http.end();
+            return false;
+        }
+        
+        // Start update
+        if (!Update.begin(contentSize)) {
+            Serial.printf("[OTA] Not enough space to begin OTA. Available: %d\n", ESP.getFreeSketchSpace());
+            http.end();
+            return false;
+        }
+        
+        Serial.println(F("[OTA] Writing firmware..."));
+        
+        // Get stream and write to Update
+        WiFiClient* stream = http.getStreamPtr();
+        size_t written = 0;
+        size_t totalSize = contentSize;
+        
+        uint8_t buff[128] = { 0 };
+        while (http.connected() && (written < totalSize)) {
+            size_t available = stream->available();
+            if (available) {
+                int c = stream->readBytes(buff, ((available > sizeof(buff)) ? sizeof(buff) : available));
+                Update.write(buff, c);
+                written += c;
+                
+                // Progress indicator
+                if (written % 10240 == 0 || written == totalSize) {
+                    Serial.printf("[OTA] Progress: %d%% (%d/%d bytes)\r", 
+                        (written * 100) / totalSize, written, totalSize);
+                }
+            }
+            delay(1);
+        }
+        
+        Serial.println(); // New line after progress
+        
+        http.end();
+        
+        if (written != totalSize) {
+            Serial.printf("[OTA] OTA Error: Written %d/%d bytes\n", written, totalSize);
+            // Update will be cleaned up automatically
+            return false;
+        }
+        
+        if (!Update.end()) {
+            Serial.printf("[OTA] Update end failed: %s\n", Update.getErrorString().c_str());
+            return false;
+        }
+        
+        if (!Update.isFinished()) {
+            Serial.println(F("[OTA] Update not finished"));
+            return false;
+        }
+        
+        Serial.println(F("[OTA] Update successful! Rebooting..."));
+        delay(1000);
+        ESP.restart();
+        
+        return true;
     }
 }
 

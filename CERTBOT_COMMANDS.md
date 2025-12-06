@@ -114,3 +114,4 @@ If you're using MQTT over TLS on port 8883, you can use the same certificate. Th
 - Let's Encrypt has rate limits: 50 certificates per registered domain per week
 - For production, ensure your server has a valid hostname and proper DNS setup
 
+
