@@ -171,8 +171,27 @@ router.get('/devices/:deviceId', async (req: AuthRequest, res) => {
   try {
     const deviceId = req.params.deviceId;
 
+    // Explicitly select columns to avoid conflicts between devices and device_configs tables
     const deviceResult = await query(
-      `SELECT d.*, t.name as tenant_name, dc.*
+      `SELECT 
+         d.id,
+         d.device_id,
+         d.tenant_id,
+         d.name,
+         d.firmware_version,
+         d.last_seen,
+         d.status,
+         d.created_at,
+         d.updated_at,
+         t.name as tenant_name,
+         dc.measurement_interval_ms,
+         dc.report_interval_ms,
+         dc.tank_full_threshold_l,
+         dc.tank_low_threshold_l,
+         dc.battery_low_threshold_v,
+         dc.level_empty_cm,
+         dc.level_full_cm,
+         dc.config_json
        FROM devices d
        LEFT JOIN tenants t ON t.id = d.tenant_id
        LEFT JOIN device_configs dc ON dc.device_id = d.id

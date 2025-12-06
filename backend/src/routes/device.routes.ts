@@ -3,6 +3,7 @@ import { authenticateDevice, DeviceAuthRequest } from '../middleware/deviceAuth.
 import { query } from '../config/database';
 import { z } from 'zod';
 import { processAlertsForMeasurement } from '../services/alert.service';
+import * as fs from 'fs';
 
 const router = express.Router();
 
@@ -168,9 +169,9 @@ router.get('/devices/:deviceId/ota/latest', authenticateDevice, async (req: Devi
     
     // Simple version comparison (you might want to use semver library)
     if (firmware.version !== currentVersion) {
-      // Construct download URL (adjust based on your file serving setup)
+      // Construct download URL using device-authenticated endpoint
       const baseUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
-      const downloadUrl = `${baseUrl}/api/v1/admin/firmware/${firmware.id}/download`;
+      const downloadUrl = `${baseUrl}/api/v1/devices/${req.device.device_id}/ota/download/${firmware.id}`;
 
       return res.json({
         update_available: true,
@@ -189,6 +190,65 @@ router.get('/devices/:deviceId/ota/latest', authenticateDevice, async (req: Devi
   } catch (error: any) {
     console.error('Error checking OTA update:', error);
     res.status(500).json({ error: 'Failed to check for updates' });
+  }
+});
+
+// GET /api/v1/devices/:deviceId/ota/download/:firmwareId - Download firmware (device-authenticated)
+router.get('/devices/:deviceId/ota/download/:firmwareId', authenticateDevice, async (req: DeviceAuthRequest, res) => {
+  try {
+    if (!req.device) {
+      return res.status(401).json({ error: 'Device not authenticated' });
+    }
+
+    const firmwareId = req.params.firmwareId;
+
+    // Verify this firmware is assigned to this device
+    const assignmentResult = await query(
+      `SELECT fb.* FROM firmware_binaries fb
+       INNER JOIN device_firmware_assignments dfa ON dfa.firmware_id = fb.id
+       WHERE dfa.device_id = $1 
+       AND fb.id = $2
+       AND dfa.status = 'pending'
+       AND fb.is_active = true`,
+      [req.device.id, firmwareId]
+    );
+
+    if (assignmentResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Firmware not found or not assigned to this device' });
+    }
+
+    const firmware = assignmentResult.rows[0];
+    const filePath = firmware.file_path;
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Firmware file not found on server' });
+    }
+
+    // Set headers for binary download
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="firmware-${firmware.version}.bin"`);
+    res.setHeader('Content-Length', firmware.file_size);
+    if (firmware.checksum) {
+      res.setHeader('X-Firmware-Checksum', firmware.checksum);
+    }
+
+    // Stream the file
+    const fileStream = fs.createReadStream(filePath);
+    fileStream.pipe(res);
+
+    // Update assignment status to 'downloading' (optional tracking)
+    await query(
+      `UPDATE device_firmware_assignments 
+       SET status = 'downloading', updated_at = NOW()
+       WHERE device_id = $1 AND firmware_id = $2`,
+      [req.device.id, firmwareId]
+    ).catch(err => {
+      // Log but don't fail the download
+      console.error('Error updating assignment status:', err);
+    });
+  } catch (error: any) {
+    console.error('Error downloading firmware:', error);
+    res.status(500).json({ error: 'Failed to download firmware' });
   }
 });
 

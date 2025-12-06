@@ -35,6 +35,24 @@ export async function deviceBelongsToTenant(
   return result.rows[0].tenant_id === tenantId;
 }
 
+// Helper function to check if user has access to device (through tenant or direct mapping)
+export async function userHasDeviceAccess(
+  deviceId: string,
+  userId: string,
+  tenantId: string
+): Promise<boolean> {
+  const result = await query(
+    `SELECT d.id, d.tenant_id
+     FROM devices d
+     LEFT JOIN user_device_mappings udm ON udm.device_id = d.id
+     WHERE d.device_id = $1
+     AND (d.tenant_id = $2 OR udm.user_id = $3)`,
+    [deviceId, tenantId, userId]
+  );
+
+  return result.rows.length > 0;
+}
+
 // Middleware to validate device access for a specific tenant
 export async function validateDeviceAccess(
   req: AuthRequest,
@@ -43,13 +61,20 @@ export async function validateDeviceAccess(
 ): Promise<void> {
   const deviceId = req.params.deviceId;
   const tenantId = (req as any).tenantId;
+  const userId = req.user?.id;
 
   if (!deviceId || !tenantId) {
     res.status(400).json({ error: 'Missing device ID or tenant ID' });
     return;
   }
 
-  const hasAccess = await deviceBelongsToTenant(deviceId, tenantId);
+  if (!userId) {
+    res.status(401).json({ error: 'User not authenticated' });
+    return;
+  }
+
+  // Check access through tenant OR user_device_mappings
+  const hasAccess = await userHasDeviceAccess(deviceId, userId, tenantId);
   
   if (!hasAccess) {
     res.status(403).json({ error: 'Device not accessible' });
@@ -58,6 +83,7 @@ export async function validateDeviceAccess(
 
   next();
 }
+
 
 
 
