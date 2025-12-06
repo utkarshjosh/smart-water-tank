@@ -1,0 +1,165 @@
+======================================================================
+ESP8266 Water Tank Monitoring System - Netlist
+======================================================================
+
+COMPONENTS:
+----------------------------------------------------------------------
+C1      Capacitor      100uF          Power decoupling (5V)
+C2      Capacitor      10uF           Power decoupling (3.3V)
+R1      Resistor       4.7k           DS18B20 pull-up
+R2      Resistor       10k            Echo voltage divider (top)
+R3      Resistor       20k            Echo voltage divider (bottom)
+R4      Resistor       100k           Battery divider (top)
+R5      Resistor       100k           Battery divider (bottom)
+R6      Resistor       220            LED current limiting
+D1      Diode          1N5819         Reverse polarity protection (optional)
+U1      ESP8266        NodeMCU        Main microcontroller
+U2      Sensor         DS18B20        Temperature sensor
+U3      Sensor         HC-SR04        Ultrasonic sensor (or JSN-SR04T)
+BZ1     Buzzer         Passive        Alert buzzer
+LED1    LED            Standard        Status LED
+J1      Connector     2-pin           Power input
+J2      Connector     2-pin           Battery connector
+
+NETS:
+----------------------------------------------------------------------
+VCC_5V:
+  - C1.1
+  - U3.VCC
+  - J1.1
+
+VCC_3V3:
+  - C2.1
+  - U1.3V3
+  - U2.VDD
+  - R1.1
+
+GND:
+  - C1.2
+  - C2.2
+  - U1.GND
+  - U2.GND
+  - U3.GND
+  - BZ1.-
+  - LED1.K
+  - R3.2
+  - R5.2
+  - J1.2
+  - J2.2
+
+GPIO0 (D3):
+  - U1.GPIO0
+  - U2.DQ
+  - R1.2
+
+GPIO4 (D2):
+  - U1.GPIO4
+  - R2.2 (ECHO_MID)
+
+GPIO5 (D1):
+  - U1.GPIO5
+  - U3.Trig
+
+GPIO14 (D5):
+  - U1.GPIO14
+  - BZ1.+
+
+GPIO16:
+  - U1.GPIO16
+  - R6.1
+
+ADC0 (A0):
+  - U1.ADC
+  - R4.2
+  - R5.1
+
+ECHO_MID:
+  - U3.Echo
+  - R2.1
+  - R3.1
+
+BATTERY_PLUS:
+  - J2.1
+  - D1.A (if using protection)
+  - R4.1
+
+BATTERY_PROTECTED:
+  - D1.K (if using protection)
+  - R4.1 (connect here instead of BATTERY_PLUS if using diode)
+
+LED_ANODE:
+  - R6.2
+  - LED1.A
+
+
+======================================================================
+PIN CONNECTION TABLE
+======================================================================
+
+ESP8266 NodeMCU Pinout:
+  D1 (GPIO5)  -> U3.Trig (Ultrasonic Trigger)
+  D2 (GPIO4)  -> R2.2 (Ultrasonic Echo via divider)
+  D3 (GPIO0)  -> U2.DQ (Temperature sensor data)
+  D5 (GPIO14) -> BZ1.+ (Buzzer positive)
+  GPIO16      -> R6.1 (Status LED)
+  A0 (ADC0)   -> R4.2 (Battery voltage divider)
+  3.3V        -> VCC_3V3 net
+  5V           -> VCC_5V net (if available)
+  GND          -> GND net
+
+DS18B20 Temperature Sensor:
+  Red (VDD)   -> VCC_3V3
+  Black (GND) -> GND
+  Yellow (DQ) -> GPIO0 (D3)
+  Note: 4.7k pull-up resistor (R1) between VDD and DQ
+
+HC-SR04 / JSN-SR04T Ultrasonic Sensor:
+  VCC (Red)   -> VCC_5V
+  GND (Black) -> GND
+  Trig (Yellow) -> GPIO5 (D1)
+  Echo (Green)  -> GPIO4 (D2) via voltage divider
+  Note: Voltage divider (R2=10k, R3=20k) for 5V to 3.3V conversion
+
+Buzzer:
+  + -> GPIO14 (D5)
+  - -> GND
+
+Status LED:
+  Anode (+)   -> R6.2 (via 220Ω resistor)
+  Cathode (-) -> GND
+  R6.1        -> GPIO16
+
+Battery Monitoring:
+  Battery +   -> J2.1 -> R4.1 (100k)
+  R4.2        -> ADC0 (A0)
+  R5.1        -> ADC0 (A0)
+  R5.2        -> GND
+  Battery -   -> J2.2 -> GND
+  Note: 100k/100k divider provides 2:1 ratio (monitors up to 2V)
+        For 12V battery, use 100k/10k ratio
+
+======================================================================
+WIRING NOTES
+======================================================================
+
+1. Power Supply:
+   - Primary: USB 5V via NodeMCU USB port
+   - Backup: External battery via J2 connector
+
+2. Voltage Levels:
+   - ESP8266 GPIO: 3.3V logic
+   - Ultrasonic sensor: 5V (needs 5V power)
+   - Echo pin: Use voltage divider for safety (R2/R3)
+
+3. OneWire Bus:
+   - Requires 4.7k pull-up resistor (R1)
+   - Connect between VCC_3V3 and DQ line
+
+4. Battery Monitoring:
+   - ESP8266 ADC max input: 1V
+   - 100k/100k divider allows monitoring up to 2V
+   - For higher voltages, adjust divider ratio
+
+5. Optional Components:
+   - D1 (1N5819): Reverse polarity protection for battery
+   - If using D1, connect battery to D1.A, R4.1 to D1.K

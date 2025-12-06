@@ -229,3 +229,6 @@ export default function DeviceDetailPage() {
   );
 }
 
+
+
+

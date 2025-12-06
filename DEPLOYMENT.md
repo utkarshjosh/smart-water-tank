@@ -705,3 +705,6 @@ For issues or questions:
 - Check Nginx logs: `/var/log/nginx/`
 - Check system logs: `journalctl -u nginx` or `journalctl -u postgresql`
 
+
+
+

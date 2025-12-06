@@ -6,7 +6,7 @@ module.exports = {
     exec_mode: 'fork',
     env: {
       NODE_ENV: 'production',
-      PORT: 3000
+      PORT: 3011
     },
     error_file: './logs/api-error.log',
     out_file: './logs/api-out.log',
@@ -18,4 +18,7 @@ module.exports = {
     ignore_watch: ['node_modules', 'logs', 'storage']
   }]
 };
+
+
+
 
