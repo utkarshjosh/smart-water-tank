@@ -899,6 +899,98 @@ router.get('/users/firebase', async (req: AuthRequest, res) => {
   }
 });
 
+// POST /api/v1/admin/users/sync-firebase - Sync all Firebase users to PostgreSQL
+router.post('/users/sync-firebase', async (req: AuthRequest, res) => {
+  try {
+    const { limit, dry_run } = req.body;
+    const maxResults = limit ? Math.min(parseInt(limit), 1000) : 100; // Default 100, max 1000
+    const isDryRun = dry_run === true;
+
+    const auth = getAuth();
+    
+    // List Firebase users
+    let listUsersResult;
+    let allUsers: any[] = [];
+    let nextPageToken: string | undefined;
+
+    do {
+      listUsersResult = await auth.listUsers(maxResults, nextPageToken);
+      allUsers = allUsers.concat(listUsersResult.users);
+      nextPageToken = listUsersResult.pageToken;
+      
+      // Limit total users processed to prevent timeout
+      if (allUsers.length >= maxResults) {
+        break;
+      }
+    } while (nextPageToken);
+
+    // Get existing users from database
+    const existingUsersResult = await query(
+      'SELECT firebase_uid FROM users WHERE firebase_uid = ANY($1)',
+      [allUsers.map(u => u.uid)]
+    );
+
+    const existingUids = new Set(
+      existingUsersResult.rows.map((row: any) => row.firebase_uid)
+    );
+
+    const usersToCreate = allUsers.filter(u => !existingUids.has(u.uid));
+    const stats = {
+      total_firebase_users: allUsers.length,
+      existing_in_db: existingUids.size,
+      to_create: usersToCreate.length,
+      created: 0,
+      errors: 0,
+      error_details: [] as any[],
+    };
+
+    if (isDryRun) {
+      return res.json({
+        dry_run: true,
+        stats,
+        users_to_create: usersToCreate.map(u => ({
+          uid: u.uid,
+          email: u.email,
+          displayName: u.displayName,
+        })),
+      });
+    }
+
+    // Create missing users
+    for (const firebaseUser of usersToCreate) {
+      try {
+        const userName = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
+        const userEmail = firebaseUser.email || '';
+
+        await query(
+          `INSERT INTO users (firebase_uid, email, name, tenant_id, role)
+           VALUES ($1, $2, $3, NULL, 'user')
+           ON CONFLICT (firebase_uid) DO NOTHING`,
+          [firebaseUser.uid, userEmail, userName]
+        );
+
+        stats.created++;
+      } catch (error: any) {
+        stats.errors++;
+        stats.error_details.push({
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          error: error.message,
+        });
+        console.error(`Error creating user ${firebaseUser.uid}:`, error);
+      }
+    }
+
+    res.json({
+      success: true,
+      stats,
+    });
+  } catch (error: any) {
+    console.error('Error syncing Firebase users:', error);
+    res.status(500).json({ error: 'Failed to sync Firebase users' });
+  }
+});
+
 // PUT /api/v1/admin/users/:userId/tenant - Update user's tenant
 const updateUserTenantSchema = z.object({
   tenant_id: z.string().uuid(),

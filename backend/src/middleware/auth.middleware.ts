@@ -28,16 +28,49 @@ export async function authenticateFirebase(
     req.firebaseUid = decodedToken.uid;
 
     // Fetch user from database
-    const userResult = await query(
+    let userResult = await query(
       'SELECT * FROM users WHERE firebase_uid = $1',
       [decodedToken.uid]
     );
 
     if (userResult.rows.length === 0) {
-      // User doesn't exist in DB, create them
-      // This is a simple implementation - you might want to handle this differently
-      res.status(403).json({ error: 'User not found. Please register first.' });
-      return;
+      // User doesn't exist in DB, auto-create them from Firebase
+      try {
+        const firebaseUser = await auth.getUser(decodedToken.uid);
+        
+        // Extract name from displayName or use email as fallback
+        const userName = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
+        const userEmail = firebaseUser.email || '';
+        
+        // Auto-create user in PostgreSQL with default role 'user' and no tenant (can be assigned later)
+        const createResult = await query(
+          `INSERT INTO users (firebase_uid, email, name, tenant_id, role)
+           VALUES ($1, $2, $3, NULL, 'user')
+           RETURNING *`,
+          [decodedToken.uid, userEmail, userName]
+        );
+        
+        console.log(`[Auth] Auto-created user in PostgreSQL: ${decodedToken.uid} (${userEmail})`);
+        userResult = createResult;
+      } catch (createError: any) {
+        console.error('Error auto-creating user in database:', createError);
+        
+        // If it's a unique constraint violation, user was created between check and insert
+        // Try to fetch again
+        if (createError.code === '23505') {
+          userResult = await query(
+            'SELECT * FROM users WHERE firebase_uid = $1',
+            [decodedToken.uid]
+          );
+        } else {
+          // For other errors, still return 500 but with more context
+          res.status(500).json({ 
+            error: 'Failed to create user account',
+            details: 'User authenticated with Firebase but could not be created in database'
+          });
+          return;
+        }
+      }
     }
 
     req.user = userResult.rows[0] as User;

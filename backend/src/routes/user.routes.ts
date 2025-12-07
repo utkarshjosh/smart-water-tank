@@ -41,7 +41,7 @@ router.post('/register', authenticateFirebase, async (req: AuthRequest, res) => 
     );
 
     if (existingUser.rows.length > 0) {
-      // Update existing user
+      // User already exists - update profile and return (idempotent)
       await query(
         `UPDATE users 
          SET name = $1, email = $2, updated_at = NOW()
@@ -59,7 +59,7 @@ router.post('/register', authenticateFirebase, async (req: AuthRequest, res) => 
 
       return res.json({
         user: updatedUser.rows[0],
-        message: 'User profile updated',
+        message: 'User already registered. Profile updated.',
       });
     }
 
@@ -96,6 +96,95 @@ router.post('/register', authenticateFirebase, async (req: AuthRequest, res) => 
     }
     
     res.status(500).json({ error: 'Failed to register user' });
+  }
+});
+
+// POST /api/v1/user/sync - Sync Firebase user with PostgreSQL (manual sync)
+router.post('/sync', authenticateFirebase, async (req: AuthRequest, res) => {
+  try {
+    if (!req.firebaseUid) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    // Get Firebase user info
+    const auth = getAuth();
+    const firebaseUser = await auth.getUser(req.firebaseUid);
+
+    // Check if user exists in database
+    const existingUser = await query(
+      'SELECT * FROM users WHERE firebase_uid = $1',
+      [req.firebaseUid]
+    );
+
+    if (existingUser.rows.length > 0) {
+      // User exists - update with latest Firebase info
+      await query(
+        `UPDATE users 
+         SET email = $1, 
+             name = COALESCE($2, name, $1),
+             updated_at = NOW()
+         WHERE firebase_uid = $3`,
+        [
+          firebaseUser.email || '',
+          firebaseUser.displayName || null,
+          req.firebaseUid
+        ]
+      );
+
+      const updatedUser = await query(
+        `SELECT u.*, t.name as tenant_name
+         FROM users u
+         LEFT JOIN tenants t ON t.id = u.tenant_id
+         WHERE u.firebase_uid = $1`,
+        [req.firebaseUid]
+      );
+
+      return res.json({
+        user: updatedUser.rows[0],
+        message: 'User synced successfully',
+        synced: true,
+      });
+    } else {
+      // User doesn't exist - create them
+      const userName = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
+      
+      const result = await query(
+        `INSERT INTO users (firebase_uid, email, name, tenant_id, role)
+         VALUES ($1, $2, $3, NULL, 'user')
+         RETURNING *`,
+        [req.firebaseUid, firebaseUser.email || '', userName]
+      );
+
+      return res.status(201).json({
+        user: result.rows[0],
+        message: 'User created and synced successfully',
+        synced: true,
+      });
+    }
+  } catch (error: any) {
+    console.error('Error syncing user:', error);
+    
+    // Handle unique constraint violation
+    if (error.code === '23505') {
+      // User was created between check and insert, fetch and return
+      const userResult = await query(
+        `SELECT u.*, t.name as tenant_name
+         FROM users u
+         LEFT JOIN tenants t ON t.id = u.tenant_id
+         WHERE u.firebase_uid = $1`,
+        [req.firebaseUid]
+      );
+      
+      if (userResult.rows.length > 0) {
+        return res.json({
+          user: userResult.rows[0],
+          message: 'User already exists',
+          synced: true,
+        });
+      }
+    }
+    
+    res.status(500).json({ error: 'Failed to sync user' });
   }
 });
 
