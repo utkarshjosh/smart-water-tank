@@ -4,6 +4,16 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Layout from '@/components/Layout';
 import api from '@/lib/api';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
+import { AlertCircle, Copy, CheckCircle2 } from 'lucide-react';
 
 interface Device {
   id: string;
@@ -129,7 +139,9 @@ export default function DevicesPage() {
   if (loading) {
     return (
       <Layout>
-        <div className="text-center">Loading...</div>
+        <div className="flex h-full items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
       </Layout>
     );
   }
@@ -139,153 +151,154 @@ export default function DevicesPage() {
       <div className="px-4 py-6 sm:px-0">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold">Devices</h1>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium"
-          >
+          <Button onClick={() => setShowCreateModal(true)}>
             Create Device
-          </button>
+          </Button>
         </div>
 
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            {error}
-          </div>
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
 
         {/* Create Device Modal */}
-        {showCreateModal && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-            <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-              <div className="mt-3">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Create New Device</h3>
-                <form onSubmit={handleCreateDevice}>
-                  <div className="mb-4">
-                    <label htmlFor="device_id" className="block text-sm font-medium text-gray-700 mb-1">
-                      Device ID <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      id="device_id"
-                      value={formData.device_id}
-                      onChange={(e) => setFormData({ ...formData, device_id: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      required
-                    />
-                  </div>
+        <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create New Device</DialogTitle>
+              <DialogDescription>
+                Add a new device to the system. All fields marked with * are required.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleCreateDevice}>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="device_id">
+                    Device ID <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="device_id"
+                    value={formData.device_id}
+                    onChange={(e) => setFormData({ ...formData, device_id: e.target.value })}
+                    required
+                  />
+                </div>
 
-                  <div className="mb-4">
-                    <label htmlFor="tenant_id" className="block text-sm font-medium text-gray-700 mb-1">
-                      Tenant <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      id="tenant_id"
-                      value={formData.tenant_id}
-                      onChange={(e) => setFormData({ ...formData, tenant_id: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      required
-                    >
-                      <option value="">Select a tenant</option>
+                <div className="space-y-2">
+                  <Label htmlFor="tenant_id">
+                    Tenant <span className="text-destructive">*</span>
+                  </Label>
+                  <Select
+                    value={formData.tenant_id}
+                    onValueChange={(value) => setFormData({ ...formData, tenant_id: value })}
+                    required
+                  >
+                    <SelectTrigger id="tenant_id">
+                      <SelectValue placeholder="Select a tenant" />
+                    </SelectTrigger>
+                    <SelectContent>
                       {tenants.map((tenant) => (
-                        <option key={tenant.id} value={tenant.id}>
+                        <SelectItem key={tenant.id} value={tenant.id}>
                           {tenant.name}
-                        </option>
+                        </SelectItem>
                       ))}
-                    </select>
-                  </div>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-                  <div className="mb-4">
-                    <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-                      Name (optional)
-                    </label>
-                    <input
-                      type="text"
-                      id="name"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="name">Name (optional)</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  />
+                </div>
 
-                  {formError && (
-                    <div className="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-                      {formError}
-                    </div>
-                  )}
-
-                  <div className="flex justify-end space-x-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowCreateModal(false);
-                        setFormError('');
-                        setFormData({ device_id: '', tenant_id: '', name: '' });
-                      }}
-                      className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md text-sm font-medium"
-                      disabled={submitting}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium disabled:opacity-50"
-                      disabled={submitting}
-                    >
-                      {submitting ? 'Creating...' : 'Create Device'}
-                    </button>
-                  </div>
-                </form>
+                {formError && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Error</AlertTitle>
+                    <AlertDescription>{formError}</AlertDescription>
+                  </Alert>
+                )}
               </div>
-            </div>
-          </div>
-        )}
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setFormError('');
+                    setFormData({ device_id: '', tenant_id: '', name: '' });
+                  }}
+                  disabled={submitting}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={submitting}>
+                  {submitting ? 'Creating...' : 'Create Device'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
 
         {/* Token Display Modal */}
-        {showTokenModal && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-            <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-              <div className="mt-3">
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Device Created Successfully</h3>
-                <div className="mb-4">
-                  <p className="text-sm text-red-600 font-medium mb-2">
-                    ⚠️ Important: Save this token now. It will not be shown again!
-                  </p>
-                  <div className="bg-gray-100 border border-gray-300 rounded-md p-3 mb-2">
-                    <textarea
-                      readOnly
-                      value={createdToken}
-                      className="w-full bg-transparent border-none resize-none focus:outline-none text-sm font-mono"
-                      rows={4}
-                    />
-                  </div>
-                  <button
-                    onClick={copyToken}
-                    className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium"
-                  >
-                    Copy Token
-                  </button>
-                </div>
-                <button
-                  onClick={closeTokenModal}
-                  className="w-full px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md text-sm font-medium"
-                >
-                  Close
-                </button>
-              </div>
+        <Dialog open={showTokenModal} onOpenChange={setShowTokenModal}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Device Created Successfully</DialogTitle>
+              <DialogDescription>
+                <Alert variant="destructive" className="mt-2">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Important</AlertTitle>
+                  <AlertDescription>
+                    Save this token now. It will not be shown again!
+                  </AlertDescription>
+                </Alert>
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <Textarea
+                readOnly
+                value={createdToken}
+                className="font-mono text-sm"
+                rows={4}
+              />
+              <Button onClick={copyToken} className="w-full">
+                <Copy className="mr-2 h-4 w-4" />
+                Copy Token
+              </Button>
             </div>
-          </div>
-        )}
+            <DialogFooter>
+              <Button variant="outline" onClick={closeTokenModal}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-        <div className="bg-white shadow overflow-hidden sm:rounded-md">
-          <ul className="divide-y divide-gray-200">
-            {devices.map((device) => (
-              <li key={device.id}>
-                <div
-                  className="px-4 py-4 sm:px-6 hover:bg-gray-50 cursor-pointer"
-                  onClick={() => router.push(`/admin/devices/${device.device_id}`)}
-                >
+        <div className="space-y-4">
+          {devices.length === 0 ? (
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-center text-muted-foreground">No devices found. Create your first device above.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            devices.map((device) => (
+              <Card
+                key={device.id}
+                className="cursor-pointer hover:bg-accent transition-colors"
+                onClick={() => router.push(`/admin/devices/${device.device_id}`)}
+              >
+                <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center">
+                    <div className="flex items-center space-x-4">
                       <div className="flex-shrink-0">
                         <div
                           className={`h-3 w-3 rounded-full ${
@@ -293,35 +306,56 @@ export default function DevicesPage() {
                           }`}
                         />
                       </div>
-                      <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">
+                      <div>
+                        <div className="font-medium">
                           {device.name || device.device_id}
                         </div>
-                        <div className="text-sm text-gray-500">
+                        <div className="text-sm text-muted-foreground">
                           {device.device_id} • {device.tenant_name}
                         </div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-sm text-gray-900">
+                    <div className="text-right space-y-1">
+                      <div className="font-medium">
                         {device.current_volume !== null && device.current_volume !== undefined
                           ? `${Number(device.current_volume).toFixed(1)}L`
                           : 'N/A'}
                       </div>
-                      <div className="text-sm text-gray-500">
-                        {device.status} • v{device.firmware_version || 'N/A'}
+                      <div className="flex items-center gap-2 justify-end">
+                        <Badge
+                          variant={
+                            device.status === 'online'
+                              ? 'outline'
+                              : device.status === 'offline'
+                              ? 'outline'
+                              : 'outline'
+                          }
+                          className={
+                            device.status === 'online'
+                              ? 'border-green-500 bg-green-500/10 text-green-700 dark:text-green-400'
+                              : device.status === 'offline'
+                              ? 'border-red-500 bg-red-500/10 text-red-700 dark:text-red-400'
+                              : 'border-gray-500 bg-gray-500/10 text-gray-700 dark:text-gray-400'
+                          }
+                        >
+                          {device.status}
+                        </Badge>
+                        <span className="text-sm text-muted-foreground">
+                          v{device.firmware_version || 'N/A'}
+                        </span>
                       </div>
                     </div>
                   </div>
-                </div>
-              </li>
-            ))}
-          </ul>
+                </CardContent>
+              </Card>
+            ))
+          )}
         </div>
       </div>
     </Layout>
   );
 }
+
 
 
 

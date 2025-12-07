@@ -3,6 +3,18 @@
 import { useEffect, useState } from 'react';
 import Layout from '@/components/Layout';
 import api from '@/lib/api';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertCircle, CheckCircle2, Download, Upload, FileUp } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 interface Firmware {
   id: string;
@@ -43,6 +55,8 @@ export default function FirmwarePage() {
   const [rolloutPercentage, setRolloutPercentage] = useState<number>(100);
   const [rollingOut, setRollingOut] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   useEffect(() => {
     fetchFirmware();
@@ -86,7 +100,7 @@ export default function FirmwarePage() {
     setSuccessMessage('');
 
     const formData = new FormData(e.currentTarget);
-    const file = (formData.get('firmware') as File) || null;
+    const file = selectedFile || (formData.get('firmware') as File) || null;
     const version = formData.get('version') as string;
     const description = formData.get('description') as string;
 
@@ -111,12 +125,58 @@ export default function FirmwarePage() {
       setSuccessMessage(`Firmware ${version} uploaded successfully!`);
       fetchFirmware();
       (e.target as HTMLFormElement).reset();
+      setSelectedFile(null);
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err: any) {
       setError(err.response?.data?.error || err.message || 'Failed to upload firmware');
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+      if (file.name.endsWith('.bin')) {
+        setSelectedFile(file);
+        // Update the file input
+        const fileInput = document.getElementById('firmware') as HTMLInputElement;
+        if (fileInput) {
+          const dataTransfer = new DataTransfer();
+          dataTransfer.items.add(file);
+          fileInput.files = dataTransfer.files;
+        }
+      } else {
+        setError('Please upload a .bin file');
+      }
+    }
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    setSelectedFile(file);
   };
 
   const handleOpenRolloutModal = (fw: Firmware) => {
@@ -200,7 +260,9 @@ export default function FirmwarePage() {
   if (loading) {
     return (
       <Layout>
-        <div className="text-center">Loading...</div>
+        <div className="flex h-full items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
       </Layout>
     );
   }
@@ -211,255 +273,292 @@ export default function FirmwarePage() {
         <h1 className="text-3xl font-bold mb-6">Firmware Management</h1>
 
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            {error}
-          </div>
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
 
         {successMessage && (
-          <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
-            {successMessage}
-          </div>
+          <Alert className="mb-4">
+            <CheckCircle2 className="h-4 w-4" />
+            <AlertTitle>Success</AlertTitle>
+            <AlertDescription>{successMessage}</AlertDescription>
+          </Alert>
         )}
 
-        <div className="bg-white shadow rounded-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Upload Firmware</h2>
-          <form onSubmit={handleUpload} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Firmware File
-              </label>
-              <input
-                type="file"
-                name="firmware"
-                accept=".bin"
-                required
-                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Version
-              </label>
-              <input
-                type="text"
-                name="version"
-                required
-                placeholder="e.g., 1.0.0"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Description (optional)
-              </label>
-              <textarea
-                name="description"
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={uploading}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
-            >
-              {uploading ? 'Uploading...' : 'Upload Firmware'}
-            </button>
-          </form>
-        </div>
-
-        <div className="bg-white shadow rounded-lg overflow-hidden">
-          <h2 className="text-xl font-semibold p-6 border-b">Firmware Versions</h2>
-          <ul className="divide-y divide-gray-200">
-            {firmware.map((fw) => (
-              <li key={fw.id} className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-lg font-medium text-gray-900">
-                      Version {fw.version}
-                      {fw.is_active && (
-                        <span className="ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                          Active
-                        </span>
-                      )}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Upload Firmware</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleUpload} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="firmware">Firmware File</Label>
+                <div
+                  onDragEnter={handleDragEnter}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  className={`
+                    relative border-2 border-dashed rounded-lg p-8 text-center transition-all
+                    ${isDragging 
+                      ? 'border-primary bg-primary/10 scale-[1.02]' 
+                      : 'border-muted-foreground/25 hover:border-primary/50'
+                    }
+                    ${selectedFile ? 'border-primary bg-primary/5' : ''}
+                  `}
+                >
+                  <input
+                    type="file"
+                    id="firmware"
+                    name="firmware"
+                    accept=".bin"
+                    onChange={handleFileInputChange}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    required
+                  />
+                  <div className="flex flex-col items-center justify-center space-y-3">
+                    <FileUp className={`h-10 w-10 ${isDragging ? 'text-primary' : 'text-muted-foreground'}`} />
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">
+                        {selectedFile ? (
+                          <span className="text-primary">{selectedFile.name}</span>
+                        ) : isDragging ? (
+                          <span className="text-primary">Drop the file here</span>
+                        ) : (
+                          <>
+                            <span className="text-primary hover:underline">Click to upload</span>
+                            {' or drag and drop'}
+                          </>
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {selectedFile 
+                          ? `${(selectedFile.size / 1024).toFixed(2)} KB`
+                          : 'Firmware file (.bin)'
+                        }
+                      </p>
                     </div>
-                    {fw.description && (
-                      <p className="text-sm text-gray-500 mt-1">{fw.description}</p>
-                    )}
-                    <p className="text-sm text-gray-500 mt-1">
-                      {(fw.file_size / 1024).toFixed(2)} KB • Uploaded{' '}
-                      {new Date(fw.created_at).toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {fw.rollout_percentage > 0 && (
-                      <span className="text-xs text-gray-500">
-                        {fw.rollout_percentage}% rolled out
-                      </span>
-                    )}
-                    <button
-                      onClick={() => handleOpenRolloutModal(fw)}
-                      className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
-                    >
-                      Rollout
-                    </button>
-                    <a
-                      href={`${process.env.NEXT_PUBLIC_API_URL}/api/v1/admin/firmware/${fw.id}/download`}
-                      className="text-blue-600 hover:text-blue-800 text-sm"
-                    >
-                      Download
-                    </a>
                   </div>
                 </div>
-              </li>
-            ))}
-          </ul>
-        </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="version">Version</Label>
+                <Input
+                  type="text"
+                  id="version"
+                  name="version"
+                  required
+                  placeholder="e.g., 1.0.0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="description">Description (optional)</Label>
+                <Textarea
+                  id="description"
+                  name="description"
+                  rows={3}
+                />
+              </div>
+              <Button type="submit" disabled={uploading}>
+                <Upload className="mr-2 h-4 w-4" />
+                {uploading ? 'Uploading...' : 'Upload Firmware'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Firmware Versions</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {firmware.map((fw) => (
+                <Card key={fw.id}>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <CardTitle>Version {fw.version}</CardTitle>
+                          {fw.is_active && (
+                            <Badge variant="default">Active</Badge>
+                          )}
+                        </div>
+                        {fw.description && (
+                          <CardDescription className="mt-1">{fw.description}</CardDescription>
+                        )}
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {(fw.file_size / 1024).toFixed(2)} KB • Uploaded{' '}
+                          {new Date(fw.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {fw.rollout_percentage > 0 && (
+                          <span className="text-xs text-muted-foreground">
+                            {fw.rollout_percentage}% rolled out
+                          </span>
+                        )}
+                        <Button
+                          onClick={() => handleOpenRolloutModal(fw)}
+                          size="sm"
+                        >
+                          Rollout
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          asChild
+                        >
+                          <a
+                            href={`${process.env.NEXT_PUBLIC_API_URL}/api/v1/admin/firmware/${fw.id}/download`}
+                          >
+                            <Download className="mr-2 h-4 w-4" />
+                            Download
+                          </a>
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Rollout Modal */}
-        {showRolloutModal && selectedFirmware && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-            <div className="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
-              <div className="mt-3">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-medium text-gray-900">
-                    Rollout Firmware {selectedFirmware.version}
-                  </h3>
-                  <button
-                    onClick={handleCloseRolloutModal}
-                    className="text-gray-400 hover:text-gray-600"
+        <Dialog open={showRolloutModal} onOpenChange={setShowRolloutModal}>
+          {selectedFirmware && (
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Rollout Firmware {selectedFirmware.version}</DialogTitle>
+                <DialogDescription>
+                  Select how you want to roll out this firmware version to devices.
+                </DialogDescription>
+              </DialogHeader>
+
+              {error && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Error</AlertTitle>
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+
+              {successMessage && (
+                <Alert>
+                  <CheckCircle2 className="h-4 w-4" />
+                  <AlertTitle>Success</AlertTitle>
+                  <AlertDescription>{successMessage}</AlertDescription>
+                </Alert>
+              )}
+
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Rollout Type</Label>
+                  <RadioGroup
+                    value={rolloutType}
+                    onValueChange={(value) => setRolloutType(value as 'devices' | 'tenants' | 'percentage')}
                   >
-                    <span className="text-2xl">&times;</span>
-                  </button>
-                </div>
-
-                {error && (
-                  <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-                    {error}
-                  </div>
-                )}
-
-                {successMessage && (
-                  <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
-                    {successMessage}
-                  </div>
-                )}
-
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Rollout Type
-                  </label>
-                  <div className="space-y-2">
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        value="devices"
-                        checked={rolloutType === 'devices'}
-                        onChange={(e) => setRolloutType(e.target.value as any)}
-                        className="mr-2"
-                      />
-                      <span>Select Specific Devices</span>
-                    </label>
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        value="tenants"
-                        checked={rolloutType === 'tenants'}
-                        onChange={(e) => setRolloutType(e.target.value as any)}
-                        className="mr-2"
-                      />
-                      <span>All Devices in Selected Tenants</span>
-                    </label>
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        value="percentage"
-                        checked={rolloutType === 'percentage'}
-                        onChange={(e) => setRolloutType(e.target.value as any)}
-                        className="mr-2"
-                      />
-                      <span>Percentage of All Devices</span>
-                    </label>
-                  </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="devices" id="devices" />
+                      <Label htmlFor="devices" className="font-normal cursor-pointer">
+                        Select Specific Devices
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="tenants" id="tenants" />
+                      <Label htmlFor="tenants" className="font-normal cursor-pointer">
+                        All Devices in Selected Tenants
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="percentage" id="percentage" />
+                      <Label htmlFor="percentage" className="font-normal cursor-pointer">
+                        Percentage of All Devices
+                      </Label>
+                    </div>
+                  </RadioGroup>
                 </div>
 
                 {rolloutType === 'devices' && (
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Select Devices ({selectedDevices.length} selected)
-                    </label>
-                    <div className="border border-gray-300 rounded-md max-h-64 overflow-y-auto">
-                      {devices.length === 0 ? (
-                        <div className="p-4 text-center text-gray-500">No devices found</div>
-                      ) : (
-                        <ul className="divide-y divide-gray-200">
-                          {devices.map((device) => (
-                            <li key={device.device_id} className="p-3 hover:bg-gray-50">
-                              <label className="flex items-center cursor-pointer">
-                                <input
-                                  type="checkbox"
+                  <div className="space-y-2">
+                    <Label>Select Devices ({selectedDevices.length} selected)</Label>
+                    <Card className="max-h-64 overflow-y-auto">
+                      <CardContent className="pt-6">
+                        {devices.length === 0 ? (
+                          <p className="text-center text-muted-foreground py-4">No devices found</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {devices.map((device) => (
+                              <div key={device.device_id} className="flex items-start space-x-3 p-2 hover:bg-accent rounded-md">
+                                <Checkbox
+                                  id={`device-${device.device_id}`}
                                   checked={selectedDevices.includes(device.device_id)}
-                                  onChange={() => toggleDeviceSelection(device.device_id)}
-                                  className="mr-3"
+                                  onCheckedChange={() => toggleDeviceSelection(device.device_id)}
                                 />
-                                <div className="flex-1">
-                                  <div className="text-sm font-medium text-gray-900">
+                                <label
+                                  htmlFor={`device-${device.device_id}`}
+                                  className="flex-1 cursor-pointer"
+                                >
+                                  <div className="text-sm font-medium">
                                     {device.name || device.device_id}
                                   </div>
-                                  <div className="text-xs text-gray-500">
+                                  <div className="text-xs text-muted-foreground">
                                     {device.device_id} • {device.tenant_name} • v{device.firmware_version || 'N/A'}
                                   </div>
-                                </div>
-                              </label>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
+                                </label>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
                   </div>
                 )}
 
                 {rolloutType === 'tenants' && (
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Select Tenants ({selectedTenants.length} selected)
-                    </label>
-                    <div className="border border-gray-300 rounded-md max-h-64 overflow-y-auto">
-                      {tenants.length === 0 ? (
-                        <div className="p-4 text-center text-gray-500">No tenants found</div>
-                      ) : (
-                        <ul className="divide-y divide-gray-200">
-                          {tenants.map((tenant) => (
-                            <li key={tenant.id} className="p-3 hover:bg-gray-50">
-                              <label className="flex items-center cursor-pointer">
-                                <input
-                                  type="checkbox"
+                  <div className="space-y-2">
+                    <Label>Select Tenants ({selectedTenants.length} selected)</Label>
+                    <Card className="max-h-64 overflow-y-auto">
+                      <CardContent className="pt-6">
+                        {tenants.length === 0 ? (
+                          <p className="text-center text-muted-foreground py-4">No tenants found</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {tenants.map((tenant) => (
+                              <div key={tenant.id} className="flex items-center space-x-3 p-2 hover:bg-accent rounded-md">
+                                <Checkbox
+                                  id={`tenant-${tenant.id}`}
                                   checked={selectedTenants.includes(tenant.id)}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
+                                  onCheckedChange={(checked) => {
+                                    if (checked) {
                                       setSelectedTenants([...selectedTenants, tenant.id]);
                                     } else {
                                       setSelectedTenants(selectedTenants.filter((id) => id !== tenant.id));
                                     }
                                   }}
-                                  className="mr-3"
                                 />
-                                <span className="text-sm font-medium text-gray-900">{tenant.name}</span>
-                              </label>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
+                                <label
+                                  htmlFor={`tenant-${tenant.id}`}
+                                  className="text-sm font-medium cursor-pointer flex-1"
+                                >
+                                  {tenant.name}
+                                </label>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
                   </div>
                 )}
 
                 {rolloutType === 'percentage' && (
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Rollout Percentage
-                    </label>
+                  <div className="space-y-2">
+                    <Label>Rollout Percentage</Label>
                     <div className="flex items-center gap-4">
                       <input
                         type="range"
@@ -469,43 +568,42 @@ export default function FirmwarePage() {
                         onChange={(e) => setRolloutPercentage(parseInt(e.target.value))}
                         className="flex-1"
                       />
-                      <input
+                      <Input
                         type="number"
                         min="1"
                         max="100"
                         value={rolloutPercentage}
                         onChange={(e) => setRolloutPercentage(parseInt(e.target.value) || 1)}
-                        className="w-20 px-3 py-2 border border-gray-300 rounded-md"
+                        className="w-20"
                       />
-                      <span className="text-sm text-gray-500">%</span>
+                      <span className="text-sm text-muted-foreground">%</span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-muted-foreground">
                       This will randomly select {rolloutPercentage}% of all devices
                     </p>
                   </div>
                 )}
-
-                <div className="flex justify-end space-x-3 mt-6">
-                  <button
-                    type="button"
-                    onClick={handleCloseRolloutModal}
-                    disabled={rollingOut}
-                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md text-sm font-medium disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleRollout}
-                    disabled={rollingOut}
-                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm font-medium disabled:opacity-50"
-                  >
-                    {rollingOut ? 'Rolling out...' : 'Rollout Firmware'}
-                  </button>
-                </div>
               </div>
-            </div>
-          </div>
-        )}
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleCloseRolloutModal}
+                  disabled={rollingOut}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleRollout}
+                  disabled={rollingOut}
+                >
+                  {rollingOut ? 'Rolling out...' : 'Rollout Firmware'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          )}
+        </Dialog>
       </div>
     </Layout>
   );
