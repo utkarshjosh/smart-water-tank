@@ -24,10 +24,30 @@ try {
 
 // Middleware
 app.use(helmet());
+
+// Parse CORS origins from environment variable
+// Supports comma-separated list of URLs or single URL
+const getCorsOrigins = (): string | string[] => {
+  if (process.env.NODE_ENV === 'production') {
+    const corsOrigin = process.env.CORS_ORIGIN || 'https://aquamind.utkarshjoshi.com';
+    // If comma-separated, split into array; otherwise return as single string
+    return corsOrigin.includes(',') 
+      ? corsOrigin.split(',').map(origin => origin.trim())
+      : corsOrigin;
+  } else {
+    const corsOrigin = process.env.CORS_ORIGIN;
+    if (!corsOrigin) {
+      return '*';
+    }
+    // If comma-separated, split into array; otherwise return as single string
+    return corsOrigin.includes(',')
+      ? corsOrigin.split(',').map(origin => origin.trim())
+      : corsOrigin;
+  }
+};
+
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production'
-    ? (process.env.CORS_ORIGIN || 'https://aquamind.utkarshjoshi.com')
-    : (process.env.CORS_ORIGIN || '*'),
+  origin: getCorsOrigins(),
   credentials: true,
 }));
 app.use(express.json());
