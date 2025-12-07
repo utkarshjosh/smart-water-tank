@@ -23,6 +23,7 @@ UPLOAD_SPEED    := 921600
 # Build Settings
 BUILD_FLAGS     := \
     -DVERSION=\"$(VERSION)\" \
+    -DFIRMWARE_VERSION=\"$(VERSION)\" \
     -DPROJECT_NAME=\"$(PROJECT_NAME)\"
 
 # Extra Build Properties (board-specific)

@@ -189,3 +189,4 @@ After making changes to the admin panel:
 | MQTT WS | 9001 | WebSocket | MQTT WebSocket (proxied via nginx) |
 
 
+
