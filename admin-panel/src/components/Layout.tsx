@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
 import { useAuthState } from 'react-firebase-hooks/auth';
@@ -14,10 +14,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [user, loading] = useAuthState(auth);
   const [isMounted, setIsMounted] = useState(false);
+  const hasInitialAuthCheck = useRef(false);
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  // Track when initial auth check is complete
+  useEffect(() => {
+    if (!loading && isMounted) {
+      hasInitialAuthCheck.current = true;
+    }
+  }, [loading, isMounted]);
 
   // Sync Firebase auth state with cookies
   useEffect(() => {
@@ -54,7 +62,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  if (loading || !isMounted) {
+  // Only show full-page loader on initial mount/auth check, not during navigation
+  if ((loading || !isMounted) && !hasInitialAuthCheck.current) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background relative overflow-hidden">
         {/* Background Gradients - Aquatic Theme */}
