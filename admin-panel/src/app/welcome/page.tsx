@@ -33,7 +33,7 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0f172a] text-white overflow-hidden relative selection:bg-cyan-500/30">
+    <div className="min-h-screen bg-[#0f172a] text-white overflow-hidden relative selection:bg-cyan-500/30" suppressHydrationWarning>
       {/* Background Gradients - Deep Aquatic Blues */}
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-900/40 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '8s' }} />
@@ -76,9 +76,8 @@ export default function LandingPage() {
       <section className="relative pt-40 pb-20 px-6">
         <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={false}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, ease: "easeOut" }}
           >
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-medium mb-6">
               <span className="relative flex h-2 w-2">
@@ -216,10 +215,9 @@ export default function LandingPage() {
             ].map((feature, i) => (
               <motion.div
                 key={i}
-                initial={{ opacity: 0, y: 20 }}
+                initial={false}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ delay: i * 0.2 }}
                 className="group p-8 rounded-3xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all hover:-translate-y-2"
               >
                 <div className="mb-6 p-4 bg-white/5 rounded-2xl w-fit group-hover:bg-white/10 transition-colors">
@@ -292,10 +290,10 @@ export default function LandingPage() {
 
                       {/* Active Bar */}
                       <motion.div
-                        initial={{ height: 0 }}
+                        initial={false}
                         whileInView={{ height: `${h}%` }}
-                        transition={{ duration: 1, delay: i * 0.1 }}
                         className="w-full bg-gradient-to-t from-cyan-500 to-blue-500 rounded-t-lg relative z-10 group-hover:from-cyan-400 group-hover:to-blue-400 transition-colors shadow-[0_0_20px_rgba(6,182,212,0.3)]"
+                        style={{ height: `${h}%` }}
                       >
                         {/* Top Glow */}
                         <div className="absolute top-0 left-0 w-full h-1 bg-white/50" />
@@ -316,9 +314,8 @@ export default function LandingPage() {
 
               {/* Floating Log Card */}
               <motion.div
-                initial={{ x: 50, opacity: 0 }}
+                initial={false}
                 whileInView={{ x: 0, opacity: 1 }}
-                transition={{ delay: 0.5 }}
                 className="absolute -bottom-10 -right-10 bg-[#1e293b] p-6 rounded-2xl border border-white/10 shadow-xl max-w-xs"
               >
                 <h4 className="text-sm font-semibold text-slate-300 mb-4">Recent Activity</h4>
@@ -384,6 +381,7 @@ export default function LandingPage() {
     </div>
   );
 }
+
 
 
 
