@@ -1022,15 +1022,11 @@ router.put('/users/:userId/tenant', async (req: AuthRequest, res) => {
     }
 
     // Check if user exists (by database ID or Firebase UID)
-    // Use CASE to safely handle both UUID and Firebase UID formats
-    // ~* is case-insensitive regex match
+    // Use a safer approach: cast UUID to text for comparison, or check firebase_uid
+    // This avoids the type mismatch error by comparing UUID as text when needed
     const userResult = await query(
       `SELECT id, firebase_uid FROM users 
-       WHERE (CASE 
-         WHEN $1 ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' 
-         THEN id = $1::uuid 
-         ELSE false 
-       END) OR firebase_uid = $1`,
+       WHERE id::text = $1 OR firebase_uid = $1`,
       [userId]
     );
 
