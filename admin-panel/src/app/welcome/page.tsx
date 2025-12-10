@@ -316,7 +316,7 @@ export default function LandingPage() {
               <motion.div
                 initial={false}
                 whileInView={{ x: 0, opacity: 1 }}
-                className="absolute -bottom-10 -right-10 bg-[#1e293b] p-6 rounded-2xl border border-white/10 shadow-xl max-w-xs"
+                className="absolute -bottom-10 -right-10 bg-[#1e293b] p-6 rounded-2xl border border-white/10 shadow-xl max-w-xs z-20"
               >
                 <h4 className="text-sm font-semibold text-slate-300 mb-4">Recent Activity</h4>
                 <div className="space-y-4">

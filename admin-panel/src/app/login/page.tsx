@@ -75,7 +75,7 @@ export default function LoginPage() {
               </div>
             </div>
             <div className="flex items-center justify-center gap-2">
-              <Droplets className="h-6 w-6 text-primary" />
+              {/* <Droplets className="h-6 w-6 text-primary" /> */}
               <CardTitle className="text-3xl font-bold">AquaMind</CardTitle>
             </div>
             <CardDescription className="text-base">
@@ -115,9 +115,9 @@ export default function LoginPage() {
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
-              <Button 
-                type="submit" 
-                className="w-full" 
+              <Button
+                type="submit"
+                className="w-full"
                 disabled={loading}
               >
                 {loading ? (
