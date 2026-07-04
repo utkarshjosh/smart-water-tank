@@ -1,10 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Layout from '@/components/Layout';
 import api from '@/lib/api';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +31,8 @@ interface DeviceDetail {
   } | null;
   recent_alerts: any[];
 }
+
+const DeviceHistoryChart = lazy(() => import('./DeviceHistoryChart'));
 
 export default function DeviceDetailClient() {
   const params = useParams();
@@ -90,11 +91,6 @@ export default function DeviceDetailClient() {
       </Layout>
     );
   }
-
-  const chartData = history.map((m) => ({
-    time: new Date(m.timestamp).toLocaleString(),
-    volume: parseFloat(m.volume_l.toString()),
-  }));
 
   return (
     <Layout>
@@ -194,21 +190,12 @@ export default function DeviceDetailClient() {
           <Card className="lg:col-span-2">
             <CardHeader>
               <CardTitle>Volume History (7 days)</CardTitle>
+              <CardDescription>Loaded on demand to keep the detail screen responsive.</CardDescription>
             </CardHeader>
             <CardContent>
-              {chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="time" />
-                    <YAxis />
-                    <Tooltip />
-                    <Line type="monotone" dataKey="volume" stroke="#8884d8" />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <p className="text-muted-foreground">No history data available</p>
-              )}
+              <Suspense fallback={<HistoryChartSkeleton />}>
+                <DeviceHistoryChart history={history} />
+              </Suspense>
             </CardContent>
           </Card>
 
@@ -261,5 +248,10 @@ export default function DeviceDetailClient() {
   );
 }
 
+function HistoryChartSkeleton() {
+  return (
+    <div className="h-[300px] animate-pulse rounded-md border border-dashed border-border bg-muted/40" />
+  );
+}
 
 
