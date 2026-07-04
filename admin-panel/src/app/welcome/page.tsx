@@ -3,16 +3,11 @@
 import { lazy, Suspense, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { motion, useScroll, useTransform } from 'framer-motion';
 import { Activity, ShieldCheck, Zap, BarChart3, Waves, Smartphone, ArrowRight } from 'lucide-react';
 
 const GlassTank = lazy(() => import('@/components/GlassTank'));
 
 export default function LandingPage() {
-  const { scrollY } = useScroll();
-  const y1 = useTransform(scrollY, [0, 500], [0, 200]);
-  const y2 = useTransform(scrollY, [0, 500], [0, -150]);
-
   // Simulation State
   const [tankLevel, setTankLevel] = useState(84);
   const [alert, setAlert] = useState<string | null>(null);
@@ -87,10 +82,7 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section className="relative pt-40 pb-20 px-6">
         <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
-          <motion.div
-            initial={false}
-            animate={{ opacity: 1, y: 0 }}
-          >
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-medium mb-6">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
@@ -112,14 +104,11 @@ export default function LandingPage() {
                 Get Started
               </Link>
             </div>
-          </motion.div>
+          </div>
 
-          <motion.div
-            style={{ y: y1 }}
-            className="relative"
-          >
+          <div className="relative animate-in fade-in slide-in-from-bottom-6 duration-700 delay-150">
             {/* Main Glass Card - Dashboard Preview */}
-            <div className="relative z-10 bg-gradient-to-b from-white/10 to-white/5 backdrop-blur-2xl border border-white/20 rounded-3xl p-8 shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
+            <div className="relative z-10 bg-gradient-to-b from-white/10 to-white/5 backdrop-blur-2xl border border-white/20 rounded-3xl p-8 shadow-[0_20px_50px_rgba(0,0,0,0.3)] transition-transform duration-300 hover:-translate-y-1">
               <div className="flex justify-between items-center mb-6">
                 <div>
                   <h3 className="text-sm text-slate-400 uppercase tracking-wider">Live Status</h3>
@@ -180,10 +169,9 @@ export default function LandingPage() {
             </div>
 
             {/* Floating Elements */}
-            <motion.div
-              animate={{ y: [0, -20, 0] }}
-              transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-              className="absolute -top-10 -right-10 bg-white/10 backdrop-blur-xl border border-white/20 p-4 rounded-2xl shadow-xl z-20"
+            <div
+              className="absolute -top-10 -right-10 bg-white/10 backdrop-blur-xl border border-white/20 p-4 rounded-2xl shadow-xl z-20 animate-pulse"
+              style={{ animationDuration: '6s' }}
             >
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-green-500/20 rounded-lg">
@@ -194,8 +182,8 @@ export default function LandingPage() {
                   <div className="text-sm font-semibold">Protected</div>
                 </div>
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -227,12 +215,9 @@ export default function LandingPage() {
                 desc: "Predictive analytics tell you exactly how much water you'll need tomorrow."
               }
             ].map((feature, i) => (
-              <motion.div
+              <div
                 key={i}
-                initial={false}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                className="group p-8 rounded-3xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all hover:-translate-y-2"
+                className="group p-8 rounded-3xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all duration-300 hover:-translate-y-2"
               >
                 <div className="mb-6 p-4 bg-white/5 rounded-2xl w-fit group-hover:bg-white/10 transition-colors">
                   {feature.icon}
@@ -241,7 +226,7 @@ export default function LandingPage() {
                 <p className="text-slate-400 leading-relaxed">
                   {feature.desc}
                 </p>
-              </motion.div>
+              </div>
             ))}
           </div>
         </div>
@@ -303,15 +288,13 @@ export default function LandingPage() {
                       <div className="absolute bottom-0 w-full h-full bg-white/5 rounded-t-lg" />
 
                       {/* Active Bar */}
-                      <motion.div
-                        initial={false}
-                        whileInView={{ height: `${h}%` }}
+                      <div
                         className="w-full bg-gradient-to-t from-cyan-500 to-blue-500 rounded-t-lg relative z-10 group-hover:from-cyan-400 group-hover:to-blue-400 transition-colors shadow-[0_0_20px_rgba(6,182,212,0.3)]"
                         style={{ height: `${h}%` }}
                       >
                         {/* Top Glow */}
                         <div className="absolute top-0 left-0 w-full h-1 bg-white/50" />
-                      </motion.div>
+                      </div>
 
                       {/* Tooltip */}
                       <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-[#1e293b] border border-white/20 px-3 py-1.5 rounded-lg text-xs font-bold opacity-0 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0 z-20 whitespace-nowrap shadow-xl">
@@ -327,10 +310,8 @@ export default function LandingPage() {
               </div>
 
               {/* Floating Log Card */}
-              <motion.div
-                initial={false}
-                whileInView={{ x: 0, opacity: 1 }}
-                className="absolute -bottom-10 -right-10 bg-[#1e293b] p-6 rounded-2xl border border-white/10 shadow-xl max-w-xs z-20"
+              <div
+                className="absolute -bottom-10 -right-10 bg-[#1e293b] p-6 rounded-2xl border border-white/10 shadow-xl max-w-xs z-20 animate-in fade-in slide-in-from-right-6 duration-700 delay-300"
               >
                 <h4 className="text-sm font-semibold text-slate-300 mb-4">Recent Activity</h4>
                 <div className="space-y-4">
@@ -349,7 +330,7 @@ export default function LandingPage() {
                     </div>
                   ))}
                 </div>
-              </motion.div>
+              </div>
             </div>
           </div>
         </div>
@@ -395,8 +376,6 @@ export default function LandingPage() {
     </div>
   );
 }
-
-
 
 
 
