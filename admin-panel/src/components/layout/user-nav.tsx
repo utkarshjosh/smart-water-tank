@@ -16,14 +16,14 @@ import {
     DropdownMenuShortcut,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useAuthState } from "react-firebase-hooks/auth";
 import { auth } from "@/lib/firebase";
 import { signOut } from "firebase/auth";
 import { removeAuthToken } from "@/lib/cookies";
 import { useRouter } from "next/navigation";
+import { useAuthSession } from "@/lib/useAuthSession";
 
 export function UserNav() {
-    const [user] = useAuthState(auth);
+    const { user } = useAuthSession();
     const router = useRouter();
 
     const handleLogout = async () => {

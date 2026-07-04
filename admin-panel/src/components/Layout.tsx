@@ -1,18 +1,15 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { onAuthStateChanged, onIdTokenChanged } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
-import { setAuthToken, removeAuthToken } from '@/lib/cookies';
+import { useAuthSession } from '@/lib/useAuthSession';
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [user, loading] = useAuthState(auth);
+  const { user, loading } = useAuthSession();
   const [isMounted, setIsMounted] = useState(false);
   const hasInitialAuthCheck = useRef(false);
 
@@ -27,40 +24,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     }
   }, [loading, isMounted]);
 
-  // Sync Firebase auth state with cookies
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        // User is signed in, update cookie with fresh token
-        try {
-          const token = await user.getIdToken();
-          setAuthToken(token);
-        } catch (error) {
-          console.error('Error getting token:', error);
-        }
-      } else {
-        // User is signed out, remove cookie
-        removeAuthToken();
-      }
-    });
-
-    // Listen for token refresh events and update cookie
-    const unsubscribeToken = onIdTokenChanged(auth, async (user) => {
-      if (user) {
-        try {
-          const token = await user.getIdToken();
-          setAuthToken(token);
-        } catch (error) {
-          console.error('Error refreshing token:', error);
-        }
-      }
-    });
-
-    return () => {
-      unsubscribeAuth();
-      unsubscribeToken();
-    };
-  }, []);
+    if (!loading && isMounted && !user) {
+      router.replace('/login');
+    }
+  }, [isMounted, loading, router, user]);
 
   // Only show full-page loader on initial mount/auth check, not during navigation
   if ((loading || !isMounted) && !hasInitialAuthCheck.current) {
@@ -101,7 +69,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) {
-    router.push('/login');
     return null;
   }
 
@@ -119,5 +86,4 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-
 

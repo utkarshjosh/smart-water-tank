@@ -3,17 +3,14 @@
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { onAuthStateChanged, onIdTokenChanged } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
-import { setAuthToken, removeAuthToken } from '@/lib/cookies';
 import api from '@/lib/api';
+import { useAuthSession } from '@/lib/useAuthSession';
 import { TenantSidebar } from '@/components/layout/tenant-sidebar';
 import { TenantHeader } from '@/components/layout/tenant-header';
 
 export default function TenantLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [user, loading] = useAuthState(auth);
+  const { user, loading } = useAuthSession();
   const [isMounted, setIsMounted] = useState(false);
   const [tenantName, setTenantName] = useState<string | undefined>();
   const hasInitialAuthCheck = useRef(false);
@@ -29,35 +26,10 @@ export default function TenantLayout({ children }: { children: React.ReactNode }
   }, [loading, isMounted]);
 
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        try {
-          const token = await user.getIdToken();
-          setAuthToken(token);
-        } catch (error) {
-          console.error('Error getting token:', error);
-        }
-      } else {
-        removeAuthToken();
-      }
-    });
-
-    const unsubscribeToken = onIdTokenChanged(auth, async (user) => {
-      if (user) {
-        try {
-          const token = await user.getIdToken();
-          setAuthToken(token);
-        } catch (error) {
-          console.error('Error refreshing token:', error);
-        }
-      }
-    });
-
-    return () => {
-      unsubscribeAuth();
-      unsubscribeToken();
-    };
-  }, []);
+    if (!loading && isMounted && !user) {
+      router.replace('/login');
+    }
+  }, [isMounted, loading, router, user]);
 
   useEffect(() => {
     if (!user) return;
@@ -95,7 +67,6 @@ export default function TenantLayout({ children }: { children: React.ReactNode }
   }
 
   if (!user) {
-    router.push('/login');
     return null;
   }
 
