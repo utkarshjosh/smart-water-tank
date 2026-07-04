@@ -1,9 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Gauge, ArrowLeft } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate, Route, Routes } from 'react-router-dom';
 
 const HomePage = lazy(() => import('@/app/page'));
 const WelcomePage = lazy(() => import('@/app/welcome/page'));
@@ -30,25 +26,25 @@ function ShellPage({
 }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-slate-50">
-      <Card className="w-full max-w-xl border-white/10 bg-white/5 text-slate-50 shadow-2xl">
-        <CardHeader className="space-y-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/15 text-cyan-300">
-            <Gauge className="h-6 w-6" />
+      <div className="w-full max-w-xl rounded-3xl border border-white/10 bg-white/5 p-8 text-slate-50 shadow-2xl">
+        <div className="space-y-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/15 text-lg font-semibold text-cyan-300">
+            !
           </div>
           <div className="space-y-2">
-            <CardTitle>{title}</CardTitle>
-            <CardDescription className="text-slate-300">{description}</CardDescription>
+            <h1 className="text-2xl font-semibold leading-none tracking-tight">{title}</h1>
+            <p className="text-sm text-slate-300">{description}</p>
           </div>
-        </CardHeader>
-        <CardContent>
-          <Button asChild variant="secondary">
-            <Link to={backHref}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Go back
-            </Link>
-          </Button>
-        </CardContent>
-      </Card>
+        </div>
+        <div className="pt-6">
+          <Link
+            to={backHref}
+            className="inline-flex h-10 items-center justify-center rounded-md bg-slate-100 px-4 text-sm font-medium text-slate-950 transition-colors hover:bg-slate-200"
+          >
+            Back
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }
