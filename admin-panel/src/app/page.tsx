@@ -2,18 +2,13 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth } from '@/lib/firebase';
 
 export default function Home() {
   const router = useRouter();
-  const [user, loading] = useAuthState(auth);
 
   useEffect(() => {
-    if (!loading) {
-      router.push('/welcome');
-    }
-  }, [user, loading, router]);
+    router.replace('/welcome');
+  }, [router]);
 
   return (
     <div className="flex items-center justify-center min-h-screen">
@@ -23,6 +18,5 @@ export default function Home() {
     </div>
   );
 }
-
 
 
