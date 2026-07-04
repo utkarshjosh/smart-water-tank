@@ -3,7 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import * as dotenv from 'dotenv';
 import { initializeFirebase } from './config/firebase';
-import { getPool } from './config/database';
+import { query, closePool } from './config/database';
 import deviceRoutes from './routes/device.routes';
 import userRoutes from './routes/user.routes';
 import adminRoutes from './routes/admin.routes';
@@ -56,8 +56,7 @@ app.use(express.urlencoded({ extended: true }));
 // Health check
 app.get('/health', async (req, res) => {
   try {
-    const pool = getPool();
-    await pool.query('SELECT 1');
+    await query('SELECT 1');
     res.json({ status: 'ok', database: 'connected' });
   } catch (error) {
     res.status(500).json({ status: 'error', database: 'disconnected' });
@@ -89,8 +88,7 @@ app.listen(PORT, () => {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully');
-  const pool = getPool();
-  await pool.end();
+  await closePool();
   process.exit(0);
 });
 

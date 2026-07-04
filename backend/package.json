@@ -11,7 +11,8 @@
     "migrate:create": "node dist/database/create-migration.js",
     "seed": "npm run build && node dist/database/seed.js",
     "seed:dev": "ts-node --transpile-only src/database/seed.ts",
-    "simulate-device": "ts-node --transpile-only scripts/simulate-device.ts"
+    "simulate-device": "ts-node --transpile-only scripts/simulate-device.ts",
+    "test": "TS_NODE_TRANSPILE_ONLY=1 node --require ts-node/register --test src/database/adapters/__tests__/*.test.ts"
   },
   "keywords": [],
   "author": "",
@@ -25,6 +26,7 @@
     "express-rate-limit": "^7.1.5",
     "helmet": "^7.1.0",
     "multer": "^1.4.5-lts.1",
+    "mysql2": "^3.11.0",
     "node-cron": "^3.0.3",
     "zod": "^3.22.4"
   },

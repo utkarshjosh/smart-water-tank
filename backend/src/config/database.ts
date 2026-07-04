@@ -1,33 +1,32 @@
-import { Pool, PoolClient } from 'pg';
 import * as dotenv from 'dotenv';
+import { createAdapter, resolveEngine, DatabaseAdapter, PoolClientLike } from '../database/adapters';
 
 dotenv.config();
 
-let pool: Pool | null = null;
+// The application never touches a driver directly — it goes through the active
+// adapter (Postgres or MySQL), selected by DB_CLIENT / DATABASE_URL scheme.
+// See src/database/adapters for how to add another engine.
+let adapter: DatabaseAdapter | null = null;
 
-export function getPool(): Pool {
-  if (!pool) {
-    pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      max: 20,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
-    });
-
-    pool.on('error', (err) => {
-      console.error('Unexpected error on idle client', err);
-      process.exit(-1);
-    });
+function getAdapter(): DatabaseAdapter {
+  if (!adapter) {
+    adapter = createAdapter();
+    console.log(`[DB] Using ${adapter.engine} adapter`);
   }
+  return adapter;
+}
 
-  return pool;
+// Kept for backwards compatibility with existing imports. Returns the active
+// engine name rather than a raw pg Pool.
+export function getEngine(): string {
+  return resolveEngine();
 }
 
 export async function query(text: string, params?: any[]): Promise<any> {
-  const pool = getPool();
+  const db = getAdapter();
   const start = Date.now();
   try {
-    const res = await pool.query(text, params);
+    const res = await db.query(text, params);
     const duration = Date.now() - start;
     console.log('Executed query', { text, duration, rows: res.rowCount });
     return res;
@@ -37,21 +36,18 @@ export async function query(text: string, params?: any[]): Promise<any> {
   }
 }
 
-export async function getClient(): Promise<PoolClient> {
-  const pool = getPool();
-  return await pool.connect();
+export async function getClient(): Promise<PoolClientLike> {
+  return getAdapter().getClient();
+}
+
+// Run raw, possibly multi-statement SQL (migration files). Not parameterized.
+export async function execSql(sql: string): Promise<void> {
+  await getAdapter().exec(sql);
 }
 
 export async function closePool(): Promise<void> {
-  if (pool) {
-    await pool.end();
-    pool = null;
+  if (adapter) {
+    await adapter.close();
+    adapter = null;
   }
 }
-
-
-
-
-
-
-
