@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { getAuth } from '../config/firebase';
 import { query } from '../config/database';
 import { User } from '../database/models';
+import { provisionPersonalTenantAndUser } from '../services/onboarding.service';
 
 export interface AuthRequest extends Request {
   user?: User;
@@ -34,42 +35,28 @@ export async function authenticateFirebase(
     );
 
     if (userResult.rows.length === 0) {
-      // User doesn't exist in DB, auto-create them from Firebase
+      // User doesn't exist in DB yet - auto-provision their own personal
+      // tenant so they land in a usable, tenant-scoped account immediately.
       try {
         const firebaseUser = await auth.getUser(decodedToken.uid);
-        
-        // Extract name from displayName or use email as fallback
         const userName = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
         const userEmail = firebaseUser.email || '';
-        
-        // Auto-create user in PostgreSQL with default role 'user' and no tenant (can be assigned later)
-        const createResult = await query(
-          `INSERT INTO users (firebase_uid, email, name, tenant_id, role)
-           VALUES ($1, $2, $3, NULL, 'user')
-           RETURNING *`,
-          [decodedToken.uid, userEmail, userName]
-        );
-        
-        console.log(`[Auth] Auto-created user in PostgreSQL: ${decodedToken.uid} (${userEmail})`);
-        userResult = createResult;
+
+        const newUser = await provisionPersonalTenantAndUser({
+          firebaseUid: decodedToken.uid,
+          email: userEmail,
+          name: userName,
+        });
+
+        console.log(`[Auth] Auto-provisioned user + tenant: ${decodedToken.uid} (${userEmail})`);
+        userResult = { rows: [newUser] };
       } catch (createError: any) {
-        console.error('Error auto-creating user in database:', createError);
-        
-        // If it's a unique constraint violation, user was created between check and insert
-        // Try to fetch again
-        if (createError.code === '23505') {
-          userResult = await query(
-            'SELECT * FROM users WHERE firebase_uid = $1',
-            [decodedToken.uid]
-          );
-        } else {
-          // For other errors, still return 500 but with more context
-          res.status(500).json({ 
-            error: 'Failed to create user account',
-            details: 'User authenticated with Firebase but could not be created in database'
-          });
-          return;
-        }
+        console.error('Error auto-provisioning user in database:', createError);
+        res.status(500).json({
+          error: 'Failed to create user account',
+          details: 'User authenticated with Firebase but could not be created in database'
+        });
+        return;
       }
     }
 

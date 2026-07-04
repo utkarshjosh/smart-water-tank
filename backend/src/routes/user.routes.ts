@@ -1,13 +1,19 @@
 import express from 'express';
+import * as crypto from 'crypto';
 import { authenticateFirebase, AuthRequest, requireRole } from '../middleware/auth.middleware';
 import { enforceTenantAccess, validateDeviceAccess } from '../middleware/tenant.middleware';
 import { query } from '../config/database';
 import { getAuth } from '../config/firebase';
+import { provisionPersonalTenantAndUser } from '../services/onboarding.service';
 import { z } from 'zod';
+import rateLimit from 'express-rate-limit';
 
 const router = express.Router();
 
-// POST /api/v1/user/register - Self-registration (requires Firebase auth but no tenant yet)
+// POST /api/v1/user/register - Self-registration (requires Firebase auth).
+// A brand-new user auto-provisions their own personal tenant (see
+// onboarding.service.ts) rather than staying tenant-less - an explicit
+// tenant_id is still accepted for the ops-driven admin-linking flow.
 const registerSchema = z.object({
   name: z.string().min(1).max(255),
   tenant_id: z.string().uuid().optional(), // Optional - admin can assign later
@@ -22,9 +28,9 @@ router.post('/register', authenticateFirebase, async (req: AuthRequest, res) => 
     // Validate request body
     const validationResult = registerSchema.safeParse(req.body);
     if (!validationResult.success) {
-      return res.status(400).json({ 
-        error: 'Validation failed', 
-        details: validationResult.error.errors 
+      return res.status(400).json({
+        error: 'Validation failed',
+        details: validationResult.error.errors
       });
     }
 
@@ -43,7 +49,7 @@ router.post('/register', authenticateFirebase, async (req: AuthRequest, res) => 
     if (existingUser.rows.length > 0) {
       // User already exists - update profile and return (idempotent)
       await query(
-        `UPDATE users 
+        `UPDATE users
          SET name = $1, email = $2, updated_at = NOW()
          WHERE firebase_uid = $3`,
         [name, firebaseUser.email || '', req.firebaseUid]
@@ -63,7 +69,8 @@ router.post('/register', authenticateFirebase, async (req: AuthRequest, res) => 
       });
     }
 
-    // If tenant_id provided, verify it exists
+    // If tenant_id explicitly provided, verify it exists and link to it
+    // instead of auto-provisioning a personal tenant (ops-driven flow).
     if (tenant_id) {
       const tenantResult = await query(
         'SELECT id FROM tenants WHERE id = $1',
@@ -73,28 +80,39 @@ router.post('/register', authenticateFirebase, async (req: AuthRequest, res) => 
       if (tenantResult.rows.length === 0) {
         return res.status(404).json({ error: 'Tenant not found' });
       }
+
+      const result = await query(
+        `INSERT INTO users (firebase_uid, email, name, tenant_id, role)
+         VALUES ($1, $2, $3, $4, 'user')
+         RETURNING *`,
+        [req.firebaseUid, firebaseUser.email || '', name, tenant_id]
+      );
+
+      return res.status(201).json({
+        user: result.rows[0],
+        message: 'User registered successfully',
+      });
     }
 
-    // Create new user
-    const result = await query(
-      `INSERT INTO users (firebase_uid, email, name, tenant_id, role)
-       VALUES ($1, $2, $3, $4, 'user')
-       RETURNING *`,
-      [req.firebaseUid, firebaseUser.email || '', name, tenant_id || null]
-    );
+    // Self-serve signup: auto-provision a personal tenant.
+    const newUser = await provisionPersonalTenantAndUser({
+      firebaseUid: req.firebaseUid,
+      email: firebaseUser.email || '',
+      name,
+    });
 
     res.status(201).json({
-      user: result.rows[0],
+      user: newUser,
       message: 'User registered successfully',
     });
   } catch (error: any) {
     console.error('Error registering user:', error);
-    
+
     // Handle unique constraint violation
     if (error.code === '23505') {
       return res.status(409).json({ error: 'User already exists' });
     }
-    
+
     res.status(500).json({ error: 'Failed to register user' });
   }
 });
@@ -145,18 +163,17 @@ router.post('/sync', authenticateFirebase, async (req: AuthRequest, res) => {
         synced: true,
       });
     } else {
-      // User doesn't exist - create them
+      // User doesn't exist - create them with their own personal tenant
       const userName = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
-      
-      const result = await query(
-        `INSERT INTO users (firebase_uid, email, name, tenant_id, role)
-         VALUES ($1, $2, $3, NULL, 'user')
-         RETURNING *`,
-        [req.firebaseUid, firebaseUser.email || '', userName]
-      );
+
+      const newUser = await provisionPersonalTenantAndUser({
+        firebaseUid: req.firebaseUid,
+        email: firebaseUser.email || '',
+        name: userName,
+      });
 
       return res.status(201).json({
-        user: result.rows[0],
+        user: newUser,
         message: 'User created and synced successfully',
         synced: true,
       });
@@ -188,9 +205,137 @@ router.post('/sync', authenticateFirebase, async (req: AuthRequest, res) => {
   }
 });
 
+// GET /api/v1/user/me - Who am I / what's my tenant (Firebase auth only, no
+// tenant requirement, so a freshly-registered user can always call this).
+router.get('/me', authenticateFirebase, async (req: AuthRequest, res) => {
+  try {
+    const result = await query(
+      `SELECT u.id, u.email, u.name, u.role, u.tenant_id, t.name as tenant_name
+       FROM users u
+       LEFT JOIN tenants t ON t.id = u.tenant_id
+       WHERE u.id = $1`,
+      [req.user!.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error: any) {
+    console.error('Error fetching current user:', error);
+    res.status(500).json({ error: 'Failed to fetch current user' });
+  }
+});
+
 // All other user routes require Firebase authentication and tenant
 router.use(authenticateFirebase);
 router.use(enforceTenantAccess);
+
+// Rate limiter for claim-code minting: per-account, not per-IP, since the
+// caller is already authenticated - stops a compromised account from
+// farming codes rather than a shared NAT/IP.
+const claimCodeMintLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: AuthRequest) => req.user!.id,
+});
+
+const CLAIM_CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ'; // excludes 0/O/1/I/L
+const CLAIM_CODE_LENGTH = 8;
+const CLAIM_CODE_TTL_MS = 10 * 60 * 1000;
+
+function generateClaimCode(): string {
+  let code = '';
+  const bytes = crypto.randomBytes(CLAIM_CODE_LENGTH);
+  for (let i = 0; i < CLAIM_CODE_LENGTH; i++) {
+    code += CLAIM_CODE_ALPHABET[bytes[i] % CLAIM_CODE_ALPHABET.length];
+  }
+  return code;
+}
+
+function hashClaimCode(code: string): string {
+  return crypto.createHash('sha256').update(code.toUpperCase()).digest('hex');
+}
+
+// POST /api/v1/user/devices/claim-code - Mint a short-lived claim code the
+// user types into their device's setup portal (see plans/first-launch-plan.md).
+router.post('/devices/claim-code', claimCodeMintLimiter, async (req: AuthRequest, res) => {
+  try {
+    const tenantId = (req as any).tenantId;
+    const code = generateClaimCode();
+    const codeHash = hashClaimCode(code);
+    const expiresAt = new Date(Date.now() + CLAIM_CODE_TTL_MS);
+
+    // Only one live code per tenant at a time - simplifies "regenerate".
+    await query(
+      `UPDATE device_claim_codes
+       SET expires_at = NOW()
+       WHERE tenant_id = $1 AND consumed_at IS NULL AND expires_at > NOW()`,
+      [tenantId]
+    );
+
+    await query(
+      `INSERT INTO device_claim_codes (code_hash, tenant_id, created_by_user_id, expires_at)
+       VALUES ($1, $2, $3, $4)`,
+      [codeHash, tenantId, req.user!.id, expiresAt]
+    );
+
+    res.status(201).json({
+      claim_code: code,
+      expires_at: expiresAt.toISOString(),
+      expires_in_seconds: CLAIM_CODE_TTL_MS / 1000,
+    });
+  } catch (error: any) {
+    console.error('Error minting claim code:', error);
+    res.status(500).json({ error: 'Failed to generate claim code' });
+  }
+});
+
+// GET /api/v1/user/devices/claim-code/:code/status - Poll target for the
+// Add Device wizard while waiting for the physical device to pair.
+router.get('/devices/claim-code/:code/status', async (req: AuthRequest, res) => {
+  try {
+    const tenantId = (req as any).tenantId;
+    const codeHash = hashClaimCode(req.params.code);
+
+    const result = await query(
+      `SELECT dcc.*, d.device_id, d.name as device_name, d.status as device_status
+       FROM device_claim_codes dcc
+       LEFT JOIN devices d ON d.id = dcc.device_id
+       WHERE dcc.code_hash = $1 AND dcc.tenant_id = $2`,
+      [codeHash, tenantId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Claim code not found' });
+    }
+
+    const row = result.rows[0];
+
+    if (row.consumed_at) {
+      return res.json({
+        status: 'claimed',
+        device: {
+          id: row.device_id,
+          name: row.device_name || row.device_id,
+          status: row.device_status,
+        },
+      });
+    }
+
+    if (new Date(row.expires_at).getTime() <= Date.now()) {
+      return res.json({ status: 'expired', device: null });
+    }
+
+    res.json({ status: 'pending', device: null });
+  } catch (error: any) {
+    console.error('Error checking claim code status:', error);
+    res.status(500).json({ error: 'Failed to check claim code status' });
+  }
+});
 
 // GET /api/v1/user/devices - List user's accessible devices
 router.get('/devices', async (req: AuthRequest, res) => {

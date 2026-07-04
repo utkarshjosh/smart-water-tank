@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { signInWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { setAuthToken } from '@/lib/cookies';
 import api from '@/lib/api';
@@ -13,57 +13,32 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, LogIn, Droplets } from 'lucide-react';
+import { AlertCircle, UserPlus } from 'lucide-react';
 
-export default function LoginPage() {
+export default function SignupPage() {
   const router = useRouter();
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Ops admins go to the admin backoffice; everyone else (self-serve tenant
-  // owners/members) goes to their own devices area.
-  const redirectByRole = async () => {
-    try {
-      const { data } = await api.get('/api/v1/user/me');
-      if (data.role === 'admin' || data.role === 'super_admin') {
-        router.push('/admin/dashboard');
-      } else {
-        router.push('/app/devices');
-      }
-    } catch (err) {
-      router.push('/app/devices');
-    }
-  };
-
-  // Check if user is already logged in
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        // User is already logged in, redirect appropriately
-        const token = await user.getIdToken();
-        setAuthToken(token);
-        await redirectByRole();
-      }
-    });
-
-    return () => unsubscribe();
-  }, [router]);
-
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      // Get the ID token and store it in cookies
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const token = await userCredential.user.getIdToken();
       setAuthToken(token);
-      await redirectByRole();
+
+      // Auto-provisions a personal tenant for this account on the backend.
+      await api.post('/api/v1/user/register', { name });
+
+      router.push('/app/onboarding');
     } catch (err: any) {
-      setError(err.message || 'Failed to login');
+      setError(err.message || 'Failed to sign up');
     } finally {
       setLoading(false);
     }
@@ -71,7 +46,6 @@ export default function LoginPage() {
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
-      {/* Background Gradients - Aquatic Theme */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-primary/10 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '8s' }} />
         <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-accent/10 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '12s', animationDelay: '2s' }} />
@@ -91,22 +65,31 @@ export default function LoginPage() {
                 />
               </div>
             </div>
-            <div className="flex items-center justify-center gap-2">
-              {/* <Droplets className="h-6 w-6 text-primary" /> */}
-              <CardTitle className="text-3xl font-bold">AquaMind</CardTitle>
-            </div>
+            <CardTitle className="text-3xl font-bold">AquaMind</CardTitle>
             <CardDescription className="text-base">
-              Admin Panel Login
+              Create your account
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleLogin} className="space-y-4">
+            <form onSubmit={handleSignup} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Name</Label>
+                <Input
+                  id="name"
+                  type="text"
+                  placeholder="Your name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  disabled={loading}
+                />
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
                   type="email"
-                  placeholder="admin@aquamind.com"
+                  placeholder="you@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -118,10 +101,11 @@ export default function LoginPage() {
                 <Input
                   id="password"
                   type="password"
-                  placeholder="Enter your password"
+                  placeholder="At least 6 characters"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  minLength={6}
                   disabled={loading}
                 />
               </div>
@@ -140,19 +124,19 @@ export default function LoginPage() {
                 {loading ? (
                   <>
                     <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
-                    Logging in...
+                    Creating account...
                   </>
                 ) : (
                   <>
-                    <LogIn className="mr-2 h-4 w-4" />
-                    Login
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Sign up
                   </>
                 )}
               </Button>
               <p className="text-center text-sm text-muted-foreground">
-                Don&apos;t have an account?{' '}
-                <Link href="/signup" className="text-primary hover:underline">
-                  Sign up
+                Already have an account?{' '}
+                <Link href="/login" className="text-primary hover:underline">
+                  Log in
                 </Link>
               </p>
             </form>
@@ -162,5 +146,3 @@ export default function LoginPage() {
     </div>
   );
 }
-
-

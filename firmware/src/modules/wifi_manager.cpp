@@ -5,6 +5,7 @@
 
 #include "wifi_manager.h"
 #include "config.h"
+#include "claim_client.h"
 #include <ESP8266WiFi.h>
 #include <WiFiManager.h>
 #include <ArduinoJson.h>
@@ -16,9 +17,8 @@
 static unsigned long lastReconnectAttempt = 0;
 static WiFiManager* wifiManager = nullptr;
 
-// Custom parameters for WiFiManager
-static WiFiManagerParameter* custom_device_id = nullptr;
-static WiFiManagerParameter* custom_device_token = nullptr;
+// Custom parameter for WiFiManager - the pairing code from the AquaMind app
+static WiFiManagerParameter* custom_claim_code = nullptr;
 
 // Callback for when config is saved
 void saveConfigCallback() {
@@ -47,24 +47,10 @@ namespace WifiManager {
         
         // Load current config values
         Config::load();
-        
-        // Create custom parameters with current values
-        char deviceIdBuffer[64];
-        char deviceTokenBuffer[128];
-        
-        Config::deviceId.toCharArray(deviceIdBuffer, sizeof(deviceIdBuffer));
-        Config::deviceToken.toCharArray(deviceTokenBuffer, sizeof(deviceTokenBuffer));
-        
-        if (!custom_device_id) {
-            custom_device_id = new WiFiManagerParameter("device_id", "Device ID", deviceIdBuffer, 64);
-            custom_device_token = new WiFiManagerParameter("device_token", "Device Token", deviceTokenBuffer, 128);
-            
-            wifiManager->addParameter(custom_device_id);
-            wifiManager->addParameter(custom_device_token);
-        } else {
-            // Update existing parameters
-            custom_device_id->setValue(deviceIdBuffer, 64);
-            custom_device_token->setValue(deviceTokenBuffer, 128);
+
+        if (!custom_claim_code) {
+            custom_claim_code = new WiFiManagerParameter("claim_code", "Pairing Code (from the AquaMind app)", "", 12);
+            wifiManager->addParameter(custom_claim_code);
         }
     }
 
@@ -247,53 +233,61 @@ namespace WifiManager {
         if (!wifiManager) {
             init();
         }
-        
-        Serial.println(F("[WiFi] Starting configuration portal..."));
-        Serial.printf("[WiFi] AP SSID: %s\n", AP_SSID);
-        Serial.printf("[WiFi] AP Password: %s\n", AP_PASSWORD);
-        Serial.println(F("[WiFi] Connect to the AP and configure your device"));
-        
-        // Start config portal (blocking)
-        bool portalStarted = wifiManager->startConfigPortal(AP_SSID, AP_PASSWORD);
-        
-        if (!portalStarted) {
-            Serial.println(F("[WiFi] Config portal timeout"));
-            return;
+
+        const int MAX_CLAIM_ATTEMPTS = 3;
+        String hardwareId = ClaimClient::getHardwareId();
+
+        for (int attempt = 1; attempt <= MAX_CLAIM_ATTEMPTS; attempt++) {
+            Serial.println(F("[WiFi] Starting configuration portal..."));
+            Serial.printf("[WiFi] AP SSID: %s\n", AP_SSID);
+            Serial.printf("[WiFi] AP Password: %s\n", AP_PASSWORD);
+            Serial.println(F("[WiFi] Connect to the AP and configure your device"));
+
+            // Start config portal (blocking)
+            bool portalStarted = wifiManager->startConfigPortal(AP_SSID, AP_PASSWORD);
+
+            if (!portalStarted) {
+                Serial.println(F("[WiFi] Config portal timeout"));
+                return;
+            }
+
+            // Config portal closed - a network was selected and WiFi connected.
+            // WiFiManager already saved the WiFi creds to EEPROM; mirror them
+            // into Config for consistency.
+            String newWifiSsid = WiFi.SSID();
+            String newWifiPassword = WiFi.psk();
+            if (newWifiSsid.length() > 0 && newWifiSsid != AP_SSID) {
+                Config::wifiSsid = newWifiSsid;
+                Serial.printf("[WiFi] Saved SSID: %s\n", newWifiSsid.c_str());
+            }
+            if (newWifiPassword.length() > 0) {
+                Config::wifiPassword = newWifiPassword;
+            }
+
+            // Exchange the claim code for a permanent device token now, while
+            // we're online (the phone had no internet while joined to our AP,
+            // so it could only hand us a short code, not a real token).
+            String claimCode = String(custom_claim_code->getValue());
+            String newDeviceToken, newDeviceId;
+            bool claimedNow = ClaimClient::claim(claimCode, hardwareId, newDeviceToken, newDeviceId);
+
+            if (claimedNow) {
+                Config::deviceId = newDeviceId;
+                Config::deviceToken = newDeviceToken;
+                Config::claimed = true;
+                break;
+            }
+
+            Serial.printf("[WiFi] Pairing failed (attempt %d/%d)\n", attempt, MAX_CLAIM_ATTEMPTS);
+            if (attempt < MAX_CLAIM_ATTEMPTS) {
+                Serial.println(F("[WiFi] Re-opening config portal to retry the pairing code..."));
+            }
         }
-        
-        // Config portal closed - save the new values
-        Serial.println(F("[WiFi] Configuration saved, updating config..."));
-        
-        // Get values from WiFiManager parameters
-        String newDeviceId = String(custom_device_id->getValue());
-        String newDeviceToken = String(custom_device_token->getValue());
-        
-        // Get WiFi credentials from the network that was selected in the portal
-        // When startConfigPortal() returns true, it means a network was selected and connected
-        // WiFiManager automatically saves credentials to EEPROM, and we can read them from WiFi
-        String newWifiSsid = WiFi.SSID();
-        String newWifiPassword = WiFi.psk();
-        
-        // Update config
-        if (newDeviceId.length() > 0) {
-            Config::deviceId = newDeviceId;
-        }
-        if (newDeviceToken.length() > 0) {
-            Config::deviceToken = newDeviceToken;
-        }
-        // Update WiFi credentials from the selected network
-        // WiFiManager has already saved them to EEPROM, but we also save to Config for consistency
-        if (newWifiSsid.length() > 0 && newWifiSsid != AP_SSID) {
-            Config::wifiSsid = newWifiSsid;
-            Serial.printf("[WiFi] Saved SSID: %s\n", newWifiSsid.c_str());
-        }
-        if (newWifiPassword.length() > 0) {
-            Config::wifiPassword = newWifiPassword;
-        }
-        
-        // Save to flash
+
+        // Save to flash (claimed values if pairing succeeded, otherwise
+        // unclaimed - the device will re-enter the portal on next boot).
         Config::save();
-        
+
         Serial.println(F("[WiFi] Config saved! Restarting..."));
         Serial.println();
         delay(2000);

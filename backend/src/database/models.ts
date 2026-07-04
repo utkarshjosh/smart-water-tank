@@ -13,7 +13,7 @@ export interface User {
   email: string;
   name?: string;
   tenant_id: string;
-  role: 'user' | 'admin' | 'super_admin';
+  role: 'user' | 'tenant_owner' | 'admin' | 'super_admin';
   fcm_token?: string;
   created_at: Date;
   updated_at: Date;
@@ -103,6 +103,17 @@ export interface UserDeviceMapping {
   id: string;
   user_id: string;
   device_id: string;
+  created_at: Date;
+}
+
+export interface DeviceClaimCode {
+  id: string;
+  code_hash: string;
+  tenant_id: string;
+  created_by_user_id?: string;
+  device_id?: string;
+  expires_at: Date;
+  consumed_at?: Date;
   created_at: Date;
 }
 

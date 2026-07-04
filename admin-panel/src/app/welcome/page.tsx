@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { motion, useScroll, useTransform } from 'framer-motion';
-import { Droplets, Activity, ShieldCheck, Zap, BarChart3, Waves, Smartphone, Download, ArrowRight, Info } from 'lucide-react';
+import { Droplets, Activity, ShieldCheck, Zap, BarChart3, Waves, Smartphone, ArrowRight } from 'lucide-react';
 import GlassTank from '@/components/GlassTank';
 
 export default function LandingPage() {
@@ -65,10 +65,15 @@ export default function LandingPage() {
             <a href="#analytics" className="hover:text-white transition-colors">Analytics</a>
             <a href="#about" className="hover:text-white transition-colors">About</a>
           </div>
-          <button className="px-5 py-2 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl text-sm font-medium transition-all hover:shadow-[0_0_20px_rgba(6,182,212,0.3)] flex items-center gap-2">
-            <Smartphone className="w-4 h-4" />
-            <span>Get App</span>
-          </button>
+          <div className="flex items-center gap-3">
+            <Link href="/login" className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors">
+              Log in
+            </Link>
+            <Link href="/signup" className="px-5 py-2 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl text-sm font-medium transition-all hover:shadow-[0_0_20px_rgba(6,182,212,0.3)] flex items-center gap-2">
+              <Smartphone className="w-4 h-4" />
+              <span>Get Started</span>
+            </Link>
+          </div>
         </div>
       </nav>
 
@@ -95,10 +100,10 @@ export default function LandingPage() {
               Experience the weightlessness of total control. Our edge AI understands your water usage patterns, predicting needs before they arise.
             </p>
             <div className="flex flex-wrap gap-4">
-              <button className="px-8 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl font-semibold shadow-[0_0_40px_rgba(6,182,212,0.4)] hover:shadow-[0_0_60px_rgba(6,182,212,0.6)] transition-all hover:scale-[1.02] flex items-center gap-3">
-                <Download className="w-5 h-5" />
-                Download Android App
-              </button>
+              <Link href="/signup" className="px-8 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl font-semibold shadow-[0_0_40px_rgba(6,182,212,0.4)] hover:shadow-[0_0_60px_rgba(6,182,212,0.6)] transition-all hover:scale-[1.02] flex items-center gap-3">
+                <ArrowRight className="w-5 h-5" />
+                Get Started
+              </Link>
             </div>
           </motion.div>
 
@@ -354,10 +359,10 @@ export default function LandingPage() {
             <p className="text-xl text-slate-300 mb-12 max-w-2xl mx-auto">
               Join thousands of smart homes that have switched to intelligent water management.
             </p>
-            <button className="inline-flex items-center justify-center px-10 py-5 bg-white text-slate-900 rounded-full font-bold text-lg hover:bg-cyan-50 transition-colors shadow-[0_0_30px_rgba(255,255,255,0.3)] gap-3">
-              <Download className="w-5 h-5" />
-              Download Android App
-            </button>
+            <Link href="/signup" className="inline-flex items-center justify-center px-10 py-5 bg-white text-slate-900 rounded-full font-bold text-lg hover:bg-cyan-50 transition-colors shadow-[0_0_30px_rgba(255,255,255,0.3)] gap-3">
+              <ArrowRight className="w-5 h-5" />
+              Get Started
+            </Link>
           </div>
         </div>
       </section>

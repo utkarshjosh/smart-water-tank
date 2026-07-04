@@ -25,10 +25,7 @@ deploy_backend() {
     
     echo "  → Building TypeScript..."
     npm run build
-    
-    echo "  → Running database migrations..."
-    npm run migrate || echo "  ⚠️  Migration failed or already up to date"
-    
+
     echo "  → Restarting PM2 process..."
     pm2 restart aquamind-api || pm2 start ecosystem.config.js --only aquamind-api
     

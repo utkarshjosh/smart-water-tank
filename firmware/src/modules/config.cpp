@@ -26,6 +26,7 @@ namespace Config {
     // Device identification (defaults from config.h)
     String deviceId = DEVICE_ID_DEFAULT;
     String deviceToken = DEVICE_TOKEN_DEFAULT;
+    bool claimed = false;
 
     void load() {
         Serial.println(F("[Config] Loading from flash..."));
@@ -79,7 +80,8 @@ namespace Config {
         if (doc.containsKey("device_token")) {
             deviceToken = doc["device_token"].as<String>();
         }
-        
+        claimed = doc["claimed"] | false;
+
         Serial.println(F("[Config] Loaded successfully"));
     }
 
@@ -109,7 +111,8 @@ namespace Config {
         doc["wifi_password"] = wifiPassword;
         doc["device_id"] = deviceId;
         doc["device_token"] = deviceToken;
-        
+        doc["claimed"] = claimed;
+
         serializeJson(doc, file);
         file.close();
         
@@ -130,7 +133,8 @@ namespace Config {
         wifiPassword = WIFI_PASSWORD_DEFAULT;
         deviceId = DEVICE_ID_DEFAULT;
         deviceToken = DEVICE_TOKEN_DEFAULT;
-        
+        claimed = false;
+
         // Delete config file
         if (LittleFS.begin()) {
             LittleFS.remove(CONFIG_FILE);

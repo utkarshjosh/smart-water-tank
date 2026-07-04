@@ -75,7 +75,16 @@ void setup() {
         state.wifiRssi = WiFi.RSSI();
         Serial.print(F("[WiFi] Connected! IP: "));
         Serial.println(WiFi.localIP());
-        
+
+        // A device that's connected to WiFi but never completed pairing has
+        // no usable device id/token - send it back into the config portal
+        // instead of reporting with an empty token forever.
+        if (!Config::claimed) {
+            Serial.println(F("[WiFi] Device not yet paired, entering config portal..."));
+            WifiManager::connect(true); // blocks; restarts the device when done
+            return;
+        }
+
         // Initialize OTA after WiFi is connected
         OTAHandler::init();
         

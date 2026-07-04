@@ -43,9 +43,11 @@
 #define SERVER_PORT         443
 #define SERVER_ENDPOINT     "/api/v1/measurements"
 
-// Default device ID and token (can be overridden via config portal)
-#define DEVICE_ID_DEFAULT   "watertank"
-#define DEVICE_TOKEN_DEFAULT "688bb1924d4a0f43d1ace8eaf9d4475d86841761c280fc4bf3650b51a32b8043"
+// Device ID and token are no longer hardcoded defaults - a fresh device has
+// neither until it's paired via the claim-code flow in the config portal
+// (see ClaimClient / WifiManager::startConfigPortal).
+#define DEVICE_ID_DEFAULT   ""
+#define DEVICE_TOKEN_DEFAULT ""
 
 // Use HTTPS (recommended)
 #define USE_HTTPS           true
@@ -162,7 +164,11 @@ namespace Config {
     // Device identification (configurable via portal)
     extern String deviceId;
     extern String deviceToken;
-    
+
+    // Whether this device has completed the claim-code pairing flow. False on
+    // a fresh device or after a factory reset (long-press).
+    extern bool claimed;
+
     // Load config from flash
     void load();
     

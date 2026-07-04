@@ -674,7 +674,7 @@ const createUserSchema = z.object({
   email: z.string().email(),
   name: z.string().optional(),
   tenant_id: z.string().uuid(),
-  role: z.enum(['user', 'admin', 'super_admin']).default('user'),
+  role: z.enum(['user', 'tenant_owner', 'admin', 'super_admin']).default('user'),
 });
 
 router.post('/users', async (req: AuthRequest, res) => {

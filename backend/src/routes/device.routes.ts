@@ -1,11 +1,100 @@
 import express from 'express';
-import { authenticateDevice, DeviceAuthRequest } from '../middleware/deviceAuth.middleware';
+import * as crypto from 'crypto';
+import { authenticateDevice, DeviceAuthRequest, createDeviceToken } from '../middleware/deviceAuth.middleware';
 import { query } from '../config/database';
 import { z } from 'zod';
 import { processAlertsForMeasurement } from '../services/alert.service';
 import * as fs from 'fs';
+import rateLimit from 'express-rate-limit';
 
 const router = express.Router();
+
+// Per-IP limiter: this route is unauthenticated (the device has no token
+// yet), so it's the real brute-force surface for guessing claim codes.
+const deviceClaimLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const claimSchema = z.object({
+  claim_code: z.string().min(1),
+  hardware_id: z.string().min(1),
+});
+
+// POST /api/v1/devices/claim - Device exchanges a short-lived claim code
+// (typed into its setup portal, see plans/first-launch-plan.md) for a
+// permanent device token bound to the account that minted the code.
+router.post('/devices/claim', deviceClaimLimiter, async (req, res) => {
+  try {
+    const validated = claimSchema.parse(req.body);
+    const codeHash = crypto.createHash('sha256').update(validated.claim_code.toUpperCase()).digest('hex');
+
+    const claimResult = await query(
+      `SELECT * FROM device_claim_codes
+       WHERE code_hash = $1 AND consumed_at IS NULL AND expires_at > NOW()`,
+      [codeHash]
+    );
+
+    if (claimResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Invalid or expired claim code' });
+    }
+
+    const claim = claimResult.rows[0];
+
+    const existingDevice = await query(
+      'SELECT * FROM devices WHERE device_id = $1',
+      [validated.hardware_id]
+    );
+
+    let deviceUuid: string;
+
+    if (existingDevice.rows.length > 0) {
+      const device = existingDevice.rows[0];
+      if (String(device.tenant_id) !== String(claim.tenant_id)) {
+        return res.status(409).json({ error: 'Device already claimed by a different account' });
+      }
+      // Same tenant re-claiming (e.g. after a factory reset) - reuse the row.
+      deviceUuid = device.id;
+    } else {
+      const inserted = await query(
+        `INSERT INTO devices (device_id, tenant_id, status)
+         VALUES ($1, $2, 'offline')
+         RETURNING *`,
+        [validated.hardware_id, claim.tenant_id]
+      );
+      deviceUuid = inserted.rows[0].id;
+    }
+
+    // Mark the code consumed; a 0 affected-row count means a concurrent
+    // request already won the race.
+    const consumeResult = await query(
+      `UPDATE device_claim_codes
+       SET consumed_at = NOW(), device_id = $1
+       WHERE id = $2 AND consumed_at IS NULL
+       RETURNING id`,
+      [deviceUuid, claim.id]
+    );
+
+    if (consumeResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Invalid or expired claim code' });
+    }
+
+    const deviceToken = await createDeviceToken(validated.hardware_id);
+
+    res.json({
+      device_token: deviceToken,
+      device_id: validated.hardware_id,
+    });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Invalid request data', details: error.errors });
+    }
+    console.error('Error claiming device:', error);
+    res.status(500).json({ error: 'Failed to claim device' });
+  }
+});
 
 // Validation schema for measurement data
 const measurementSchema = z.object({
