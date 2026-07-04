@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { motion, useScroll, useTransform } from 'framer-motion';
-import { Droplets, Activity, ShieldCheck, Zap, BarChart3, Waves, Smartphone, ArrowRight } from 'lucide-react';
-import GlassTank from '@/components/GlassTank';
+import { Activity, ShieldCheck, Zap, BarChart3, Waves, Smartphone, ArrowRight } from 'lucide-react';
+
+const GlassTank = lazy(() => import('@/components/GlassTank'));
 
 export default function LandingPage() {
   const { scrollY } = useScroll();
@@ -31,6 +32,12 @@ export default function LandingPage() {
     setAlert('low');
     setTankLevel(15);
   };
+
+  const tankFallback = (
+    <div className="mx-auto flex h-80 w-64 items-center justify-center rounded-[2rem] border border-white/15 bg-white/5">
+      <div className="h-32 w-32 rounded-full border-4 border-cyan-400/20 border-t-cyan-300 animate-spin" />
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-[#0f172a] text-white overflow-hidden relative selection:bg-cyan-500/30" suppressHydrationWarning>
@@ -130,7 +137,9 @@ export default function LandingPage() {
 
               {/* Animated Glass Tank */}
               <div className="mb-8 py-4">
-                <GlassTank level={tankLevel} alert={alert} />
+                <Suspense fallback={tankFallback}>
+                  <GlassTank level={tankLevel} alert={alert} />
+                </Suspense>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -386,7 +395,6 @@ export default function LandingPage() {
     </div>
   );
 }
-
 
 
 

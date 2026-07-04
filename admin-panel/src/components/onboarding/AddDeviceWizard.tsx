@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle, RefreshCw, CheckCircle2, Wifi } from 'lucide-react';
-import GlassTank from '@/components/GlassTank';
+
+const GlassTank = lazy(() => import('@/components/GlassTank'));
 
 type ClaimCodeResponse = {
   claim_code: string;
@@ -35,6 +36,11 @@ export function AddDeviceWizard() {
   const [claimedDevice, setClaimedDevice] = useState<ClaimedDevice | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const tankFallback = (
+    <div className="mx-auto flex h-60 w-48 items-center justify-center rounded-[2rem] border border-slate-700 bg-slate-900/40">
+      <div className="h-20 w-20 rounded-full border-4 border-cyan-500/20 border-t-cyan-400 animate-spin" />
+    </div>
+  );
 
   const clearTimers = () => {
     if (pollRef.current) clearInterval(pollRef.current);
@@ -109,7 +115,9 @@ export function AddDeviceWizard() {
         <CardContent className="flex flex-col items-center gap-6">
           <div className="rounded-3xl bg-[#0f172a] p-6 w-full flex justify-center">
             <div className="scale-75 origin-top">
-              <GlassTank level={70} alert={null} />
+              <Suspense fallback={tankFallback}>
+                <GlassTank level={70} alert={null} />
+              </Suspense>
             </div>
           </div>
           <Button className="w-full" onClick={() => router.push('/app/devices')}>
