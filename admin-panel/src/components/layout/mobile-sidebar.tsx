@@ -1,13 +1,13 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Menu } from "lucide-react";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Sidebar } from "@/components/layout/sidebar";
-import { Button } from "@/components/ui/button";
-import { useState, useEffect } from "react";
+import { SidebarDrawer } from "@/components/layout/sidebar-drawer";
 
 export const MobileSidebar = () => {
     const [isMounted, setIsMounted] = useState(false);
+    const [open, setOpen] = useState(false);
 
     useEffect(() => {
         setIsMounted(true);
@@ -18,15 +18,19 @@ export const MobileSidebar = () => {
     }
 
     return (
-        <Sheet>
-            <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="md:hidden">
-                    <Menu />
-                </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="p-0 bg-slate-900 border-r-slate-800 text-white w-72">
-                <Sidebar />
-            </SheetContent>
-        </Sheet>
+        <>
+            <button
+                type="button"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white md:hidden"
+                aria-label="Open navigation menu"
+                aria-expanded={open}
+                onClick={() => setOpen(true)}
+            >
+                <Menu className="h-5 w-5" />
+            </button>
+            <SidebarDrawer open={open} onClose={() => setOpen(false)} title="Admin navigation">
+                <Sidebar onNavigate={() => setOpen(false)} />
+            </SidebarDrawer>
+        </>
     );
 };

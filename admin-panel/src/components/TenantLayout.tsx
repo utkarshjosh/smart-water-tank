@@ -1,15 +1,14 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import Image from 'next/image';
+import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
 import { useAuthSession } from '@/lib/useAuthSession';
 import { TenantSidebar } from '@/components/layout/tenant-sidebar';
 import { TenantHeader } from '@/components/layout/tenant-header';
 
 export default function TenantLayout({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
+  const navigate = useNavigate();
   const { user, loading } = useAuthSession();
   const [isMounted, setIsMounted] = useState(false);
   const [tenantName, setTenantName] = useState<string | undefined>();
@@ -27,9 +26,9 @@ export default function TenantLayout({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     if (!loading && isMounted && !user) {
-      router.replace('/login');
+      navigate('/login', { replace: true });
     }
-  }, [isMounted, loading, router, user]);
+  }, [isMounted, loading, navigate, user]);
 
   useEffect(() => {
     if (!user) return;
@@ -49,12 +48,10 @@ export default function TenantLayout({ children }: { children: React.ReactNode }
           <div className="relative w-24 h-24">
             <div className="absolute inset-0 animate-spin rounded-full border-4 border-primary/20 border-t-primary"></div>
             <div className="absolute inset-2 flex items-center justify-center">
-              <Image
+              <img
                 src="/logo.png"
                 alt="AquaMind Logo"
-                fill
-                className="object-contain"
-                priority
+                className="h-full w-full object-contain"
               />
             </div>
           </div>
