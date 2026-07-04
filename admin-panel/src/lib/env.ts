@@ -12,10 +12,5 @@ export function getEnv(key: string, fallback?: string) {
     return metaValue;
   }
 
-  const processValue = typeof process !== 'undefined' ? process.env?.[key] : undefined;
-  if (typeof processValue === 'string' && processValue.length > 0) {
-    return processValue;
-  }
-
   return fallback;
 }
