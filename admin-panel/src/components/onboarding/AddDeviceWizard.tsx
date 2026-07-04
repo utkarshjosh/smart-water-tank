@@ -1,11 +1,8 @@
 'use client';
 
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle, RefreshCw, CheckCircle2, Wifi } from 'lucide-react';
 
 const GlassTank = lazy(() => import('@/components/GlassTank'));
@@ -27,7 +24,7 @@ type ClaimedDevice = {
 const POLL_INTERVAL_MS = 3000;
 
 export function AddDeviceWizard() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [step, setStep] = useState<'generate' | 'waiting' | 'success'>('generate');
   const [claimCode, setClaimCode] = useState<string>('');
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
@@ -102,17 +99,17 @@ export function AddDeviceWizard() {
 
   if (step === 'success') {
     return (
-      <Card className="border-2 shadow-xl">
-        <CardHeader className="text-center space-y-2">
+      <div className="rounded-3xl border-2 border-border/80 bg-card shadow-xl">
+        <div className="space-y-2 px-6 pb-0 pt-6 text-center">
           <div className="flex justify-center">
             <CheckCircle2 className="h-10 w-10 text-green-500" />
           </div>
-          <CardTitle className="text-2xl">Device paired!</CardTitle>
-          <CardDescription>
+          <h2 className="text-2xl font-semibold tracking-tight">Device paired!</h2>
+          <p className="text-sm text-muted-foreground">
             {claimedDevice?.name || claimedDevice?.id} is connected to your account.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col items-center gap-6">
+          </p>
+        </div>
+        <div className="flex flex-col items-center gap-6 p-6">
           <div className="rounded-3xl bg-[#0f172a] p-6 w-full flex justify-center">
             <div className="scale-75 origin-top">
               <Suspense fallback={tankFallback}>
@@ -120,35 +117,43 @@ export function AddDeviceWizard() {
               </Suspense>
             </div>
           </div>
-          <Button className="w-full" onClick={() => router.push('/app/devices')}>
+          <button
+            type="button"
+            className="inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            onClick={() => navigate('/app/devices')}
+          >
             Go to my devices
-          </Button>
-        </CardContent>
-      </Card>
+          </button>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Card className="border-2 shadow-xl">
-      <CardHeader className="text-center space-y-2">
+    <div className="rounded-3xl border-2 border-border/80 bg-card shadow-xl">
+      <div className="space-y-2 px-6 pb-0 pt-6 text-center">
         <div className="flex justify-center">
           <Wifi className="h-10 w-10 text-primary" />
         </div>
-        <CardTitle className="text-2xl">Pair your device</CardTitle>
-        <CardDescription>
+        <h2 className="text-2xl font-semibold tracking-tight">Pair your device</h2>
+        <p className="text-sm text-muted-foreground">
           Long-press the button on your AquaMind device until it starts blinking, then
           connect your phone or laptop to the <span className="font-medium">WaterTank-Setup</span> WiFi
           network it creates. Choose your home WiFi, enter its password, and when prompted,
           type in the pairing code below.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col items-center gap-6">
+        </p>
+      </div>
+      <div className="flex flex-col items-center gap-6 p-6">
         {error && (
-          <Alert variant="destructive" className="w-full">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Error</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
+          <div className="w-full rounded-lg border border-destructive/50 bg-background p-4 text-destructive">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <h3 className="mb-1 text-sm font-medium leading-none">Error</h3>
+                <p className="text-sm leading-relaxed">{error}</p>
+              </div>
+            </div>
+          </div>
         )}
 
         {claimCode && step === 'waiting' && (
@@ -163,11 +168,15 @@ export function AddDeviceWizard() {
           </>
         )}
 
-        <Button variant="outline" onClick={generateCode} className="w-full">
+        <button
+          type="button"
+          onClick={generateCode}
+          className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+        >
           <RefreshCw className="mr-2 h-4 w-4" />
           Regenerate code
-        </Button>
-      </CardContent>
-    </Card>
+        </button>
+      </div>
+    </div>
   );
 }
