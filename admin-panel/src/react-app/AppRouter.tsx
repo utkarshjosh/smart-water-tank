@@ -13,6 +13,11 @@ const TenantLayout = lazy(() => import('@/components/TenantLayout'));
 const TenantDevicesPage = lazy(() => import('@/app/app/devices/page'));
 const OnboardingPage = lazy(() => import('@/app/app/onboarding/page'));
 const AdminDashboardPage = lazy(() => import('@/app/admin/dashboard/page'));
+const AdminDevicesPage = lazy(() => import('@/app/admin/devices/page'));
+const AdminDeviceDetailPage = lazy(() => import('@/app/admin/devices/[deviceId]/page'));
+const AdminFirmwarePage = lazy(() => import('@/app/admin/firmware/page'));
+const AdminTenantsPage = lazy(() => import('@/app/admin/tenants/page'));
+const AdminAnalyticsPage = lazy(() => import('@/app/admin/analytics/page'));
 
 function ShellPage({
   title,
@@ -75,46 +80,11 @@ export default function AppRouter() {
         />
         <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
         <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
-        <Route
-          path="/admin/devices"
-          element={
-            <ShellPage
-              title="Devices migration pending"
-              description="The Vite shell is live. Admin devices is the next page to move over from the legacy Next app."
-              backHref="/admin/dashboard"
-            />
-          }
-        />
-        <Route
-          path="/admin/firmware"
-          element={
-            <ShellPage
-              title="Firmware migration pending"
-              description="This route is intentionally stubbed so navigation works while the remaining admin pages are ported incrementally."
-              backHref="/admin/dashboard"
-            />
-          }
-        />
-        <Route
-          path="/admin/tenants"
-          element={
-            <ShellPage
-              title="Tenants migration pending"
-              description="The new client-side app keeps the route stable even though the tenant management screen is still on the migration backlog."
-              backHref="/admin/dashboard"
-            />
-          }
-        />
-        <Route
-          path="/admin/analytics"
-          element={
-            <ShellPage
-              title="Analytics migration pending"
-              description="Analytics remains to be moved. The route stays addressable so the new shell can replace Next without dead links."
-              backHref="/admin/dashboard"
-            />
-          }
-        />
+        <Route path="/admin/devices" element={<AdminDevicesPage />} />
+        <Route path="/admin/devices/:deviceId" element={<AdminDeviceDetailPage />} />
+        <Route path="/admin/firmware" element={<AdminFirmwarePage />} />
+        <Route path="/admin/tenants" element={<AdminTenantsPage />} />
+        <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
         <Route
           path="*"
           element={
