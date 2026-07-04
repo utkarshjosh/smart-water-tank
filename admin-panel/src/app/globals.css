@@ -127,3 +127,22 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  @keyframes water-surface {
+    0%,
+    100% {
+      transform: scale(1) rotateX(0deg);
+    }
+
+    50% {
+      transform: scale(1.02) rotateX(2deg);
+    }
+  }
+
+  .animate-water-surface {
+    animation: water-surface 3s ease-in-out infinite;
+    transform-origin: center;
+    will-change: transform;
+  }
+}

@@ -1,6 +1,6 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { useEffect, useState } from 'react';
 
 interface GlassTankProps {
     level: number;
@@ -8,6 +8,17 @@ interface GlassTankProps {
 }
 
 export default function GlassTank({ level, alert }: GlassTankProps) {
+    const clampedLevel = Math.max(0, Math.min(100, level));
+    const [displayLevel, setDisplayLevel] = useState(0);
+
+    useEffect(() => {
+        const frame = window.requestAnimationFrame(() => {
+            setDisplayLevel(clampedLevel);
+        });
+
+        return () => window.cancelAnimationFrame(frame);
+    }, [clampedLevel]);
+
     // Determine color based on alert state
     const liquidColor = alert === 'leak' ? 'from-red-500/80 to-red-600/90' :
         alert === 'low' ? 'from-yellow-500/80 to-yellow-600/90' :
@@ -34,11 +45,9 @@ export default function GlassTank({ level, alert }: GlassTankProps) {
                 {/* --- Water Column --- */}
                 <div className="absolute bottom-4 left-2 right-2 top-4 rounded-[1.8rem] overflow-hidden z-10">
                     {/* Liquid Body */}
-                    <motion.div
-                        initial={{ height: '0%' }}
-                        animate={{ height: `${level}%` }}
-                        transition={{ type: "spring", damping: 20, stiffness: 50 }}
-                        className="absolute bottom-0 w-full"
+                    <div
+                        style={{ height: `${displayLevel}%` }}
+                        className="absolute bottom-0 w-full transition-[height] duration-700 ease-out will-change-[height]"
                     >
                         <div className={`w-full h-full bg-gradient-to-r ${liquidColor} backdrop-blur-sm transition-colors duration-500`}>
                             {/* Internal Volume Shadow/Highlight */}
@@ -47,16 +56,14 @@ export default function GlassTank({ level, alert }: GlassTankProps) {
 
                         {/* Water Surface (Meniscus) */}
                         <div className="absolute top-0 left-0 w-full h-8 -translate-y-1/2 perspective-[500px]">
-                            <motion.div
-                                animate={{ scale: [1, 1.02, 1], rotateX: [0, 2, 0] }}
-                                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                                className={`w-full h-full rounded-[50%] ${surfaceColor} border border-white/30 shadow-[inset_0_0_10px_rgba(255,255,255,0.5)] backdrop-blur-md`}
+                            <div
+                                className={`animate-water-surface w-full h-full rounded-[50%] ${surfaceColor} border border-white/30 shadow-[inset_0_0_10px_rgba(255,255,255,0.5)] backdrop-blur-md`}
                             >
                                 {/* Surface Reflection */}
                                 <div className="absolute top-1/4 left-1/4 w-1/2 h-1/2 bg-white/40 rounded-[50%] blur-sm" />
-                            </motion.div>
+                            </div>
                         </div>
-                    </motion.div>
+                    </div>
                 </div>
 
                 {/* --- Front Layer (Over Water) --- */}
@@ -93,7 +100,7 @@ export default function GlassTank({ level, alert }: GlassTankProps) {
 
             {/* Level Text Overlay */}
             <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-40 text-5xl font-bold text-white drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)] mix-blend-overlay">
-                {Math.round(level)}<span className="text-2xl opacity-80">%</span>
+                {Math.round(clampedLevel)}<span className="text-2xl opacity-80">%</span>
             </div>
         </div>
     );
