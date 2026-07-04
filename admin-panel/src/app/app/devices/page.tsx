@@ -1,12 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle, PlusCircle, Droplets } from 'lucide-react';
 
 interface Device {
@@ -20,7 +16,7 @@ interface Device {
 }
 
 export default function TenantDevicesPage() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -35,78 +31,109 @@ export default function TenantDevicesPage() {
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-sky-500" />
       </div>
     );
   }
 
   return (
     <div className="px-4 py-6 sm:px-0">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">My Devices</h1>
-        <Button onClick={() => router.push('/app/onboarding')}>
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-2">
+          <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200">
+            Tank fleet
+          </span>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">My Devices</h1>
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              Track live tank readings and pair new sensors without leaving the dashboard.
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate('/app/onboarding')}
+          className="inline-flex h-11 items-center justify-center rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2 dark:focus:ring-offset-slate-900"
+        >
           <PlusCircle className="mr-2 h-4 w-4" />
           Add Device
-        </Button>
+        </button>
       </div>
 
       {error && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <div className="mb-6 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+          <AlertCircle className="mt-0.5 h-4 w-4 flex-none" />
+          <div>
+            <p className="font-semibold">Error</p>
+            <p className="text-sm">{error}</p>
+          </div>
+        </div>
       )}
 
       {devices.length === 0 ? (
-        <Card>
-          <CardContent className="pt-12 pb-12 flex flex-col items-center text-center gap-4">
-            <Droplets className="h-10 w-10 text-primary" />
-            <div>
-              <p className="font-medium">No devices yet</p>
-              <p className="text-sm text-muted-foreground">Pair your first AquaMind sensor to start seeing live data.</p>
+        <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+          <div className="flex flex-col items-center gap-4 px-6 py-14 text-center">
+            <div className="rounded-3xl bg-sky-100 p-4 text-sky-700 dark:bg-sky-500/10 dark:text-sky-200">
+              <Droplets className="h-10 w-10" />
             </div>
-            <Button onClick={() => router.push('/app/onboarding')}>
+            <div>
+              <p className="font-medium text-slate-900 dark:text-white">No devices yet</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Pair your first AquaMind sensor to start seeing live data.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/app/onboarding')}
+              className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 dark:border-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 dark:focus:ring-offset-slate-950"
+            >
               <PlusCircle className="mr-2 h-4 w-4" />
               Pair your first device
-            </Button>
-          </CardContent>
-        </Card>
+            </button>
+          </div>
+        </section>
       ) : (
-        <div className="space-y-4">
+        <div className="grid gap-4 lg:grid-cols-2">
           {devices.map((device) => (
-            <Card key={device.id}>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className={`h-3 w-3 rounded-full ${device.status === 'online' ? 'bg-green-500' : 'bg-red-500'}`} />
-                    <div>
-                      <div className="font-medium">{device.name}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {device.last_measurement ? `Last reading ${new Date(device.last_measurement).toLocaleString()}` : 'No data yet'}
-                      </div>
+            <article
+              key={device.id}
+              className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-950"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div
+                    className={`mt-1 h-3 w-3 rounded-full ${
+                      device.status === 'online' ? 'bg-emerald-500 shadow-[0_0_0_6px_rgba(16,185,129,0.16)]' : 'bg-rose-500 shadow-[0_0_0_6px_rgba(244,63,94,0.12)]'
+                    }`}
+                  />
+                  <div className="space-y-1">
+                    <div className="font-semibold text-slate-900 dark:text-white">{device.name}</div>
+                    <div className="text-sm text-slate-500 dark:text-slate-400">
+                      Firmware {device.firmware_version || 'Unknown'}
                     </div>
-                  </div>
-                  <div className="text-right space-y-1">
-                    <div className="font-medium">
-                      {device.current_volume !== null && device.current_volume !== undefined
-                        ? `${Number(device.current_volume).toFixed(1)}L`
-                        : 'N/A'}
+                    <div className="text-sm text-slate-500 dark:text-slate-400">
+                      {device.last_measurement ? `Last reading ${new Date(device.last_measurement).toLocaleString()}` : 'No data yet'}
                     </div>
-                    <Badge
-                      variant="outline"
-                      className={
-                        device.status === 'online'
-                          ? 'border-green-500 bg-green-500/10 text-green-700 dark:text-green-400'
-                          : 'border-red-500 bg-red-500/10 text-red-700 dark:text-red-400'
-                      }
-                    >
-                      {device.status}
-                    </Badge>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+                <div className="space-y-2 text-right">
+                  <div className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
+                    {device.current_volume !== null && device.current_volume !== undefined
+                      ? `${Number(device.current_volume).toFixed(1)}L`
+                      : 'N/A'}
+                  </div>
+                  <span
+                    className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${
+                      device.status === 'online'
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+                        : 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'
+                    }`}
+                  >
+                    {device.status}
+                  </span>
+                </div>
+              </div>
+            </article>
           ))}
         </div>
       )}
