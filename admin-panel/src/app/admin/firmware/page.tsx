@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Layout from '@/components/Layout';
-import api from '@/lib/api';
+import api, { API_BASE_URL } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -413,7 +413,7 @@ export default function FirmwarePage() {
                           asChild
                         >
                           <a
-                            href={`${process.env.NEXT_PUBLIC_API_URL}/api/v1/admin/firmware/${fw.id}/download`}
+                            href={`${API_BASE_URL}/api/v1/admin/firmware/${fw.id}/download`}
                           >
                             <Download className="mr-2 h-4 w-4" />
                             Download
@@ -608,7 +608,6 @@ export default function FirmwarePage() {
     </Layout>
   );
 }
-
 
 
 

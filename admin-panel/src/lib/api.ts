@@ -3,8 +3,10 @@ import { auth } from './firebase';
 import { getAuthToken } from './cookies';
 import { getEnv } from './env';
 
+export const API_BASE_URL = getEnv('NEXT_PUBLIC_API_URL', 'http://localhost:3000');
+
 const api = axios.create({
-  baseURL: getEnv('NEXT_PUBLIC_API_URL', 'http://localhost:3000'),
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -36,4 +38,3 @@ api.interceptors.request.use(async (config) => {
 });
 
 export default api;
-
