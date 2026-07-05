@@ -3,7 +3,7 @@ import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { AlertCircle, Boxes, ChevronDown, ChevronUp, Cylinder, Gauge, Ruler, Save } from 'lucide-react';
 import TankDiagram from './TankDiagram';
 
 export interface TankProfileDto {
@@ -22,6 +22,12 @@ export interface TankProfileDto {
 type Step = 'shape' | 'parallel' | 'dimensions' | 'summary';
 
 const NOMINAL_SIZES = [500, 1000, 2000];
+const STEPS: Array<{ key: Step; label: string }> = [
+  { key: 'shape', label: 'Shape' },
+  { key: 'parallel', label: 'Units' },
+  { key: 'dimensions', label: 'Size' },
+  { key: 'summary', label: 'Review' },
+];
 
 interface FormState {
   shape: 'cylindrical' | 'cuboidal' | null;
@@ -91,6 +97,7 @@ export function TankSetupWizard({
   const [error, setError] = useState('');
 
   const totalCapacityL = computeUnitCapacityL(form) * form.parallelUnitCount;
+  const activeStepIndex = STEPS.findIndex((item) => item.key === step);
 
   const canProceedFromDimensions =
     Number(form.heightCm) > 0 &&
@@ -123,17 +130,68 @@ export function TankSetupWizard({
   };
 
   return (
-    <div className="rounded-3xl border-2 border-border/80 bg-card shadow-xl">
-      <div className="space-y-2 px-6 pb-0 pt-6 text-center">
-        <h2 className="text-2xl font-semibold tracking-tight">Set up your tank</h2>
-        <p className="text-sm text-muted-foreground">
-          A few quick questions so we can show accurate levels and alerts for your tank.
-        </p>
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="rounded-md bg-cyan-100 p-2 text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-300">
+              <Gauge className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight text-slate-950 dark:text-white">Tank calibration</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Capture shape and size so dashboard readings map to real capacity.
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-4 gap-1 rounded-md bg-slate-100 p-1 dark:bg-slate-800">
+            {STEPS.map((item, index) => (
+              <span
+                key={item.key}
+                className={`rounded px-2 py-1 text-center text-xs font-semibold ${
+                  index === activeStepIndex
+                    ? 'bg-white text-slate-950 shadow-sm dark:bg-slate-950 dark:text-white'
+                    : 'text-slate-500 dark:text-slate-400'
+                }`}
+              >
+                {item.label}
+              </span>
+            ))}
+          </div>
+        </div>
       </div>
 
-      <div className="flex flex-col gap-6 p-6">
+      <div className="grid gap-0 md:grid-cols-[0.9fr_1.1fr]">
+        <div className="border-b border-slate-100 bg-slate-950 p-4 text-slate-100 dark:border-slate-800 md:border-b-0 md:border-r">
+          <div className="flex h-full min-h-72 flex-col justify-between gap-4">
+            <div className="flex items-center justify-center rounded-lg bg-white/5 px-4 py-5 ring-1 ring-white/10">
+              <TankDiagram
+                shape={form.shape}
+                unitCount={form.parallelUnitCount}
+                fillPercent={step === 'summary' ? 62 : null}
+                className="h-44 max-w-full"
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="rounded-md bg-white/5 px-3 py-2 ring-1 ring-white/10">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Shape</p>
+                <p className="mt-1 truncate text-sm font-semibold capitalize">{form.shape || 'Unset'}</p>
+              </div>
+              <div className="rounded-md bg-white/5 px-3 py-2 ring-1 ring-white/10">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Units</p>
+                <p className="mt-1 text-sm font-semibold">{form.parallelUnitCount}</p>
+              </div>
+              <div className="rounded-md bg-white/5 px-3 py-2 ring-1 ring-white/10">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Capacity</p>
+                <p className="mt-1 truncate text-sm font-semibold">{totalCapacityL > 0 ? `${totalCapacityL.toFixed(0)}L` : 'Pending'}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-4 p-4">
         {error && (
-          <div className="w-full rounded-lg border border-destructive/50 bg-background p-4 text-destructive">
+          <div className="w-full rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
             <div className="flex items-start gap-3">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <p className="text-sm leading-relaxed">{error}</p>
@@ -141,39 +199,36 @@ export function TankSetupWizard({
           </div>
         )}
 
-        <div className="flex justify-center rounded-2xl bg-slate-950 p-4 text-slate-100">
-          <TankDiagram
-            shape={form.shape}
-            unitCount={form.parallelUnitCount}
-            fillPercent={step === 'summary' ? 62 : null}
-            className="h-40"
-          />
-        </div>
-
         {step === 'shape' && (
-          <div className="space-y-4">
-            <p className="text-sm font-medium">What shape is your tank?</p>
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-950 dark:text-white">What shape is your tank?</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Choose the closest physical layout.</p>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               {(
                 [
-                  { shape: 'cylindrical' as const, label: 'Plastic household tank' },
-                  { shape: 'cuboidal' as const, label: 'Cuboidal / sump tank' },
+                  { shape: 'cylindrical' as const, label: 'Plastic household tank', icon: Cylinder },
+                  { shape: 'cuboidal' as const, label: 'Cuboidal / sump tank', icon: Boxes },
                 ]
-              ).map((option) => (
-                <button
-                  key={option.shape}
-                  type="button"
-                  onClick={() => setForm((f) => ({ ...f, shape: option.shape }))}
-                  className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-4 transition-colors ${
-                    form.shape === option.shape
-                      ? 'border-sky-500 bg-sky-50 dark:bg-sky-500/10'
-                      : 'border-border hover:border-sky-300'
-                  }`}
-                >
-                  <TankDiagram shape={option.shape} unitCount={1} className="h-24 text-slate-500" />
-                  <span className="text-sm font-medium">{option.label}</span>
-                </button>
-              ))}
+              ).map((option) => {
+                const Icon = option.icon;
+                return (
+                  <button
+                    key={option.shape}
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, shape: option.shape }))}
+                    className={`flex min-h-28 flex-col items-start justify-between rounded-lg border p-3 text-left transition-colors ${
+                      form.shape === option.shape
+                        ? 'border-cyan-500 bg-cyan-50 text-cyan-950 dark:bg-cyan-500/10 dark:text-cyan-100'
+                        : 'border-slate-200 hover:border-cyan-300 dark:border-slate-800 dark:hover:border-cyan-600'
+                    }`}
+                  >
+                    <Icon className="h-5 w-5 text-cyan-600 dark:text-cyan-300" />
+                    <span className="text-sm font-semibold">{option.label}</span>
+                  </button>
+                );
+              })}
             </div>
             <Button className="w-full" disabled={!form.shape} onClick={() => setStep('parallel')}>
               Next
@@ -182,12 +237,13 @@ export function TankSetupWizard({
         )}
 
         {step === 'parallel' && (
-          <div className="space-y-4">
-            <p className="text-sm font-medium">Are multiple identical tanks connected together?</p>
-            <p className="text-xs text-muted-foreground">
-              Common with plastic tanks plumbed side-by-side (e.g. two 500L tanks joined at the base) so they fill and
-              drain together.
-            </p>
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-950 dark:text-white">Connected tank units</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Count identical tanks plumbed together so they fill and drain as one.
+              </p>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <Button
                 type="button"
@@ -231,7 +287,7 @@ export function TankSetupWizard({
         )}
 
         {step === 'dimensions' && (
-          <div className="space-y-4">
+          <div className="space-y-3">
             <div className="space-y-2">
               <Label htmlFor="height-cm">Total tank height (cm)</Label>
               <Input
@@ -246,7 +302,7 @@ export function TankSetupWizard({
 
             {!form.useExactDimensions && (
               <div className="space-y-2">
-                <p className="text-sm font-medium">Pick your tank's nominal size</p>
+                <p className="text-sm font-semibold text-slate-950 dark:text-white">Nominal tank size</p>
                 <div className="grid grid-cols-3 gap-2">
                   {NOMINAL_SIZES.map((size) => (
                     <Button
@@ -270,7 +326,7 @@ export function TankSetupWizard({
             )}
 
             {form.useExactDimensions && (
-              <div className="space-y-4">
+              <div className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
                 {form.shape === 'cylindrical' ? (
                   <div className="space-y-2">
                     <Label htmlFor="diameter-cm">Diameter (cm)</Label>
@@ -327,7 +383,7 @@ export function TankSetupWizard({
                 {showAdvanced ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
               </button>
               {showAdvanced && (
-                <div className="mt-2 space-y-2">
+                <div className="mt-2 space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
                   <p className="text-xs text-muted-foreground">
                     How far below the tank's rim is the sensor mounted? Leave as 0 unless your sensor sits noticeably
                     below the rim.
@@ -354,11 +410,16 @@ export function TankSetupWizard({
         )}
 
         {step === 'summary' && (
-          <div className="space-y-4">
-            <div className="rounded-2xl bg-muted p-4 text-center">
-              <p className="text-sm text-muted-foreground">Total capacity</p>
-              <p className="text-3xl font-bold tracking-tight">{totalCapacityL.toFixed(0)}L</p>
-              <p className="text-xs text-muted-foreground">
+          <div className="space-y-3">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Total capacity</p>
+                  <p className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 dark:text-white">{totalCapacityL.toFixed(0)}L</p>
+                </div>
+                <Ruler className="h-5 w-5 text-cyan-600 dark:text-cyan-300" />
+              </div>
+              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                 {form.parallelUnitCount > 1
                   ? `${form.parallelUnitCount} × ${(totalCapacityL / form.parallelUnitCount).toFixed(0)}L tanks, `
                   : ''}
@@ -370,6 +431,7 @@ export function TankSetupWizard({
                 Back
               </Button>
               <Button className="w-full" onClick={save} disabled={saving}>
+                {!saving && <Save className="mr-2 h-4 w-4" />}
                 {saving ? 'Saving...' : 'Save'}
               </Button>
             </div>
@@ -381,6 +443,7 @@ export function TankSetupWizard({
             Skip for now
           </button>
         )}
+        </div>
       </div>
     </div>
   );
