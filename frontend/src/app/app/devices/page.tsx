@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
-import { AlertCircle, PlusCircle, Droplets } from 'lucide-react';
+import { AlertCircle, PlusCircle, Droplets, Settings2 } from 'lucide-react';
+import DeviceCardTankPreview from '@/components/DeviceCardTankPreview';
 
 interface Device {
   id: string;
@@ -10,7 +11,10 @@ interface Device {
   firmware_version: string;
   last_seen: string;
   current_volume: number | null;
+  level_percent: number | null;
+  has_tank_profile: boolean;
   last_measurement: string | null;
+  active_alert: 'leak' | 'low' | null;
 }
 
 export default function TenantDevicesPage() {
@@ -91,11 +95,12 @@ export default function TenantDevicesPage() {
           </div>
         </section>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-4">
           {devices.map((device) => (
             <article
               key={device.id}
-              className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-950"
+              onClick={() => navigate(`/app/devices/${device.id}`)}
+              className="cursor-pointer rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-950"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-4">
@@ -114,22 +119,37 @@ export default function TenantDevicesPage() {
                     </div>
                   </div>
                 </div>
-                <div className="space-y-2 text-right">
-                  <div className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
-                    {device.current_volume !== null && device.current_volume !== undefined
-                      ? `${Number(device.current_volume).toFixed(1)}L`
-                      : 'N/A'}
-                  </div>
-                  <span
-                    className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${
-                      device.status === 'online'
-                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
-                        : 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'
-                    }`}
-                  >
-                    {device.status}
-                  </span>
+                <span
+                  className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${
+                    device.status === 'online'
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+                      : 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'
+                  }`}
+                >
+                  {device.status}
+                </span>
+              </div>
+
+              {device.has_tank_profile && device.level_percent != null ? (
+                <DeviceCardTankPreview level={device.level_percent} alert={device.active_alert} />
+              ) : (
+                <div
+                  role="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/app/onboarding/tank-setup/${device.id}`);
+                  }}
+                  className="mt-4 flex items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-300 py-4 text-sm font-medium text-sky-700 hover:bg-sky-50 dark:border-slate-700 dark:text-sky-300 dark:hover:bg-sky-500/10"
+                >
+                  <Settings2 className="h-4 w-4" />
+                  Set up your tank
                 </div>
+              )}
+
+              <div className="mt-3 text-center text-sm text-slate-500 dark:text-slate-400">
+                {device.current_volume !== null && device.current_volume !== undefined
+                  ? `${Number(device.current_volume).toFixed(1)}L`
+                  : 'No data yet'}
               </div>
             </article>
           ))}

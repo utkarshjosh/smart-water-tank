@@ -28,6 +28,8 @@ export interface ConfigDto {
   report_interval_ms: number;
   tank_full_threshold_l: number | null;
   tank_low_threshold_l: number | null;
+  tank_full_threshold_pct: number | null;
+  tank_low_threshold_pct: number | null;
   battery_low_threshold_v: number | null;
   level_empty_cm: number | null;
   level_full_cm: number | null;
@@ -39,6 +41,8 @@ const DEFAULT_CONFIG: ConfigDto = {
   report_interval_ms: 300000,
   tank_full_threshold_l: 900.0,
   tank_low_threshold_l: 100.0,
+  tank_full_threshold_pct: null,
+  tank_low_threshold_pct: null,
   battery_low_threshold_v: 3.3,
   level_empty_cm: null,
   level_full_cm: null,
@@ -50,11 +54,37 @@ export function toConfigDto(config: DeviceConfig): ConfigDto {
     report_interval_ms: config.reportIntervalMs,
     tank_full_threshold_l: config.tankFullThresholdL?.toNumber() ?? null,
     tank_low_threshold_l: config.tankLowThresholdL?.toNumber() ?? null,
+    tank_full_threshold_pct: config.tankFullThresholdPct?.toNumber() ?? null,
+    tank_low_threshold_pct: config.tankLowThresholdPct?.toNumber() ?? null,
     battery_low_threshold_v: config.batteryLowThresholdV?.toNumber() ?? null,
     level_empty_cm: config.levelEmptyCm?.toNumber() ?? null,
     level_full_cm: config.levelFullCm?.toNumber() ?? null,
     ...((config.configJson as object) || {}),
   };
+}
+
+export interface AlertThresholdsInput {
+  tank_low_threshold_pct?: number | null;
+  tank_full_threshold_pct?: number | null;
+  battery_low_threshold_v?: number | null;
+}
+
+export async function updateAlertThresholds(device: Device, input: AlertThresholdsInput): Promise<ConfigDto> {
+  const existing = await prisma.deviceConfig.findUnique({ where: { deviceId: device.id } });
+
+  const data = {
+    tankLowThresholdPct: input.tank_low_threshold_pct !== undefined ? input.tank_low_threshold_pct : existing?.tankLowThresholdPct ?? null,
+    tankFullThresholdPct: input.tank_full_threshold_pct !== undefined ? input.tank_full_threshold_pct : existing?.tankFullThresholdPct ?? null,
+    batteryLowThresholdV: input.battery_low_threshold_v !== undefined ? input.battery_low_threshold_v : existing?.batteryLowThresholdV ?? null,
+  };
+
+  const config = await prisma.deviceConfig.upsert({
+    where: { deviceId: device.id },
+    create: { deviceId: device.id, ...data },
+    update: data,
+  });
+
+  return toConfigDto(config);
 }
 
 export async function claimDevice(claimCode: string, hardwareId: string): Promise<{ deviceToken: string; deviceId: string }> {
@@ -128,7 +158,11 @@ export async function recordMeasurement(
   const config = await prisma.deviceConfig.findUnique({ where: { deviceId: device.id } });
 
   // Fire-and-forget: the device shouldn't wait on alert delivery.
-  processAlertsForMeasurement(device.id, { volumeL: data.volumeL, batteryV: data.batteryV ?? null }).catch((err) => {
+  processAlertsForMeasurement(device.id, {
+    levelCm: data.levelCm,
+    volumeL: data.volumeL,
+    batteryV: data.batteryV ?? null,
+  }).catch((err) => {
     console.error('Error processing alerts:', err);
   });
 

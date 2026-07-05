@@ -114,6 +114,13 @@ export function AddDeviceWizard() {
           <button
             type="button"
             className="inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            onClick={() => navigate(`/app/onboarding/tank-setup/${claimedDevice?.id}`)}
+          >
+            Set up your tank
+          </button>
+          <button
+            type="button"
+            className="text-xs text-muted-foreground hover:underline"
             onClick={() => navigate('/app/devices')}
           >
             Go to my devices

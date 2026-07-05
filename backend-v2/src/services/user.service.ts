@@ -6,6 +6,15 @@ import { getAuth } from '../config/firebase';
 import { provisionPersonalTenantAndUser } from './onboarding.service';
 import { CLAIM_CODE_TTL_MS, generateClaimCode, hashClaimCode } from '../lib/claim-code';
 import { toMeasurementDto } from './device.service';
+import { computeLevelPercent, getTankProfileRaw } from './tank-profile.service';
+
+function levelPercentFor(profile: { heightCm: { toNumber(): number }; sensorOffsetCm: { toNumber(): number } } | null, levelCm: number): number | null {
+  if (!profile) return null;
+  return computeLevelPercent(levelCm, {
+    heightCm: profile.heightCm.toNumber(),
+    sensorOffsetCm: profile.sensorOffsetCm.toNumber(),
+  });
+}
 
 function toUserDto(user: { id: string; email: string; name: string | null; role: string; tenantId: string | null; tenant?: { name: string } | null }) {
   return {
@@ -70,11 +79,19 @@ export async function listDevicesForTenant(tenantId: string, userId: string) {
 
   return Promise.all(
     devices.map(async (device) => {
-      const latest = await prisma.measurement.findFirst({
-        where: { deviceId: device.id },
-        orderBy: { timestamp: 'desc' },
-        select: { volumeL: true, timestamp: true },
-      });
+      const [latest, profile, activeAlert] = await Promise.all([
+        prisma.measurement.findFirst({
+          where: { deviceId: device.id },
+          orderBy: { timestamp: 'desc' },
+          select: { levelCm: true, volumeL: true, timestamp: true },
+        }),
+        getTankProfileRaw(device.id),
+        prisma.alert.findFirst({
+          where: { deviceId: device.id, acknowledged: false, type: { in: ['leak_detected', 'tank_low'] } },
+          orderBy: { createdAt: 'desc' },
+          select: { type: true },
+        }),
+      ]);
       return {
         id: device.deviceId,
         name: device.name || device.deviceId,
@@ -82,26 +99,49 @@ export async function listDevicesForTenant(tenantId: string, userId: string) {
         firmware_version: device.firmwareVersion,
         last_seen: device.lastSeen,
         current_volume: latest ? latest.volumeL.toNumber() : null,
+        level_percent: latest ? levelPercentFor(profile, latest.levelCm.toNumber()) : null,
+        has_tank_profile: !!profile,
         last_measurement: latest ? latest.timestamp : null,
+        active_alert: activeAlert ? (activeAlert.type === 'leak_detected' ? 'leak' : 'low') : null,
       };
     })
   );
 }
 
+export async function getDeviceInfo(device: Device) {
+  return {
+    id: device.deviceId,
+    name: device.name || device.deviceId,
+    status: device.status,
+    firmware_version: device.firmwareVersion,
+    last_seen: device.lastSeen,
+    created_at: device.createdAt,
+  };
+}
+
 export async function getDeviceCurrent(device: Device) {
-  const m = await prisma.measurement.findFirst({ where: { deviceId: device.id }, orderBy: { timestamp: 'desc' } });
+  const [m, profile] = await Promise.all([
+    prisma.measurement.findFirst({ where: { deviceId: device.id }, orderBy: { timestamp: 'desc' } }),
+    getTankProfileRaw(device.id),
+  ]);
   if (!m) throw new HttpError(404, 'No measurements found');
-  return { device_id: device.deviceId, ...toMeasurementDto(m) };
+  return { device_id: device.deviceId, ...toMeasurementDto(m), level_percent: levelPercentFor(profile, m.levelCm.toNumber()) };
 }
 
 export async function getDeviceHistory(device: Device, days: number, limit: number) {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-  const rows = await prisma.measurement.findMany({
-    where: { deviceId: device.id, timestamp: { gte: since } },
-    orderBy: { timestamp: 'desc' },
-    take: limit,
-  });
-  return { device_id: device.deviceId, measurements: rows.map(toMeasurementDto) };
+  const [rows, profile] = await Promise.all([
+    prisma.measurement.findMany({
+      where: { deviceId: device.id, timestamp: { gte: since } },
+      orderBy: { timestamp: 'desc' },
+      take: limit,
+    }),
+    getTankProfileRaw(device.id),
+  ]);
+  return {
+    device_id: device.deviceId,
+    measurements: rows.map((m) => ({ ...toMeasurementDto(m), level_percent: levelPercentFor(profile, m.levelCm.toNumber()) })),
+  };
 }
 
 export async function getDeviceAlerts(device: Device, limit: number) {

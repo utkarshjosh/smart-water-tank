@@ -2,37 +2,74 @@ import { AlertSeverity, AlertType } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { getMessaging } from '../config/firebase';
 import { env } from '../config/env';
+import { computeLevelPercent } from './tank-profile.service';
 
 export async function processAlertsForMeasurement(
   deviceId: string,
-  measurement: { volumeL: number; batteryV: number | null }
+  measurement: { levelCm: number; volumeL: number; batteryV: number | null }
 ): Promise<void> {
-  const device = await prisma.device.findUnique({ where: { id: deviceId }, include: { config: true } });
+  const device = await prisma.device.findUnique({
+    where: { id: deviceId },
+    include: { config: true, tankProfile: true },
+  });
   if (!device || !device.tenantId) return;
 
   const config = device.config;
-  const { volumeL, batteryV } = measurement;
+  const profile = device.tankProfile;
+  const { levelCm, volumeL, batteryV } = measurement;
 
-  if (config?.tankFullThresholdL && volumeL >= config.tankFullThresholdL.toNumber()) {
-    await createAndSendAlert(
-      device.id,
-      device.tenantId,
-      'tank_full',
-      'high',
-      `Tank is full (${volumeL.toFixed(1)}L)`,
-      { volume_l: volumeL, threshold: config.tankFullThresholdL.toNumber() }
-    );
-  }
+  // With a tank profile, thresholds are percentage-based (device-agnostic,
+  // works for parallel-plumbed tanks). Without one yet, fall back to the
+  // legacy liter thresholds so existing devices keep alerting unchanged.
+  if (profile && (config?.tankFullThresholdPct != null || config?.tankLowThresholdPct != null)) {
+    const levelPercent = computeLevelPercent(levelCm, {
+      heightCm: profile.heightCm.toNumber(),
+      sensorOffsetCm: profile.sensorOffsetCm.toNumber(),
+    });
 
-  if (config?.tankLowThresholdL && volumeL <= config.tankLowThresholdL.toNumber()) {
-    await createAndSendAlert(
-      device.id,
-      device.tenantId,
-      'tank_low',
-      'critical',
-      `Tank is low (${volumeL.toFixed(1)}L)`,
-      { volume_l: volumeL, threshold: config.tankLowThresholdL.toNumber() }
-    );
+    if (config?.tankFullThresholdPct != null && levelPercent >= config.tankFullThresholdPct.toNumber()) {
+      await createAndSendAlert(
+        device.id,
+        device.tenantId,
+        'tank_full',
+        'high',
+        `Tank is full (${levelPercent.toFixed(0)}%)`,
+        { level_percent: levelPercent, threshold_pct: config.tankFullThresholdPct.toNumber() }
+      );
+    }
+
+    if (config?.tankLowThresholdPct != null && levelPercent <= config.tankLowThresholdPct.toNumber()) {
+      await createAndSendAlert(
+        device.id,
+        device.tenantId,
+        'tank_low',
+        'critical',
+        `Tank is low (${levelPercent.toFixed(0)}%)`,
+        { level_percent: levelPercent, threshold_pct: config.tankLowThresholdPct.toNumber() }
+      );
+    }
+  } else {
+    if (config?.tankFullThresholdL && volumeL >= config.tankFullThresholdL.toNumber()) {
+      await createAndSendAlert(
+        device.id,
+        device.tenantId,
+        'tank_full',
+        'high',
+        `Tank is full (${volumeL.toFixed(1)}L)`,
+        { volume_l: volumeL, threshold: config.tankFullThresholdL.toNumber() }
+      );
+    }
+
+    if (config?.tankLowThresholdL && volumeL <= config.tankLowThresholdL.toNumber()) {
+      await createAndSendAlert(
+        device.id,
+        device.tenantId,
+        'tank_low',
+        'critical',
+        `Tank is low (${volumeL.toFixed(1)}L)`,
+        { volume_l: volumeL, threshold: config.tankLowThresholdL.toNumber() }
+      );
+    }
   }
 
   if (batteryV !== null && config?.batteryLowThresholdV && batteryV < config.batteryLowThresholdV.toNumber()) {

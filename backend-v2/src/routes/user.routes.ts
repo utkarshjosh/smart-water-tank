@@ -5,6 +5,9 @@ import { AuthRequest, firebaseAuth, requireTenant } from '../middleware/firebase
 import { DeviceAccessRequest, requireDeviceAccess } from '../lib/access';
 import { asyncHandler } from '../lib/async-handler';
 import * as userService from '../services/user.service';
+import * as deviceService from '../services/device.service';
+import * as tankProfileService from '../services/tank-profile.service';
+import * as firmwareService from '../services/firmware.service';
 import { updateUserFCMToken } from '../services/fcm.service';
 
 const router = express.Router();
@@ -83,6 +86,15 @@ router.get(
   })
 );
 
+// GET /api/v1/user/devices/:deviceId - Basic device info (name/status/firmware)
+router.get(
+  '/devices/:deviceId',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    res.json(await userService.getDeviceInfo(req.device!));
+  })
+);
+
 // GET /api/v1/user/devices/:deviceId/current - Latest measurement
 router.get(
   '/devices/:deviceId/current',
@@ -104,6 +116,70 @@ router.get(
   asyncHandler(async (req: DeviceAccessRequest, res) => {
     const { days, limit } = historyQuerySchema.parse(req.query);
     res.json(await userService.getDeviceHistory(req.device!, days, limit));
+  })
+);
+
+// GET /api/v1/user/devices/:deviceId/tank-profile - Tank shape/dimensions setup
+router.get(
+  '/devices/:deviceId/tank-profile',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    res.json({ profile: await tankProfileService.getTankProfile(req.device!) });
+  })
+);
+
+const tankProfileSchema = z.object({
+  shape: z.enum(['cylindrical', 'cuboidal']),
+  parallel_unit_count: z.coerce.number().int().min(1).max(6).optional(),
+  height_cm: z.coerce.number().positive(),
+  diameter_cm: z.coerce.number().positive().nullable().optional(),
+  length_cm: z.coerce.number().positive().nullable().optional(),
+  width_cm: z.coerce.number().positive().nullable().optional(),
+  nominal_unit_volume_l: z.coerce.number().positive().nullable().optional(),
+  sensor_offset_cm: z.coerce.number().min(0).optional(),
+});
+
+// PUT /api/v1/user/devices/:deviceId/tank-profile - Set/edit tank setup
+router.put(
+  '/devices/:deviceId/tank-profile',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    const validated = tankProfileSchema.parse(req.body);
+    res.json({ profile: await tankProfileService.upsertTankProfile(req.device!, validated) });
+  })
+);
+
+// GET /api/v1/user/devices/:deviceId/config - Read-only device config display
+router.get(
+  '/devices/:deviceId/config',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    res.json(await deviceService.getDeviceConfig(req.device!));
+  })
+);
+
+const alertThresholdsSchema = z.object({
+  tank_low_threshold_pct: z.coerce.number().min(0).max(100).optional(),
+  tank_full_threshold_pct: z.coerce.number().min(0).max(100).optional(),
+  battery_low_threshold_v: z.coerce.number().min(0).optional(),
+});
+
+// PUT /api/v1/user/devices/:deviceId/alert-thresholds - Tenant-editable alert thresholds
+router.put(
+  '/devices/:deviceId/alert-thresholds',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    const validated = alertThresholdsSchema.parse(req.body);
+    res.json(await deviceService.updateAlertThresholds(req.device!, validated));
+  })
+);
+
+// GET /api/v1/user/devices/:deviceId/firmware-status - Read-only OTA status
+router.get(
+  '/devices/:deviceId/firmware-status',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    res.json(await firmwareService.getTenantFacingOtaStatus(req.device!));
   })
 );
 

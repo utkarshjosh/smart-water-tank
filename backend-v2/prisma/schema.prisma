@@ -42,6 +42,11 @@ enum FirmwareAssignmentStatus {
   failed
 }
 
+enum TankShape {
+  cylindrical
+  cuboidal
+}
+
 model Tenant {
   id        String   @id @default(uuid()) @db.Char(36)
   name      String   @db.VarChar(255)
@@ -84,6 +89,7 @@ model Device {
   firmwareVersion String?      @map("firmware_version") @db.VarChar(50)
   lastSeen        DateTime?    @map("last_seen")
   status          DeviceStatus @default(offline)
+  lastOtaCheckAt  DateTime?    @map("last_ota_check_at")
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt @map("updated_at")
 
@@ -93,6 +99,7 @@ model Device {
   summaries           DailySummary[]
   alerts              Alert[]
   config              DeviceConfig?
+  tankProfile         TankProfile?
   firmwareAssignments DeviceFirmwareAssignment[]
   userMappings        UserDeviceMapping[]
   claimCodes          DeviceClaimCode[]
@@ -182,6 +189,8 @@ model DeviceConfig {
   reportIntervalMs      Int      @default(300000) @map("report_interval_ms")
   tankFullThresholdL    Decimal? @map("tank_full_threshold_l") @db.Decimal(10, 2)
   tankLowThresholdL     Decimal? @map("tank_low_threshold_l") @db.Decimal(10, 2)
+  tankFullThresholdPct  Decimal? @map("tank_full_threshold_pct") @db.Decimal(5, 2)
+  tankLowThresholdPct   Decimal? @map("tank_low_threshold_pct") @db.Decimal(5, 2)
   batteryLowThresholdV  Decimal? @map("battery_low_threshold_v") @db.Decimal(5, 2)
   levelEmptyCm          Decimal? @map("level_empty_cm") @db.Decimal(10, 2)
   levelFullCm           Decimal? @map("level_full_cm") @db.Decimal(10, 2)
@@ -192,6 +201,25 @@ model DeviceConfig {
   device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
 
   @@map("device_configs")
+}
+
+model TankProfile {
+  id                 String    @id @default(uuid()) @db.Char(36)
+  deviceId           String    @unique @map("device_id") @db.Char(36)
+  shape              TankShape
+  parallelUnitCount  Int       @default(1) @map("parallel_unit_count")
+  heightCm           Decimal   @map("height_cm") @db.Decimal(10, 2)
+  diameterCm         Decimal?  @map("diameter_cm") @db.Decimal(10, 2)
+  lengthCm           Decimal?  @map("length_cm") @db.Decimal(10, 2)
+  widthCm            Decimal?  @map("width_cm") @db.Decimal(10, 2)
+  nominalUnitVolumeL Decimal?  @map("nominal_unit_volume_l") @db.Decimal(10, 2)
+  sensorOffsetCm     Decimal   @default(0) @map("sensor_offset_cm") @db.Decimal(10, 2)
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@map("tank_profiles")
 }
 
 model FirmwareBinary {

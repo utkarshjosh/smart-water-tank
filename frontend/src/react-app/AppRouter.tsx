@@ -7,7 +7,9 @@ const LoginPage = lazy(() => import('@/app/login/page'));
 const SignupPage = lazy(() => import('@/app/signup/page'));
 const TenantLayout = lazy(() => import('@/components/TenantLayout'));
 const TenantDevicesPage = lazy(() => import('@/app/app/devices/page'));
+const TenantDeviceDetailPage = lazy(() => import('@/app/app/devices/[deviceId]/page'));
 const OnboardingPage = lazy(() => import('@/app/app/onboarding/page'));
+const TankSetupPage = lazy(() => import('@/app/app/onboarding/tank-setup/[deviceId]/page'));
 const AdminDashboardPage = lazy(() => import('@/app/admin/dashboard/page'));
 const AdminDevicesPage = lazy(() => import('@/app/admin/devices/page'));
 const AdminDeviceDetailPage = lazy(() => import('@/app/admin/devices/[deviceId]/page'));
@@ -67,10 +69,26 @@ export default function AppRouter() {
           }
         />
         <Route
+          path="/app/devices/:deviceId"
+          element={
+            <TenantLayout>
+              <TenantDeviceDetailPage />
+            </TenantLayout>
+          }
+        />
+        <Route
           path="/app/onboarding"
           element={
             <TenantLayout>
               <OnboardingPage />
+            </TenantLayout>
+          }
+        />
+        <Route
+          path="/app/onboarding/tank-setup/:deviceId"
+          element={
+            <TenantLayout>
+              <TankSetupPage />
             </TenantLayout>
           }
         />

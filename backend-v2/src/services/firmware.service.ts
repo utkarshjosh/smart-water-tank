@@ -96,6 +96,8 @@ export async function rolloutFirmware(
 export async function checkOtaUpdate(device: Device, headerVersion?: string) {
   const currentVersion = headerVersion || device.firmwareVersion || '0.0.0';
 
+  await prisma.device.update({ where: { id: device.id }, data: { lastOtaCheckAt: new Date() } });
+
   const assignment = await prisma.deviceFirmwareAssignment.findFirst({
     where: { deviceId: device.id, status: 'pending', firmware: { isActive: true } },
     include: { firmware: true },
@@ -114,6 +116,26 @@ export async function checkOtaUpdate(device: Device, headerVersion?: string) {
     download_url: `${env.apiBaseUrl}/api/v1/devices/${device.deviceId}/ota/download/${firmware.id}`,
     file_size: firmware.fileSize,
     checksum: firmware.checksum,
+  };
+}
+
+export async function getTenantFacingOtaStatus(device: Device) {
+  const latestActive = await prisma.firmwareBinary.findFirst({
+    where: { isActive: true },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const pendingAssignment = await prisma.deviceFirmwareAssignment.findFirst({
+    where: { deviceId: device.id, status: { in: ['pending', 'downloading', 'installing'] } },
+    include: { firmware: true },
+    orderBy: { assignedAt: 'desc' },
+  });
+
+  return {
+    current_version: device.firmwareVersion,
+    latest_known_version: latestActive?.version ?? null,
+    update_pending: !!pendingAssignment && pendingAssignment.firmware.version !== device.firmwareVersion,
+    last_checked_at: device.lastOtaCheckAt,
   };
 }
 
