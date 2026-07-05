@@ -24,7 +24,7 @@ function buildPool(): Pool {
 
   const sslEnabled = process.env.DB_SSL === 'true';
 
-  return mysql.createPool({
+  const pool = mysql.createPool({
     uri: url,
     connectionLimit: 20,
     waitForConnections: true,
@@ -32,8 +32,24 @@ function buildPool(): Pool {
     // runtime queries go through prepared `execute()` which ignores this.
     multipleStatements: true,
     typeCast,
+    // Without this, Date params (e.g. claim-code expires_at) are written using
+    // the Node process's local wall-clock, while `NOW()` in SQL is evaluated in
+    // the MySQL session's timezone - if those two differ, naive DATETIME
+    // comparisons like `expires_at > NOW()` can be wrong by the offset between
+    // them. Pin both sides to UTC instead.
+    timezone: 'Z',
     ...(sslEnabled ? { ssl: { rejectUnauthorized: false } } : {}),
   });
+
+  // `timezone: 'Z'` above only controls client-side Date encoding; it doesn't
+  // touch the server's session time_zone, so NOW()/CURRENT_TIMESTAMP would
+  // still use whatever the DB defaults to. Force every pooled connection to
+  // UTC too so both sides of a comparison agree.
+  pool.on('connection', (conn) => {
+    conn.query("SET time_zone = '+00:00'");
+  });
+
+  return pool;
 }
 
 function remapError(error: any): never {
