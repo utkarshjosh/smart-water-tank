@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sensor Sanity · Live Dashboard</title>
+<style>
+  :root {
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2230; --line:#2a3140;
+    --text:#e6edf3; --muted:#8b949e; --accent:#3b82f6; --accent2:#22d3ee;
+    --good:#22c55e; --warn:#f59e0b; --bad:#ef4444;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; background:var(--bg); color:var(--text);
+    font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    padding:20px; max-width:1100px; margin:0 auto;
+  }
+  header { display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:20px; }
+  h1 { font-size:18px; margin:0; font-weight:600; }
+  h1 span { color:var(--muted); font-weight:400; }
+  .spacer { flex:1; }
+  .dot { width:10px; height:10px; border-radius:50%; background:var(--bad); display:inline-block; }
+  .dot.on { background:var(--good); box-shadow:0 0 8px var(--good); }
+  button {
+    background:var(--panel2); color:var(--text); border:1px solid var(--line);
+    border-radius:8px; padding:8px 14px; font-size:13px; cursor:pointer;
+    transition:.15s;
+  }
+  button:hover:not(:disabled) { border-color:var(--accent); background:#222b3d; }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.primary:hover { background:#2f6fd6; }
+  select { background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:7px 10px; }
+
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:18px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .card .label { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+  .card .value { font-size:28px; font-weight:600; margin-top:4px; font-variant-numeric:tabular-nums; }
+  .card .unit { font-size:14px; color:var(--muted); font-weight:400; }
+  .card .sub { font-size:12px; color:var(--muted); margin-top:2px; }
+  .card.status .value { font-size:20px; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:20px; font-size:12px; font-weight:600; }
+  .pill.good { background:rgba(34,197,94,.15); color:var(--good); }
+  .pill.warn { background:rgba(245,158,11,.15); color:var(--warn); }
+  .pill.bad  { background:rgba(239,68,68,.15); color:var(--bad); }
+
+  .charts { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:18px; }
+  .chart-box { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; }
+  .chart-box h3 { margin:0 0 8px; font-size:13px; color:var(--muted); font-weight:500; }
+  canvas { width:100%; height:180px; display:block; }
+
+  .controls { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px; align-items:center; }
+  .controls .sep { width:1px; height:24px; background:var(--line); margin:0 4px; }
+
+  details { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:0 14px; }
+  summary { cursor:pointer; padding:12px 0; color:var(--muted); font-size:13px; }
+  #log { font:12px/1.5 ui-monospace,Menlo,Consolas,monospace; white-space:pre-wrap;
+         max-height:240px; overflow:auto; padding-bottom:12px; color:#c9d1d9; }
+  .banner { background:rgba(239,68,68,.1); border:1px solid var(--bad); color:#ffb4b4;
+            padding:12px 16px; border-radius:10px; margin-bottom:16px; font-size:13px; display:none; }
+  .banner.show { display:block; }
+  .hint { color:var(--muted); font-size:12px; }
+  a { color:var(--accent2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Sensor Sanity <span>· live dashboard</span></h1>
+  <div class="spacer"></div>
+  <span class="dot" id="dot"></span>
+  <span id="statusText" class="hint">disconnected</span>
+  <select id="baud">
+    <option value="115200" selected>115200</option>
+    <option value="74880">74880</option>
+    <option value="9600">9600</option>
+  </select>
+  <button id="connectBtn" class="primary">Connect</button>
+</header>
+
+<div class="banner" id="banner"></div>
+
+<div class="cards">
+  <div class="card"><div class="label">Distance</div>
+    <div class="value" id="dist">–<span class="unit"> cm</span></div>
+    <div class="sub" id="distSub">raw – µs</div></div>
+  <div class="card"><div class="label">Temperature</div>
+    <div class="value" id="temp">–<span class="unit"> °C</span></div>
+    <div class="sub">DS18B20</div></div>
+  <div class="card status"><div class="label">Signal</div>
+    <div class="value"><span class="pill" id="signalPill">–</span></div>
+    <div class="sub" id="signalSub">waiting…</div></div>
+  <div class="card"><div class="label">Dropouts</div>
+    <div class="value" id="drops">–<span class="unit"> /10</span></div>
+    <div class="sub">no-echo pings</div></div>
+  <div class="card"><div class="label">Jitter</div>
+    <div class="value" id="jitter">–<span class="unit"> cm</span></div>
+    <div class="sub">max − min spread</div></div>
+</div>
+
+<div class="charts">
+  <div class="chart-box"><h3>Distance (cm)</h3><canvas id="distChart"></canvas></div>
+  <div class="chart-box"><h3>Temperature (°C)</h3><canvas id="tempChart"></canvas></div>
+</div>
+
+<div class="controls">
+  <button id="selfTestBtn" disabled>Run self-test</button>
+  <button id="helpBtn" disabled>Help</button>
+  <button id="rearmBtn" disabled>Re-arm telemetry</button>
+  <span class="sep"></span>
+  <button id="pauseBtn" disabled>Pause</button>
+  <button id="clearBtn">Clear chart</button>
+  <span class="hint">Buttons send commands to the device — no typing needed.</span>
+</div>
+
+<details>
+  <summary>Raw serial feed</summary>
+  <div id="log"></div>
+</details>
+
+<p class="hint" style="margin-top:16px">
+  Requires Chrome, Edge, or Brave (Web Serial API). Close the Arduino IDE / <code>arduino-cli monitor</code>
+  first — only one program can hold the serial port. If Connect does nothing from <code>file://</code>,
+  serve this folder with <code>python3 -m http.server</code> and open <code>http://localhost:8000/webui/</code>.
+</p>
+
+<script>
+const MAXPTS = 120;                 // points kept in each chart
+const dist = { hist:[], el:$('dist'), sub:$('distSub') };
+const temp = { hist:[], el:$('temp') };
+let port, reader, writer, paused=false, lineBuf='';
+
+function $(id){ return document.getElementById(id); }
+
+// ---- Web Serial ----------------------------------------------------------
+if (!('serial' in navigator)) {
+  banner('This browser has no Web Serial API. Use Chrome, Edge, or Brave (desktop).');
+  $('connectBtn').disabled = true;
+}
+
+$('connectBtn').onclick = () => port ? disconnect() : connect();
+
+async function connect() {
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: parseInt($('baud').value) });
+    writer = port.writable.getWriter();
+    setConnected(true);
+    readLoop();
+    await send('j');            // switch device into JSON telemetry mode
+  } catch (e) {
+    banner('Could not open port: ' + e.message);
+    port = null;
+  }
+}
+
+async function disconnect() {
+  try {
+    if (reader) { await reader.cancel().catch(()=>{}); }
+    if (writer) { writer.releaseLock(); writer = null; }
+    if (port)   { await port.close().catch(()=>{}); }
+  } finally {
+    port = null; setConnected(false);
+  }
+}
+
+async function readLoop() {
+  const decoder = new TextDecoderStream();
+  const closed = port.readable.pipeTo(decoder.writable).catch(()=>{});
+  reader = decoder.readable.getReader();
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (value) ingest(value);
+    }
+  } catch (e) { /* port closed */ }
+  finally { reader.releaseLock(); await closed; }
+}
+
+async function send(str) {
+  if (!writer) return;
+  await writer.write(new TextEncoder().encode(str + '\n'));
+}
+
+// ---- Parsing -------------------------------------------------------------
+function ingest(chunk) {
+  lineBuf += chunk;
+  let nl;
+  while ((nl = lineBuf.indexOf('\n')) >= 0) {
+    const line = lineBuf.slice(0, nl).trim();
+    lineBuf = lineBuf.slice(nl + 1);
+    if (line) handleLine(line);
+  }
+}
+
+function handleLine(line) {
+  logLine(line);
+  if (line[0] === '{') {
+    try { if (!paused) applyTelemetry(JSON.parse(line)); } catch {}
+  }
+}
+
+function applyTelemetry(d) {
+  // Distance card + chart
+  if (d.dist == null) {
+    dist.el.innerHTML = 'NO ECHO<span class="unit"></span>';
+    dist.sub.textContent = 'no valid ping';
+  } else {
+    dist.el.innerHTML = d.dist.toFixed(1) + '<span class="unit"> cm</span>';
+    dist.sub.textContent = 'raw ' + d.us + ' µs';
+    pushPt(dist.hist, d.dist);
+  }
+  // Temperature card + chart
+  if (d.temp == null) {
+    temp.el.innerHTML = '––<span class="unit"></span>';
+  } else {
+    temp.el.innerHTML = d.temp.toFixed(2) + '<span class="unit"> °C</span>';
+    pushPt(temp.hist, d.temp);
+  }
+  // Dropouts + jitter
+  $('drops').innerHTML = d.drops + '<span class="unit"> /' + (d.drops + d.valid) + '</span>';
+  const jit = (d.min != null && d.max != null) ? (d.max - d.min) : null;
+  $('jitter').innerHTML = (jit == null ? '–' : jit.toFixed(1)) + '<span class="unit"> cm</span>';
+  // Signal quality verdict
+  signalVerdict(d, jit);
+  drawAll();
+}
+
+function signalVerdict(d, jit) {
+  const pill = $('signalPill'), sub = $('signalSub');
+  let cls, txt, why;
+  if (d.valid === 0)                    { cls='bad';  txt='NO SIGNAL'; why='no echoes — check 5V power & wiring'; }
+  else if (d.drops > (d.drops+d.valid)/3){ cls='bad';  txt='POOR';      why='many dropouts — weak power or long/noisy cable'; }
+  else if (d.drops > 0 || (jit!=null && jit>3)) { cls='warn'; txt='NOISY'; why='some dropouts/jitter — mounting or reflections'; }
+  else                                  { cls='good'; txt='STABLE';    why='clean, consistent readings'; }
+  pill.className = 'pill ' + cls; pill.textContent = txt; sub.textContent = why;
+}
+
+// ---- Charts (dependency-free canvas) ------------------------------------
+function pushPt(arr, v){ arr.push(v); if (arr.length > MAXPTS) arr.shift(); }
+
+function drawAll(){ drawChart('distChart', dist.hist, '#3b82f6'); drawChart('tempChart', temp.hist, '#22d3ee'); }
+
+function drawChart(id, data, color){
+  const c = $(id), dpr = window.devicePixelRatio || 1;
+  const w = c.clientWidth, h = c.clientHeight;
+  c.width = w*dpr; c.height = h*dpr;
+  const ctx = c.getContext('2d'); ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,w,h);
+  const pad = 24;
+  if (data.length < 2) { ctx.fillStyle='#8b949e'; ctx.font='12px system-ui';
+    ctx.fillText('waiting for data…', pad, h/2); return; }
+  let lo = Math.min(...data), hi = Math.max(...data);
+  if (hi - lo < 1) { hi += 1; lo -= 1; }           // avoid flat-line divide-by-zero
+  const pad2 = (hi-lo)*0.1; lo-=pad2; hi+=pad2;
+  const X = i => pad + (w-2*pad) * i/(MAXPTS-1);
+  const Y = v => (h-pad) - (h-2*pad) * (v-lo)/(hi-lo);
+  // gridlines + labels
+  ctx.strokeStyle='#2a3140'; ctx.fillStyle='#8b949e'; ctx.font='11px system-ui'; ctx.lineWidth=1;
+  for (let g=0; g<=2; g++){ const val = lo + (hi-lo)*g/2, y = Y(val);
+    ctx.beginPath(); ctx.moveTo(pad,y); ctx.lineTo(w-pad,y); ctx.stroke();
+    ctx.fillText(val.toFixed(1), 2, y-2); }
+  // line
+  ctx.strokeStyle=color; ctx.lineWidth=2; ctx.beginPath();
+  data.forEach((v,i)=>{ const x=X(i+(MAXPTS-data.length)), y=Y(v); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+  ctx.stroke();
+  // last point dot
+  const lx=X(MAXPTS-1), ly=Y(data[data.length-1]);
+  ctx.fillStyle=color; ctx.beginPath(); ctx.arc(lx,ly,3,0,7); ctx.fill();
+}
+
+// ---- Buttons -------------------------------------------------------------
+$('selfTestBtn').onclick = () => send('s');
+$('helpBtn').onclick     = () => send('h');
+$('rearmBtn').onclick    = () => send('j');
+$('pauseBtn').onclick    = () => { paused=!paused; $('pauseBtn').textContent = paused?'Resume':'Pause'; };
+$('clearBtn').onclick    = () => { dist.hist.length=0; temp.hist.length=0; drawAll(); };
+
+// ---- UI helpers ----------------------------------------------------------
+function setConnected(on){
+  $('dot').classList.toggle('on', on);
+  $('statusText').textContent = on ? 'connected' : 'disconnected';
+  $('connectBtn').textContent = on ? 'Disconnect' : 'Connect';
+  ['selfTestBtn','helpBtn','rearmBtn','pauseBtn'].forEach(id=>$(id).disabled=!on);
+  if (on) banner('');
+}
+function logLine(s){
+  const el=$('log'); const atBottom = el.scrollHeight-el.scrollTop-el.clientHeight < 40;
+  el.textContent += s + '\n';
+  if (el.textContent.length > 20000) el.textContent = el.textContent.slice(-16000);
+  if (atBottom) el.scrollTop = el.scrollHeight;
+}
+function banner(msg){ const b=$('banner'); b.textContent=msg; b.classList.toggle('show', !!msg); }
+
+window.addEventListener('resize', drawAll);
+drawAll();
+</script>
+</body>
+</html>

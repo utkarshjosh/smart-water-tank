@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "author": "AquaMind",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+    { "type": "wokwi-hc-sr04", "id": "ultra", "top": -220, "left": 210,
+      "attrs": { "distance": "120" } },
+    { "type": "wokwi-ds18b20", "id": "temp", "top": 150, "left": 250,
+      "attrs": { "temperature": "27" } },
+    { "type": "wokwi-resistor", "id": "r1", "top": 110, "left": 170,
+      "attrs": { "value": "4700" } },
+    { "type": "wokwi-buzzer", "id": "buzzer", "top": 150, "left": -120, "attrs": { "volume": "0.1" } },
+    { "type": "wokwi-led", "id": "led", "top": -80, "left": -140, "attrs": { "color": "blue" } },
+    { "type": "wokwi-resistor", "id": "r2", "top": -60, "left": -180, "attrs": { "value": "220" } },
+    { "type": "wokwi-potentiometer", "id": "battery", "top": 40, "left": -200, "attrs": {} }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+
+    [ "esp:5V",    "ultra:VCC",  "red",   [] ],
+    [ "esp:GND.1", "ultra:GND",  "black", [] ],
+    [ "esp:5",     "ultra:TRIG", "green", [] ],
+    [ "esp:18",    "ultra:ECHO", "blue",  [] ],
+
+    [ "esp:3V3",   "temp:VCC", "red",   [] ],
+    [ "esp:GND.2", "temp:GND", "black", [] ],
+    [ "esp:4",     "temp:DQ",  "gold",  [] ],
+    [ "temp:DQ",   "r1:1",     "gold",  [] ],
+    [ "r1:2",      "esp:3V3",  "red",   [] ],
+
+    [ "esp:14",    "buzzer:1", "green", [] ],
+    [ "esp:GND.3", "buzzer:2", "black", [] ],
+
+    [ "esp:2",     "r2:1",   "green", [] ],
+    [ "r2:2",      "led:A",  "green", [] ],
+    [ "led:C",     "esp:GND.1", "black", [] ],
+
+    [ "battery:VCC", "esp:3V3",  "red",   [] ],
+    [ "battery:GND", "esp:GND.2", "black", [] ],
+    [ "battery:SIG", "esp:34",   "blue",  [] ]
+  ]
+}

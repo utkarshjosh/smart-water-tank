@@ -1,9 +1,15 @@
 /**
  * ============================================================================
- * Configuration Module
+ * Configuration Module (Wokwi / ESP32 build)
  * ============================================================================
- * Central configuration for the water tank monitoring system.
- * Edit these values or override via OTA config updates.
+ * Ported from firmware/src/modules/config.h for the Wokwi simulator.
+ * Differences from the real ESP8266 firmware:
+ *   - WiFi defaults point at Wokwi's virtual "Wokwi-GUEST" network instead of
+ *     a real router (there's no real AP to configure from inside Wokwi).
+ *   - Pins are plain ESP32 GPIO numbers (must match diagram.json) instead of
+ *     the ESP8266 Dx macros.
+ * Server config, tank config, and everything else is unchanged from the real
+ * firmware so the claim/pairing and reporting logic behaves identically.
  */
 
 #ifndef CONFIG_H
@@ -16,18 +22,19 @@
 // ============================================================================
 
 #ifndef FIRMWARE_VERSION
-#define FIRMWARE_VERSION "0.0.0-dev"
+#define FIRMWARE_VERSION "wokwi-sim-0.1.0"
 #endif
 
 // ============================================================================
 // WiFi Configuration
 // ============================================================================
 
-// Default WiFi credentials (can be overridden via config portal)
-#define WIFI_SSID_DEFAULT           "Champs"
-#define WIFI_PASSWORD_DEFAULT       "@susChamps@11"
+// Wokwi's built-in virtual access point (open network, no password).
+#define WIFI_SSID_DEFAULT           "Wokwi-GUEST"
+#define WIFI_PASSWORD_DEFAULT       ""
 
-// AP mode for configuration (do not change - used for setup portal)
+// AP mode for configuration is unused in the Wokwi build (see wifi_manager.h) -
+// kept only so log messages/comments referencing it still make sense.
 #define AP_SSID             "WaterTank-Setup"
 #define AP_PASSWORD         "watertank123"
 
@@ -61,24 +68,24 @@
 #define MQTT_TOPIC          "watertank/device1"
 
 // ============================================================================
-// Hardware Pin Configuration
+// Hardware Pin Configuration (ESP32 GPIOs - must match diagram.json)
 // ============================================================================
 
-// Ultrasonic Sensor (HC-SR04 or similar)
-#define PIN_ULTRASONIC_TRIG     D1      // GPIO5
-#define PIN_ULTRASONIC_ECHO     D2      // GPIO4
+// Ultrasonic Sensor (HC-SR04)
+#define PIN_ULTRASONIC_TRIG     5
+#define PIN_ULTRASONIC_ECHO     18
 
 // Temperature Sensor (DS18B20)
-#define PIN_TEMPERATURE         D3      // GPIO0
+#define PIN_TEMPERATURE         4
 
 // Speaker/Buzzer
-#define PIN_SPEAKER             D5      // GPIO14
+#define PIN_SPEAKER             14
 
-// Battery ADC (through voltage divider)
-#define PIN_BATTERY_ADC         A0      // ADC (0-1V input)
+// Battery ADC (through voltage divider) - Wokwi potentiometer wiper
+#define PIN_BATTERY_ADC         34
 
 // Status LED
-#define PIN_STATUS_LED          LED_BUILTIN
+#define PIN_STATUS_LED          2
 
 // ============================================================================
 // Tank Configuration
@@ -156,11 +163,11 @@ namespace Config {
     extern float batteryLowThreshold;
     extern float levelEmptyCm;
     extern float levelFullCm;
-    
+
     // WiFi credentials (configurable via portal)
     extern String wifiSsid;
     extern String wifiPassword;
-    
+
     // Device identification (configurable via portal)
     extern String deviceId;
     extern String deviceToken;
@@ -171,19 +178,18 @@ namespace Config {
 
     // Load config from flash
     void load();
-    
+
     // Save config to flash
     void save();
-    
+
     // Reset to defaults
     void reset();
-    
+
     // Apply config from JSON (for remote updates)
     bool applyFromJson(const char* json);
-    
+
     // Get OTA hostname (uses deviceId)
     String getOtaHostname();
 }
 
 #endif // CONFIG_H
-

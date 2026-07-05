@@ -7,6 +7,14 @@
 .env.local
 .env.*.local
 
+# Secrets / credentials
+*.secret
+*service-account*.json
+backend/firbase-service-account.json
+
+# Arduino IDE local data
+.arduino-data/
+
 # IDE and Editor Files
 .vscode/
 .idea/

@@ -1,0 +1,15 @@
+# Wokwi simulator config for water_tank_wokwi.
+# Point `firmware`/`elf` at the arduino-cli build output (see README), then
+# start the simulator from the Wokwi VS Code extension.
+
+[wokwi]
+version = 1
+firmware = "build/water_tank_wokwi.ino.merged.bin"
+elf = "build/water_tank_wokwi.ino.elf"
+
+# Forward the pairing page (and, once claimed, nothing else - measurement
+# reporting/OTA go straight out to the real backend over WiFi) so you can
+# open it from a normal browser on your machine.
+[[net.forward]]
+from = "localhost:8080"
+to = "target:80"

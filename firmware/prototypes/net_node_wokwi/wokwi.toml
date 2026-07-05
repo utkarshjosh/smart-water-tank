@@ -1,0 +1,14 @@
+# Wokwi simulator config for net_node_wokwi.
+# Point `firmware`/`elf` at the arduino-cli build output (see README), then
+# start the simulator from the Wokwi VS Code extension.
+
+[wokwi]
+version = 1
+firmware = "build/net_node_wokwi.ino.bin"
+elf = "build/net_node_wokwi.ino.elf"
+
+# Forward the virtual ESP32's TCP server to your host so the debug hub can
+# connect. In the hub UI: Add network device → host "localhost", port 3333.
+[[net.forward]]
+from = "localhost:3333"
+to = "target:3333"
