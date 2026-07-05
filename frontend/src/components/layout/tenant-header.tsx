@@ -10,15 +10,15 @@ const UserNav = lazy(() =>
 
 export function TenantHeader({ tenantName }: { tenantName?: string }) {
     return (
-        <div className="border-b">
-            <div className="flex h-16 items-center px-4">
+        <div className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur">
+            <div className="flex h-14 items-center px-4 sm:px-6 lg:px-7">
                 <TenantMobileSidebar />
                 {tenantName && (
-                    <span className="ml-4 text-sm font-medium text-muted-foreground hidden md:inline">
+                    <span className="ml-1 hidden text-sm font-medium text-muted-foreground md:inline">
                         {tenantName}
                     </span>
                 )}
-                <div className="ml-auto flex items-center space-x-4">
+                <div className="ml-auto flex items-center gap-2">
                     <Suspense fallback={<div className="h-9 w-9 rounded-md border" aria-hidden="true" />}>
                         <ModeToggle />
                     </Suspense>

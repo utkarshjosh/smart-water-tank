@@ -19,7 +19,7 @@ export const TenantMobileSidebar = () => {
         <>
             <button
                 type="button"
-                className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white md:hidden"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white md:hidden"
                 aria-label="Open navigation menu"
                 aria-expanded={open}
                 onClick={() => setOpen(true)}
