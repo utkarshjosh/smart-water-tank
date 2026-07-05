@@ -83,18 +83,14 @@ backend/storage/
 backend/.DS_Store
 
 # ============================================================================
-# Admin Panel (Next.js)
+# Frontend (Vite/React)
 # ============================================================================
 
-admin-panel/node_modules/
-admin-panel/.next/
-admin-panel/out/
-admin-panel/build/
-admin-panel/.env
-admin-panel/.env*.local
-admin-panel/.vercel/
-admin-panel/*.tsbuildinfo
-admin-panel/next-env.d.ts
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.env
+frontend/.env*.local
 
 # ============================================================================
 # Mobile App (React Native/Expo)

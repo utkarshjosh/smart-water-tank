@@ -1,12 +1,12 @@
 # Water Tank Monitoring System - Full Stack
 
-Complete IoT water tank monitoring system with ESP8266 firmware, Node.js backend, Next.js admin panel, and React Native mobile app.
+Complete IoT water tank monitoring system with ESP8266 firmware, Node.js backend, Vite/React admin panel, and React Native mobile app.
 
 ## Architecture
 
 - **Firmware**: ESP8266 device sending sensor data via HTTPS
 - **Backend API**: Node.js/TypeScript + PostgreSQL with multi-tenant support
-- **Admin Panel**: Next.js web application for device management and OTA
+- **Admin Panel**: Vite/React web application for device management and OTA
 - **Mobile App**: React Native app with GlueStackUI for end users
 
 ## Project Structure
@@ -15,7 +15,7 @@ Complete IoT water tank monitoring system with ESP8266 firmware, Node.js backend
 WATER_TANK/
 ├── firmware/          # ESP8266 firmware (existing)
 ├── backend/           # Node.js API server
-├── admin-panel/       # Next.js admin web app
+├── frontend/          # Vite/React admin web app
 ├── mobile-app/        # React Native mobile app
 └── docs/              # Documentation and plans
 ```
@@ -51,10 +51,10 @@ Backend will run on `http://localhost:3000`
 ### 2. Admin Panel Setup
 
 ```bash
-cd admin-panel
+cd frontend
 npm install
 
-# Create .env.local file with:
+# Create .env file with:
 # NEXT_PUBLIC_API_URL=http://localhost:3000
 # NEXT_PUBLIC_FIREBASE_API_KEY=...
 # NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=...
@@ -185,7 +185,7 @@ npm run migrate    # Run database migrations
 
 ### Admin Panel
 ```bash
-cd admin-panel
+cd frontend
 npm run dev        # Development server
 npm run build      # Production build
 npm start          # Production server

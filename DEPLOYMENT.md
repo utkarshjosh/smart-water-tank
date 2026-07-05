@@ -211,8 +211,8 @@ pm2 startup  # Follow instructions to enable auto-start on boot
 
 ```bash
 cd /home/aquamind/apps
-# Clone or copy admin-panel folder here
-cd admin-panel
+# Clone or copy frontend folder here
+cd frontend
 ```
 
 ### 4.2 Install Dependencies
@@ -223,7 +223,7 @@ npm install
 
 ### 4.3 Environment Variables
 
-Create `/home/aquamind/apps/admin-panel/.env.production`:
+Create `/home/aquamind/apps/frontend/.env.production`:
 
 ```bash
 # Backend API URL
@@ -246,7 +246,7 @@ npm run build
 
 ### 4.5 Setup PM2 for Next.js
 
-Create `/home/aquamind/apps/admin-panel/ecosystem.config.js`:
+Create `/home/aquamind/apps/frontend/ecosystem.config.js`:
 
 ```javascript
 module.exports = {
@@ -254,7 +254,7 @@ module.exports = {
     name: 'aquamind-admin',
     script: 'node_modules/next/dist/bin/next',
     args: 'start',
-    cwd: '/home/aquamind/apps/admin-panel',
+    cwd: '/home/aquamind/apps/frontend',
     instances: 1,
     exec_mode: 'fork',
     env: {
@@ -471,7 +471,7 @@ And update `backend/src/index.ts` to use it properly (remove the wildcard `*` in
 ```bash
 # Secure environment files
 chmod 600 /home/aquamind/apps/aquamind-backend/.env
-chmod 600 /home/aquamind/apps/admin-panel/.env.production
+chmod 600 /home/aquamind/apps/frontend/.env.production
 ```
 
 ---
@@ -561,7 +561,7 @@ pm2 restart aquamind-api
 
 # Frontend deployment
 echo "📦 Deploying frontend..."
-cd /home/aquamind/apps/admin-panel
+cd /home/aquamind/apps/frontend
 git pull origin main  # or your branch
 npm install
 npm run build
@@ -628,7 +628,7 @@ psql -U aquamind_user -d aquamind_db -c "SELECT 1;"
 pm2 logs aquamind-admin
 
 # Verify build
-cd /home/aquamind/apps/admin-panel
+cd /home/aquamind/apps/frontend
 npm run build
 ```
 
@@ -678,7 +678,7 @@ sudo systemctl restart postgresql
 
 ### Important Paths
 - Backend: `/home/aquamind/apps/aquamind-backend`
-- Frontend: `/home/aquamind/apps/admin-panel`
+- Frontend: `/home/aquamind/apps/frontend`
 - Logs: `/home/aquamind/logs`
 - Backups: `/home/aquamind/backups`
 - Nginx configs: `/etc/nginx/sites-available/`
