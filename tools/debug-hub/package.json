@@ -1,0 +1,18 @@
+{
+  "name": "aquamind-debug-hub",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local debug hub + web UI + device simulator for the smart water tank stack. Bridges serial (USB) and WiFi (LAN/TCP) devices into one dashboard. Zero required dependencies.",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "hub": "node src/index.js --sim 0",
+    "sim": "node src/simulator.js --count 2"
+  },
+  "optionalDependencies": {
+    "serialport": "^12.0.0",
+    "@serialport/parser-readline": "^12.0.0"
+  }
+}

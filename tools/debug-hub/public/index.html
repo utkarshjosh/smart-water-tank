@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AquaMind · Debug Hub</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<header>
+  <div class="brand">AquaMind <span>· debug hub</span></div>
+  <div class="spacer"></div>
+  <span class="dot" id="hubDot"></span>
+  <span id="hubStatus" class="muted">connecting…</span>
+</header>
+
+<div class="layout">
+  <!-- Devices -->
+  <main>
+    <div class="section-title">Devices <span id="devCount" class="muted"></span></div>
+    <div id="devices" class="device-grid"></div>
+    <div id="empty" class="empty">No devices yet. Start the simulator, plug in a USB board, or add a network device →</div>
+  </main>
+
+  <!-- Connections sidebar -->
+  <aside>
+    <div class="panel">
+      <h3>Simulator</h3>
+      <p class="muted small">Fake tank + control nodes — debug the whole stack with no hardware.</p>
+      <div class="row">
+        <input type="number" id="simCount" value="2" min="0" max="8" />
+        <button id="simStart" class="primary">Start</button>
+        <button id="simStop">Stop</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Network device <span class="muted small">(WiFi / LAN)</span></h3>
+      <div class="row">
+        <input type="text" id="netHost" placeholder="192.168.1.50" />
+        <input type="number" id="netPort" value="3333" style="max-width:80px" />
+      </div>
+      <button id="netConnect" class="primary full">Connect</button>
+      <p class="muted small">Devices that broadcast on the LAN appear automatically.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Serial ports <span class="muted small">(USB)</span></h3>
+      <div id="ports" class="ports"></div>
+      <div class="row">
+        <select id="baud">
+          <option>115200</option><option>74880</option><option>9600</option>
+        </select>
+        <button id="portsRefresh">Refresh</button>
+      </div>
+      <p class="muted small" id="serialNote"></p>
+    </div>
+  </aside>
+</div>
+
+<!-- Log console -->
+<section class="console">
+  <div class="console-head">
+    <span>Log console</span>
+    <div class="spacer"></div>
+    <label class="muted small"><input type="checkbox" id="autoscroll" checked /> autoscroll</label>
+    <button id="clearLog">Clear</button>
+  </div>
+  <div id="log"></div>
+</section>
+
+<script src="app.js"></script>
+</body>
+</html>
