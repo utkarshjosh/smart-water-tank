@@ -1,0 +1,258 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  user
+  tenant_owner
+  admin
+  super_admin
+}
+
+enum DeviceStatus {
+  online
+  offline
+}
+
+enum AlertType {
+  tank_full
+  tank_low
+  battery_low
+  device_offline
+  leak_detected
+}
+
+enum AlertSeverity {
+  low
+  medium
+  high
+  critical
+}
+
+enum FirmwareAssignmentStatus {
+  pending
+  downloading
+  installing
+  installed
+  failed
+}
+
+model Tenant {
+  id        String   @id @default(uuid()) @db.Char(36)
+  name      String   @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  users      User[]
+  devices    Device[]
+  alerts     Alert[]
+  claimCodes DeviceClaimCode[]
+
+  @@map("tenants")
+}
+
+model User {
+  id          String    @id @default(uuid()) @db.Char(36)
+  firebaseUid String    @unique @map("firebase_uid") @db.VarChar(255)
+  email       String    @db.VarChar(255)
+  name        String?   @db.VarChar(255)
+  tenantId    String?   @map("tenant_id") @db.Char(36)
+  role        Role      @default(user)
+  fcmToken    String?   @map("fcm_token") @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  tenant             Tenant?             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  deviceMappings     UserDeviceMapping[]
+  acknowledgedAlerts Alert[]             @relation("AlertAcknowledgedBy")
+  claimCodesCreated  DeviceClaimCode[]
+
+  @@index([tenantId])
+  @@map("users")
+}
+
+model Device {
+  id              String       @id @default(uuid()) @db.Char(36)
+  deviceId        String       @unique @map("device_id") @db.VarChar(255)
+  tenantId        String?      @map("tenant_id") @db.Char(36)
+  name            String?      @db.VarChar(255)
+  firmwareVersion String?      @map("firmware_version") @db.VarChar(50)
+  lastSeen        DateTime?    @map("last_seen")
+  status          DeviceStatus @default(offline)
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  tenant              Tenant?                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tokens              DeviceToken[]
+  measurements        Measurement[]
+  summaries           DailySummary[]
+  alerts              Alert[]
+  config              DeviceConfig?
+  firmwareAssignments DeviceFirmwareAssignment[]
+  userMappings        UserDeviceMapping[]
+  claimCodes          DeviceClaimCode[]
+
+  @@index([tenantId])
+  @@map("devices")
+}
+
+model DeviceToken {
+  id        String    @id @default(uuid()) @db.Char(36)
+  deviceId  String    @map("device_id") @db.Char(36)
+  tokenHash String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt DateTime? @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@map("device_tokens")
+}
+
+model Measurement {
+  id           String   @id @default(uuid()) @db.Char(36)
+  deviceId     String   @map("device_id") @db.Char(36)
+  timestamp    DateTime @default(now())
+  levelCm      Decimal  @map("level_cm") @db.Decimal(10, 2)
+  volumeL      Decimal  @map("volume_l") @db.Decimal(10, 2)
+  temperatureC Decimal? @map("temperature_c") @db.Decimal(5, 2)
+  batteryV     Decimal? @map("battery_v") @db.Decimal(5, 2)
+  rssi         Int?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId, timestamp(sort: Desc)])
+  @@index([timestamp(sort: Desc)])
+  @@map("measurements")
+}
+
+model DailySummary {
+  id            String   @id @default(uuid()) @db.Char(36)
+  deviceId      String   @map("device_id") @db.Char(36)
+  date          DateTime @db.Date
+  totalUsageL   Decimal  @default(0) @map("total_usage_l") @db.Decimal(10, 2)
+  minVolumeL    Decimal? @map("min_volume_l") @db.Decimal(10, 2)
+  maxVolumeL    Decimal? @map("max_volume_l") @db.Decimal(10, 2)
+  avgVolumeL    Decimal? @map("avg_volume_l") @db.Decimal(10, 2)
+  refillEvents  Int      @default(0) @map("refill_events")
+  leakSuspected Boolean  @default(false) @map("leak_suspected")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceId, date])
+  @@index([deviceId, date(sort: Desc)])
+  @@map("daily_summaries")
+}
+
+model Alert {
+  id                  String        @id @default(uuid()) @db.Char(36)
+  deviceId            String        @map("device_id") @db.Char(36)
+  tenantId            String        @map("tenant_id") @db.Char(36)
+  type                AlertType
+  severity            AlertSeverity @default(medium)
+  message             String?       @db.Text
+  payload             Json?
+  acknowledged        Boolean       @default(false)
+  acknowledgedBy      String?       @map("acknowledged_by") @db.Char(36)
+  acknowledgedAt      DateTime?     @map("acknowledged_at")
+  deliveredToFirebase Boolean       @default(false) @map("delivered_to_firebase")
+  createdAt           DateTime      @default(now()) @map("created_at")
+
+  device       Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  acknowledger User?  @relation("AlertAcknowledgedBy", fields: [acknowledgedBy], references: [id])
+
+  @@index([deviceId, createdAt(sort: Desc)])
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([acknowledged, createdAt(sort: Desc)])
+  @@map("alerts")
+}
+
+model DeviceConfig {
+  id                    String   @id @default(uuid()) @db.Char(36)
+  deviceId              String   @unique @map("device_id") @db.Char(36)
+  measurementIntervalMs Int      @default(60000) @map("measurement_interval_ms")
+  reportIntervalMs      Int      @default(300000) @map("report_interval_ms")
+  tankFullThresholdL    Decimal? @map("tank_full_threshold_l") @db.Decimal(10, 2)
+  tankLowThresholdL     Decimal? @map("tank_low_threshold_l") @db.Decimal(10, 2)
+  batteryLowThresholdV  Decimal? @map("battery_low_threshold_v") @db.Decimal(5, 2)
+  levelEmptyCm          Decimal? @map("level_empty_cm") @db.Decimal(10, 2)
+  levelFullCm           Decimal? @map("level_full_cm") @db.Decimal(10, 2)
+  configJson            Json?    @map("config_json")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@map("device_configs")
+}
+
+model FirmwareBinary {
+  id                String   @id @default(uuid()) @db.Char(36)
+  version           String   @unique @db.VarChar(50)
+  filePath          String   @map("file_path") @db.Text
+  fileSize          Int?     @map("file_size")
+  checksum          String?  @db.VarChar(255)
+  description       String?  @db.Text
+  isActive          Boolean  @default(false) @map("is_active")
+  rolloutPercentage Int      @default(0) @map("rollout_percentage")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  assignments DeviceFirmwareAssignment[]
+
+  @@map("firmware_binaries")
+}
+
+model DeviceFirmwareAssignment {
+  id          String                   @id @default(uuid()) @db.Char(36)
+  deviceId    String                   @map("device_id") @db.Char(36)
+  firmwareId  String                   @map("firmware_id") @db.Char(36)
+  assignedAt  DateTime                 @default(now()) @map("assigned_at")
+  installedAt DateTime?                @map("installed_at")
+  status      FirmwareAssignmentStatus @default(pending)
+
+  device   Device         @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  firmware FirmwareBinary @relation(fields: [firmwareId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceId, firmwareId])
+  @@map("device_firmware_assignments")
+}
+
+model UserDeviceMapping {
+  id        String   @id @default(uuid()) @db.Char(36)
+  userId    String   @map("user_id") @db.Char(36)
+  deviceId  String   @map("device_id") @db.Char(36)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
+  @@map("user_device_mappings")
+}
+
+model DeviceClaimCode {
+  id              String    @id @default(uuid()) @db.Char(36)
+  codeHash        String    @map("code_hash") @db.VarChar(255)
+  tenantId        String    @map("tenant_id") @db.Char(36)
+  createdByUserId String?   @map("created_by_user_id") @db.Char(36)
+  deviceId        String?   @map("device_id") @db.Char(36)
+  expiresAt       DateTime  @map("expires_at")
+  consumedAt      DateTime? @map("consumed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  creator User?   @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  device  Device? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  @@index([codeHash])
+  @@index([tenantId])
+  @@map("device_claim_codes")
+}
