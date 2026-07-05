@@ -43,10 +43,10 @@ deploy_frontend() {
 
     echo "  → Building frontend app..."
     npm run build
-    
-    echo "  → Restarting PM2 process..."
-    pm2 restart aquamind-admin || pm2 start ecosystem.config.js --only aquamind-admin
-    
+
+    echo "  → Syncing static build to /var/www/aquamind..."
+    sudo rsync -a --delete dist/ /var/www/aquamind/
+
     echo -e "${GREEN}✅ Frontend deployed successfully!${NC}"
     cd ..
 }

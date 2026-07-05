@@ -4,7 +4,7 @@
 
 This guide covers deploying the Water Tank Monitoring System with the following architecture:
 
-- **Frontend/Admin Panel**: `aquamind.utkarshjoshi.com` (Next.js app)
+- **Frontend/Admin Panel**: `aquamind.utkarshjoshi.com` (static Vite/React build, served by nginx)
   - Public landing page at `/`
   - Admin panel at `/admin/*`
   
@@ -24,7 +24,7 @@ This guide covers deploying the Water Tank Monitoring System with the following 
 - Root/sudo access
 
 **Option B: Cloud Platform**
-- Vercel (for Next.js) + Railway/Render (for backend)
+- Any static host/CDN (for the frontend) + Railway/Render (for backend)
 - Or AWS/GCP/Azure with container services
 
 **For this guide, we'll assume Option A (VPS deployment)**
@@ -238,43 +238,25 @@ NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your-messaging-sender-id
 NEXT_PUBLIC_FIREBASE_APP_ID=your-firebase-app-id
 ```
 
-### 4.4 Build Next.js App
+### 4.4 Build the App
 
 ```bash
 npm run build
 ```
 
-### 4.5 Setup PM2 for Next.js
+This produces a static build in `frontend/dist/` — plain HTML/JS/CSS, no
+Node server required to run it.
 
-Create `/home/aquamind/apps/frontend/ecosystem.config.js`:
-
-```javascript
-module.exports = {
-  apps: [{
-    name: 'aquamind-admin',
-    script: 'node_modules/next/dist/bin/next',
-    args: 'start',
-    cwd: '/home/aquamind/apps/frontend',
-    instances: 1,
-    exec_mode: 'fork',
-    env: {
-      NODE_ENV: 'production',
-      PORT: 3001
-    },
-    error_file: '/home/aquamind/logs/admin-error.log',
-    out_file: '/home/aquamind/logs/admin-out.log',
-    log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-    merge_logs: true,
-    autorestart: true,
-    max_memory_restart: '500M'
-  }]
-};
-```
+### 4.5 Sync the Build to Nginx's Web Root
 
 ```bash
-pm2 start ecosystem.config.js
-pm2 save
+sudo mkdir -p /var/www/aquamind
+sudo rsync -a --delete dist/ /var/www/aquamind/
 ```
+
+No PM2 process is needed for the frontend — nginx serves these static
+files directly (see Step 5.2). Re-running this rsync is the entire
+deploy for a new frontend release.
 
 ---
 
@@ -366,22 +348,19 @@ server {
     access_log /var/log/nginx/admin-access.log;
     error_log /var/log/nginx/admin-error.log;
 
-    # Proxy to Next.js
+    root /var/www/aquamind;
+    index index.html;
+
+    # SPA fallback so client-side routes (e.g. /admin/dashboard) don't 404 on refresh
     location / {
-        proxy_pass http://localhost:3001;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-        
-        # Timeouts
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Long-cache hashed asset filenames; index.html is never cached so
+    # deploys are picked up immediately
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
     }
 }
 ```
