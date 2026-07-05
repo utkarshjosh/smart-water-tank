@@ -11,7 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { AlertCircle, Copy, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, Building2, Copy, Cpu, Droplets, Plus, Radio, Search } from 'lucide-react';
 
 interface Device {
   id: string;
@@ -44,6 +44,7 @@ export default function DevicesPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [createdToken, setCreatedToken] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [formData, setFormData] = useState({
     device_id: '',
     tenant_id: '',
@@ -134,6 +135,41 @@ export default function DevicesPage() {
     setCreatedToken('');
   };
 
+  const onlineDevices = devices.filter((device) => device.status === 'online').length;
+  const offlineDevices = devices.filter((device) => device.status === 'offline').length;
+  const assignedTenants = new Set(devices.map((device) => device.tenant_id)).size;
+  const totalVolume = devices.reduce((sum, device) => sum + (Number(device.current_volume) || 0), 0);
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredDevices = normalizedQuery
+    ? devices.filter((device) =>
+        [
+          device.name,
+          device.device_id,
+          device.tenant_name,
+          device.status,
+          device.firmware_version,
+        ]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(normalizedQuery))
+      )
+    : devices;
+
+  const formatLastSeen = (value: string | null) => {
+    if (!value) return 'Never seen';
+
+    const timestamp = new Date(value).getTime();
+    if (Number.isNaN(timestamp)) return 'Unknown';
+
+    const minutes = Math.max(0, Math.round((Date.now() - timestamp) / 60000));
+    if (minutes < 1) return 'Just now';
+    if (minutes < 60) return `${minutes}m ago`;
+
+    const hours = Math.round(minutes / 60);
+    if (hours < 48) return `${hours}h ago`;
+
+    return new Date(value).toLocaleDateString();
+  };
+
   if (loading) {
     return (
       <Layout>
@@ -146,11 +182,17 @@ export default function DevicesPage() {
 
   return (
     <Layout>
-      <div className="px-4 py-6 sm:px-0">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold">Devices</h1>
-          <Button onClick={() => setShowCreateModal(true)}>
-            Create Device
+      <div className="space-y-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-950 dark:text-white">Device inventory</h1>
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              Provisioned sensors, tenant ownership, and latest reporting state.
+            </p>
+          </div>
+          <Button onClick={() => setShowCreateModal(true)} className="h-9 w-fit">
+            <Plus className="mr-2 h-4 w-4" />
+            Create device
           </Button>
         </div>
 
@@ -161,6 +203,31 @@ export default function DevicesPage() {
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            { label: 'Devices', value: devices.length, detail: `${onlineDevices} online`, icon: Radio },
+            { label: 'Offline', value: offlineDevices, detail: 'Need attention', icon: AlertCircle },
+            { label: 'Tenants', value: assignedTenants, detail: 'With assigned hardware', icon: Building2 },
+            { label: 'Stored volume', value: `${totalVolume.toFixed(0)}L`, detail: 'Latest readings', icon: Droplets },
+          ].map((metric) => {
+            const Icon = metric.icon;
+            return (
+              <Card key={metric.label} className="border-slate-200 shadow-sm dark:border-slate-800">
+                <CardContent className="flex items-center justify-between gap-3 p-4">
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">{metric.label}</p>
+                    <p className="mt-1 text-2xl font-semibold text-slate-950 dark:text-white">{metric.value}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{metric.detail}</p>
+                  </div>
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
+                    <Icon className="h-4 w-4 text-slate-600 dark:text-slate-300" />
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
 
         {/* Create Device Modal */}
         <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
@@ -280,82 +347,102 @@ export default function DevicesPage() {
           </DialogContent>
         </Dialog>
 
-        <div className="space-y-4">
-          {devices.length === 0 ? (
-            <Card>
-              <CardContent className="pt-6">
-                <p className="text-center text-muted-foreground">No devices found. Create your first device above.</p>
-              </CardContent>
-            </Card>
-          ) : (
-            devices.map((device) => (
-              <Card
-                key={device.id}
-                className="cursor-pointer hover:bg-accent transition-colors"
-                onClick={() => navigate(`/admin/devices/${device.device_id}`)}
-              >
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className="flex-shrink-0">
-                        <div
-                          className={`h-3 w-3 rounded-full ${
-                            device.status === 'online' ? 'bg-green-500' : 'bg-red-500'
-                          }`}
-                        />
-                      </div>
-                      <div>
-                        <div className="font-medium">
+        <Card className="border-slate-200 shadow-sm dark:border-slate-800">
+          <CardHeader className="flex flex-col gap-3 border-b border-slate-100 p-4 dark:border-slate-800 md:flex-row md:items-center md:justify-between">
+            <div>
+              <CardTitle className="text-base font-semibold tracking-normal">Fleet list</CardTitle>
+              <CardDescription>{filteredDevices.length} of {devices.length} devices shown</CardDescription>
+            </div>
+            <div className="relative w-full md:w-72">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search device, tenant, status"
+                className="h-9 pl-9"
+              />
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {devices.length === 0 ? (
+              <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+                No devices found. Create your first device above.
+              </div>
+            ) : filteredDevices.length === 0 ? (
+              <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+                No devices match your search.
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {filteredDevices.map((device) => (
+                  <button
+                    key={device.id}
+                    className="grid w-full gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-900/60 md:grid-cols-[1.4fr_1fr_0.7fr_0.7fr]"
+                    onClick={() => navigate(`/admin/devices/${device.device_id}`)}
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span
+                        className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                          device.status === 'online' ? 'bg-emerald-500' : 'bg-rose-500'
+                        }`}
+                      />
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-slate-950 dark:text-white">
                           {device.name || device.device_id}
                         </div>
-                        <div className="text-sm text-muted-foreground">
-                          {device.device_id} • {device.tenant_name}
-                        </div>
+                        <div className="truncate text-xs text-slate-500 dark:text-slate-400">{device.device_id}</div>
                       </div>
                     </div>
-                    <div className="text-right space-y-1">
-                      <div className="font-medium">
+
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">{device.tenant_name}</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">Tenant</div>
+                    </div>
+
+                    <div>
+                      <div className="text-sm font-medium text-slate-950 dark:text-white">
                         {device.current_volume !== null && device.current_volume !== undefined
                           ? `${Number(device.current_volume).toFixed(1)}L`
                           : 'N/A'}
                       </div>
-                      <div className="flex items-center gap-2 justify-end">
-                        <Badge
-                          variant={
-                            device.status === 'online'
-                              ? 'outline'
-                              : device.status === 'offline'
-                              ? 'outline'
-                              : 'outline'
-                          }
-                          className={
-                            device.status === 'online'
-                              ? 'border-green-500 bg-green-500/10 text-green-700 dark:text-green-400'
-                              : device.status === 'offline'
-                              ? 'border-red-500 bg-red-500/10 text-red-700 dark:text-red-400'
-                              : 'border-gray-500 bg-gray-500/10 text-gray-700 dark:text-gray-400'
-                          }
-                        >
-                          {device.status}
-                        </Badge>
-                        <span className="text-sm text-muted-foreground">
-                          v{device.firmware_version || 'N/A'}
-                        </span>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">Current volume</div>
+                    </div>
+
+                    <div className="flex items-start justify-between gap-2 md:justify-end">
+                      <div className="min-w-0 md:text-right">
+                        <div className="flex items-center gap-2 md:justify-end">
+                          <Badge
+                            variant="outline"
+                            className={
+                              device.status === 'online'
+                                ? 'border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                                : device.status === 'offline'
+                                ? 'border-rose-500 bg-rose-500/10 text-rose-700 dark:text-rose-300'
+                                : 'border-slate-500 bg-slate-500/10 text-slate-700 dark:text-slate-300'
+                            }
+                          >
+                            {device.status}
+                          </Badge>
+                          <span className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                            <Cpu className="h-3 w-3" />
+                            v{device.firmware_version || 'N/A'}
+                          </span>
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                          Seen {formatLastSeen(device.last_seen)}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
-          )}
-        </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </Layout>
   );
 }
-
-
-
 
 
 
