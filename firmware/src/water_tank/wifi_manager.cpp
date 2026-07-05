@@ -8,11 +8,6 @@
 #include "claim_client.h"
 #include <ESP8266WiFi.h>
 #include <WiFiManager.h>
-#include <ArduinoJson.h>
-#include <LittleFS.h>
-
-// Restart detection file path
-#define RESTART_DETECT_FILE "/restart_detect.json"
 
 static unsigned long lastReconnectAttempt = 0;
 static WiFiManager* wifiManager = nullptr;
@@ -25,11 +20,25 @@ void saveConfigCallback() {
     Serial.println(F("[WiFi] Config will be saved"));
 }
 
-// Restart detection structure
+// Restart-loop detection, stored in RTC memory (a small block of RAM kept
+// alive by the RTC domain). It survives a crash, ESP.restart(), or a press
+// of the reset button, but is wiped by an actual power cycle. That's exactly
+// the signal we want: repeated restarts *without ever losing power* means
+// the device is stuck in a loop, while a power cycle - even a quick one -
+// always starts the counter back at zero. No wall-clock math needed, so
+// there's nothing for millis() resetting on every boot to break.
+#define RTC_RESTART_MAGIC 0x57544B31 // "WTK1"
+#define RTC_RESTART_SLOT  0
+
 struct RestartData {
+    uint32_t magic;
     uint32_t restartCount;
-    unsigned long lastRestartTime;
 };
+
+static void resetRestartCounter() {
+    RestartData data{RTC_RESTART_MAGIC, 0};
+    ESP.rtcUserMemoryWrite(RTC_RESTART_SLOT, reinterpret_cast<uint32_t*>(&data), sizeof(data));
+}
 
 namespace WifiManager {
     void init() {
@@ -55,87 +64,27 @@ namespace WifiManager {
     }
 
     bool shouldEnterConfigPortal() {
-        // Use LittleFS to persist restart data across full resets
-        // Strategy: Write a marker file with timestamp on each boot
-        // If file exists and was written recently (within 5 seconds), increment counter
-        // Since we can't get real time between boots, we use a simpler approach:
-        // - Write marker file on each boot
-        // - If file exists, increment counter (assumes rapid restarts)
-        // - Reset counter after successful connection or config portal
-        
-        uint32_t restartCount = 0;
-        unsigned long currentTime = millis();
-        bool fileExisted = false;
-        
-        // Try to read existing restart data
-        if (LittleFS.begin()) {
-            if (LittleFS.exists(RESTART_DETECT_FILE)) {
-                fileExisted = true;
-                File file = LittleFS.open(RESTART_DETECT_FILE, "r");
-                if (file) {
-                    StaticJsonDocument<512> doc;
-                    DeserializationError error = deserializeJson(doc, file);
-                    if (error == DeserializationError::Ok) {
-                        restartCount = doc["restart_count"] | 0;
-                        unsigned long lastTime = doc["last_restart_time"] | 0;
-                        
-                        // Check if last restart was "recent" (within 5 seconds)
-                        // Since millis() resets, we check if the time difference is small
-                        // If currentTime < lastTime, it means we wrapped around or restarted
-                        // In that case, assume it's a recent restart if time is small
-                        unsigned long timeDiff = (currentTime >= lastTime) ? 
-                            (currentTime - lastTime) : (currentTime + (ULONG_MAX - lastTime));
-                        
-                        if (timeDiff <= 5000) {
-                            // Recent restart, increment counter
-                            restartCount++;
-                            Serial.printf("[WiFi] Recent restart detected, count: %d\n", restartCount);
-                        } else {
-                            // Not recent, reset counter
-                            restartCount = 1;
-                            Serial.println(F("[WiFi] Restart after delay, resetting count"));
-                        }
-                    }
-                    file.close();
-                }
-            } else {
-                // First boot or file was deleted
-                restartCount = 1;
-            }
+        RestartData data;
+        ESP.rtcUserMemoryRead(RTC_RESTART_SLOT, reinterpret_cast<uint32_t*>(&data), sizeof(data));
+
+        // Garbage/uninitialized RTC memory (e.g. this is the first boot after
+        // a real power-on) doesn't carry our magic value - start fresh.
+        if (data.magic != RTC_RESTART_MAGIC) {
+            data.magic = RTC_RESTART_MAGIC;
+            data.restartCount = 0;
         }
-        
-        // Save restart data with current timestamp
-        if (LittleFS.begin()) {
-            File file = LittleFS.open(RESTART_DETECT_FILE, "w");
-            if (file) {
-                StaticJsonDocument<512> doc;
-                doc["restart_count"] = restartCount;
-                doc["last_restart_time"] = currentTime;
-                serializeJson(doc, file);
-                file.close();
-            }
+
+        data.restartCount++;
+        Serial.printf("[WiFi] Restart count since last power-on/successful connect: %d\n", data.restartCount);
+
+        bool enterPortal = data.restartCount >= WIFI_RESTART_THRESHOLD;
+        if (enterPortal) {
+            Serial.printf("[WiFi] %d restarts without a successful connection - entering config portal...\n", WIFI_RESTART_THRESHOLD);
+            data.restartCount = 0;
         }
-        
-        // Check if 3 or more restarts within 5 seconds
-        if (restartCount >= 3) {
-            Serial.println(F("[WiFi] 3 restarts within 5 seconds detected! Entering config portal..."));
-            
-            // Reset restart count
-            if (LittleFS.begin()) {
-                File file = LittleFS.open(RESTART_DETECT_FILE, "w");
-                if (file) {
-                    StaticJsonDocument<512> doc;
-                    doc["restart_count"] = 0;
-                    doc["last_restart_time"] = currentTime;
-                    serializeJson(doc, file);
-                    file.close();
-                }
-            }
-            
-            return true;
-        }
-        
-        return false;
+
+        ESP.rtcUserMemoryWrite(RTC_RESTART_SLOT, reinterpret_cast<uint32_t*>(&data), sizeof(data));
+        return enterPortal;
     }
 
     bool connect(bool forceConfigPortal) {
@@ -143,9 +92,10 @@ namespace WifiManager {
             init();
         }
         
-        // Check if we should force config portal (3 restarts within 5 seconds)
+        // Check if we should force the config portal open (either the caller
+        // asked for it directly, e.g. an unclaimed device, or we've restarted
+        // too many times in a row without ever connecting)
         if (forceConfigPortal || shouldEnterConfigPortal()) {
-            Serial.println(F("[WiFi] Starting configuration portal..."));
             startConfigPortal();
             return false; // Will return after portal closes
         }
@@ -185,20 +135,9 @@ namespace WifiManager {
         Serial.print(F("[WiFi] Connected! IP: "));
         Serial.println(WiFi.localIP());
         
-        // Reset restart count on successful connection
-        if (LittleFS.begin()) {
-            if (LittleFS.exists(RESTART_DETECT_FILE)) {
-                File file = LittleFS.open(RESTART_DETECT_FILE, "w");
-                if (file) {
-                    StaticJsonDocument<512> doc;
-                    doc["restart_count"] = 0;
-                    doc["last_restart_time"] = millis();
-                    serializeJson(doc, file);
-                    file.close();
-                }
-            }
-        }
-        
+        // Successful connection - the device isn't stuck in a restart loop.
+        resetRestartCounter();
+
         return true;
     }
 
@@ -247,8 +186,14 @@ namespace WifiManager {
             bool portalStarted = wifiManager->startConfigPortal(AP_SSID, AP_PASSWORD);
 
             if (!portalStarted) {
-                Serial.println(F("[WiFi] Config portal timeout"));
-                return;
+                // Nobody configured the device within the timeout. Restart
+                // rather than falling through to loop() - the device may
+                // still be sitting on a stale STA connection here, and
+                // without a restart it would carry on into normal operation
+                // still unclaimed and with the reporter never initialized.
+                Serial.println(F("[WiFi] Config portal timed out, restarting..."));
+                delay(1000);
+                ESP.restart();
             }
 
             // Config portal closed - a network was selected and WiFi connected.

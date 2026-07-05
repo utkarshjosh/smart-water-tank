@@ -65,14 +65,15 @@ void setup() {
     // Initialize state timers
     state.lastOtaCheck = 0;  // Will check on first loop after WiFi connects
     
-    // Connect to WiFi (will check for 3 restarts and start config portal if needed)
+    // Connect to WiFi (will open the config portal after WIFI_RESTART_THRESHOLD
+    // restarts in a row with no successful connection)
     Serial.println(F("[WiFi] Connecting..."));
     WifiManager::init();
-    
-    // Connect (will automatically check for 3 restarts and start config portal if needed)
+
     if (WifiManager::connect()) {
         state.wifiConnected = true;
         state.wifiRssi = WiFi.RSSI();
+        state.fastReportMode = true;
         Serial.print(F("[WiFi] Connected! IP: "));
         Serial.println(WiFi.localIP());
 
@@ -81,7 +82,7 @@ void setup() {
         // instead of reporting with an empty token forever.
         if (!Config::claimed) {
             Serial.println(F("[WiFi] Device not yet paired, entering config portal..."));
-            WifiManager::connect(true); // blocks; restarts the device when done
+            WifiManager::connect(true); // blocks; always restarts the device when it returns
             return;
         }
 
@@ -130,24 +131,31 @@ void loop() {
     } else if (!state.wifiConnected) {
         state.wifiConnected = true;
         state.wifiRssi = WiFi.RSSI();
+        state.fastReportMode = true;
+        state.lastReport = 0; // report soon instead of waiting out the old interval
         Serial.println(F("[WiFi] Reconnected!"));
     }
-    
+
     // Take measurements at configured interval
     if (now - state.lastMeasurement >= Config::measurementIntervalMs) {
         takeMeasurement();
         state.lastMeasurement = now;
     }
-    
-    // Report data at configured interval
-    if (now - state.lastReport >= Config::reportIntervalMs) {
-        if (state.wifiConnected) {
-            reportData();
-        } else {
-            // Store locally for later upload
-            Storage::bufferMeasurement(state);
+
+    // A device that hasn't completed the claim-code pairing flow has no
+    // device id/token to report under - never send or buffer telemetry
+    // until it's claimed, even if it's technically connected to WiFi.
+    if (Config::claimed) {
+        unsigned long reportInterval = state.fastReportMode ? FAST_REPORT_INTERVAL_MS : Config::reportIntervalMs;
+        if (now - state.lastReport >= reportInterval) {
+            if (state.wifiConnected) {
+                reportData();
+            } else {
+                // Store locally for later upload
+                Storage::bufferMeasurement(state);
+            }
+            state.lastReport = now;
         }
-        state.lastReport = now;
     }
     
     // Check for OTA updates at configured interval
@@ -210,6 +218,12 @@ void reportData() {
         Serial.println(F("[Report] Data sent successfully"));
         // Try to send any buffered data
         Storage::flushBuffer();
+
+        // Caught up - back off to the normal, slower report cadence
+        if (state.fastReportMode && Storage::getBufferCount() == 0) {
+            Serial.println(F("[Report] Caught up, returning to normal report interval"));
+            state.fastReportMode = false;
+        }
     } else {
         Serial.println(F("[Report] Failed to send, buffering locally"));
         Storage::bufferMeasurement(state);

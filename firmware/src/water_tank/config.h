@@ -23,9 +23,11 @@
 // WiFi Configuration
 // ============================================================================
 
-// Default WiFi credentials (can be overridden via config portal)
-#define WIFI_SSID_DEFAULT           "Champs"
-#define WIFI_PASSWORD_DEFAULT       "@susChamps@11"
+// A factory-fresh (or factory-reset) device has no WiFi credentials of its
+// own - it must always go through the config portal. Never hardcode a real
+// network here, or the device will silently join it and skip provisioning.
+#define WIFI_SSID_DEFAULT           ""
+#define WIFI_PASSWORD_DEFAULT       ""
 
 // AP mode for configuration (do not change - used for setup portal)
 #define AP_SSID             "WaterTank-Setup"
@@ -34,6 +36,14 @@
 // Connection settings
 #define WIFI_CONNECT_TIMEOUT_MS     15000
 #define WIFI_RECONNECT_INTERVAL_MS  30000
+
+// Number of restarts in a row (without ever reaching a successful WiFi
+// connection or being power-cycled) before we assume the device is stuck
+// and force open the config portal. Tracked in RTC memory, which survives
+// a crash/reset/reset-button-press but is cleared by an actual power cycle -
+// so this only fires on genuine restart loops, not "I unplugged it and
+// plugged it back in a week later" or "I intentionally rebooted twice".
+#define WIFI_RESTART_THRESHOLD      5
 
 // ============================================================================
 // Server Configuration
@@ -126,11 +136,24 @@
 // How often to report to server (milliseconds)
 #define REPORT_INTERVAL_MS          300000  // 5 minutes
 
+// Right after connecting (or reconnecting), report at this faster cadence
+// instead of waiting a full REPORT_INTERVAL_MS - so a fresh connection or a
+// device coming back online is reflected quickly. Once a live send succeeds
+// and there's nothing left buffered, it drops back to REPORT_INTERVAL_MS.
+#define FAST_REPORT_INTERVAL_MS     20000   // 20 seconds
+
 // How often to check for OTA updates (milliseconds)
 #define OTA_CHECK_INTERVAL_MS       3600000  // 1 hour
 
 // Sensor stabilization delay
 #define SENSOR_WARMUP_MS            100
+
+// Max number of measurements kept on flash while offline. Once full, the
+// oldest buffered measurement is dropped to make room for the newest one -
+// during an outage, only recent data matters, and this keeps flash usage
+// and upload-on-reconnect time bounded. At the normal REPORT_INTERVAL_MS
+// cadence, 100 measurements covers roughly 8 hours of offline history.
+#define MAX_BUFFERED_MEASUREMENTS   100
 
 // ============================================================================
 // OTA Configuration
