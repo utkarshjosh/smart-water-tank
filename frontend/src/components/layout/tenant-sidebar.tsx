@@ -5,7 +5,7 @@ import { Monitor, PlusCircle } from "lucide-react";
 
 const routes = [
     {
-        label: "My Devices",
+        label: "Dashboard",
         icon: Monitor,
         href: "/app/devices",
         color: "text-sky-500",

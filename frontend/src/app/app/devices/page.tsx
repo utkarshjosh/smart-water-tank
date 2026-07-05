@@ -133,14 +133,7 @@ export default function TenantDevicesPage() {
               {device.has_tank_profile && device.level_percent != null ? (
                 <DeviceCardTankPreview level={device.level_percent} alert={device.active_alert} />
               ) : (
-                <div
-                  role="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    navigate(`/app/onboarding/tank-setup/${device.id}`);
-                  }}
-                  className="mt-4 flex items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-300 py-4 text-sm font-medium text-sky-700 hover:bg-sky-50 dark:border-slate-700 dark:text-sky-300 dark:hover:bg-sky-500/10"
-                >
+                <div className="mt-4 flex items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-300 py-4 text-sm font-medium text-sky-700 dark:border-slate-700 dark:text-sky-300">
                   <Settings2 className="h-4 w-4" />
                   Set up your tank
                 </div>
