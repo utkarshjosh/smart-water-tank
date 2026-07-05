@@ -36,12 +36,12 @@ deploy_backend() {
 # Function to deploy frontend
 deploy_frontend() {
     echo -e "${YELLOW}📦 Deploying Admin Panel...${NC}"
-    cd admin-panel
-    
+    cd frontend
+
     echo "  → Installing dependencies..."
     npm ci
-    
-    echo "  → Building Next.js app..."
+
+    echo "  → Building frontend app..."
     npm run build
     
     echo "  → Restarting PM2 process..."
