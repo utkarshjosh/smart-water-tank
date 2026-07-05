@@ -10,7 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Building2, Plus, Search, UserPlus, Users } from 'lucide-react';
 
 interface Tenant {
   id: string;
@@ -205,25 +205,68 @@ export default function TenantsPage() {
     }
   };
 
+  const totalDevices = tenants.reduce((sum, tenant) => sum + tenant.device_count, 0);
+  const totalTenantUsers = tenants.reduce((sum, tenant) => sum + tenant.user_count, 0);
+  const unassignedUsers = databaseUsers.filter((user) => !user.tenant_id).length;
+  const linkedFirebaseUsers = firebaseUsers.filter((user) => user.is_linked).length;
+
   return (
     <Layout>
-      <div className="px-4 py-6 sm:px-0">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-bold">Manage Tenants & Users</h1>
+      <div className="space-y-5 px-4 py-4 sm:px-0">
+        <div className="flex flex-col gap-3 border-b border-border pb-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <Building2 className="h-3.5 w-3.5" />
+              Admin directory
+            </div>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight">Tenants & users</h1>
+          </div>
+          <div className="grid grid-cols-3 gap-2 sm:min-w-[430px]">
+            <div className="rounded-md border border-border bg-card px-3 py-2">
+              <div className="text-[11px] font-medium uppercase text-muted-foreground">Tenants</div>
+              <div className="text-lg font-semibold">{tenants.length}</div>
+            </div>
+            <div className="rounded-md border border-border bg-card px-3 py-2">
+              <div className="text-[11px] font-medium uppercase text-muted-foreground">Devices</div>
+              <div className="text-lg font-semibold">{totalDevices}</div>
+            </div>
+            <div className="rounded-md border border-border bg-card px-3 py-2">
+              <div className="text-[11px] font-medium uppercase text-muted-foreground">Users</div>
+              <div className="text-lg font-semibold">{activeTab === 'users' ? databaseUsers.length : totalTenantUsers}</div>
+            </div>
+          </div>
         </div>
 
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'tenants' | 'users')}>
-          <TabsList>
-            <TabsTrigger value="tenants">Tenants</TabsTrigger>
-            <TabsTrigger value="users">Users</TabsTrigger>
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'tenants' | 'users')} className="space-y-4">
+          <TabsList className="h-9 rounded-md">
+            <TabsTrigger value="tenants" className="h-7 gap-2 px-3 text-xs">
+              <Building2 className="h-3.5 w-3.5" />
+              Tenants
+            </TabsTrigger>
+            <TabsTrigger value="users" className="h-7 gap-2 px-3 text-xs">
+              <Users className="h-3.5 w-3.5" />
+              Users
+            </TabsTrigger>
           </TabsList>
 
           {/* Tenants Tab */}
-          <TabsContent value="tenants">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-semibold">Tenants</h2>
-              <Button onClick={() => setShowCreateForm(!showCreateForm)}>
-                {showCreateForm ? 'Cancel' : '+ Create Tenant'}
+          <TabsContent value="tenants" className="space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-base font-semibold">Tenant roster</h2>
+                <p className="text-sm text-muted-foreground">
+                  {tenants.length} tenant{tenants.length === 1 ? '' : 's'} across {totalDevices} device{totalDevices === 1 ? '' : 's'}
+                </p>
+              </div>
+              <Button onClick={() => setShowCreateForm(!showCreateForm)} size="sm" variant={showCreateForm ? 'outline' : 'default'}>
+                {showCreateForm ? (
+                  'Cancel'
+                ) : (
+                  <>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create tenant
+                  </>
+                )}
               </Button>
             </div>
 
@@ -236,13 +279,13 @@ export default function TenantsPage() {
             )}
 
             {showCreateForm && (
-              <Card className="mb-6">
-                <CardHeader>
-                  <CardTitle>Create New Tenant</CardTitle>
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Create tenant</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <form onSubmit={handleCreateTenant} className="space-y-4">
-                    <div className="space-y-2">
+                  <form onSubmit={handleCreateTenant} className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+                    <div className="space-y-1.5">
                       <Label htmlFor="tenant-name">Tenant Name</Label>
                       <Input
                         id="tenant-name"
@@ -257,6 +300,7 @@ export default function TenantsPage() {
                       <Button
                         type="submit"
                         disabled={creating || !newTenantName.trim()}
+                        size="sm"
                       >
                         {creating ? 'Creating...' : 'Create'}
                       </Button>
@@ -269,6 +313,7 @@ export default function TenantsPage() {
                           setError('');
                         }}
                         disabled={creating}
+                        size="sm"
                       >
                         Cancel
                       </Button>
@@ -279,14 +324,14 @@ export default function TenantsPage() {
             )}
 
             {loading ? (
-              <div className="flex h-full items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <div className="flex h-40 items-center justify-center rounded-md border border-dashed border-border">
+                <div className="h-7 w-7 animate-spin rounded-full border-b-2 border-primary"></div>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-2">
                 {tenants.length === 0 ? (
                   <Card>
-                    <CardContent className="pt-6">
+                    <CardContent className="py-8">
                       <p className="text-center text-muted-foreground">
                         No tenants found. Create your first tenant above.
                       </p>
@@ -294,18 +339,24 @@ export default function TenantsPage() {
                   </Card>
                 ) : (
                   tenants.map((tenant) => (
-                    <Card key={tenant.id}>
-                      <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <CardTitle>{tenant.name}</CardTitle>
-                            <CardDescription>
+                    <Card key={tenant.id} className="rounded-md">
+                      <CardContent className="p-4">
+                        <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
+                          <div className="min-w-0">
+                            <CardTitle className="truncate text-sm font-semibold">{tenant.name}</CardTitle>
+                            <CardDescription className="mt-1 text-xs">
                               Created {new Date(tenant.created_at).toLocaleDateString()}
                             </CardDescription>
                           </div>
-                          <div className="text-right space-y-1">
-                            <div className="font-medium">{tenant.device_count} devices</div>
-                            <div className="text-sm text-muted-foreground">{tenant.user_count} users</div>
+                          <div className="grid grid-cols-2 gap-2 sm:w-44">
+                            <div className="rounded-md bg-muted/50 px-3 py-2 text-right">
+                              <div className="text-sm font-semibold">{tenant.device_count}</div>
+                              <div className="text-[11px] uppercase text-muted-foreground">Devices</div>
+                            </div>
+                            <div className="rounded-md bg-muted/50 px-3 py-2 text-right">
+                              <div className="text-sm font-semibold">{tenant.user_count}</div>
+                              <div className="text-[11px] uppercase text-muted-foreground">Users</div>
+                            </div>
                           </div>
                         </div>
                       </CardContent>
@@ -317,11 +368,17 @@ export default function TenantsPage() {
           </TabsContent>
 
           {/* Users Tab */}
-          <TabsContent value="users">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-semibold">User Management</h2>
+          <TabsContent value="users" className="space-y-4">
+            <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
+              <div>
+                <h2 className="text-base font-semibold">User assignments</h2>
+                <p className="text-sm text-muted-foreground">
+                  {databaseUsers.length} database user{databaseUsers.length === 1 ? '' : 's'} · {unassignedUsers} unassigned · {linkedFirebaseUsers} Firebase linked
+                </p>
+              </div>
               <Button
                 variant="default"
+                size="sm"
                 onClick={() => {
                   setShowFirebaseSearch(!showFirebaseSearch);
                   if (!showFirebaseSearch) {
@@ -329,18 +386,25 @@ export default function TenantsPage() {
                   }
                 }}
               >
-                {showFirebaseSearch ? 'Hide' : 'Search'} Firebase Users
+                {showFirebaseSearch ? (
+                  'Hide search'
+                ) : (
+                  <>
+                    <Search className="mr-2 h-4 w-4" />
+                    Search Firebase
+                  </>
+                )}
               </Button>
             </div>
 
             {/* Firebase Users Search */}
             {showFirebaseSearch && (
-              <Card className="mb-6">
-                <CardHeader>
-                  <CardTitle>Search Firebase Users</CardTitle>
+              <Card className="rounded-md">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Firebase users</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex gap-2 mb-4">
+                  <div className="mb-4 flex gap-2">
                     <Input
                       type="text"
                       value={firebaseSearch}
@@ -356,6 +420,7 @@ export default function TenantsPage() {
                     <Button
                       onClick={searchFirebaseUsers}
                       disabled={usersLoading}
+                      size="sm"
                     >
                       {usersLoading ? 'Searching...' : 'Search'}
                     </Button>
@@ -363,26 +428,26 @@ export default function TenantsPage() {
 
                   {firebaseUsers.length > 0 && (
                     <div className="mt-4">
-                      <h4 className="font-medium mb-2">Firebase Users ({firebaseUsers.length})</h4>
-                      <div className="space-y-3 max-h-96 overflow-y-auto">
+                      <h4 className="mb-2 text-sm font-medium">Firebase users ({firebaseUsers.length})</h4>
+                      <div className="max-h-96 space-y-2 overflow-y-auto pr-1">
                         {firebaseUsers.map((user) => (
-                          <Card key={user.uid}>
-                            <CardContent className="pt-6">
-                              <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                  <div className="font-medium">{user.email || user.uid}</div>
+                          <Card key={user.uid} className="rounded-md">
+                            <CardContent className="p-3">
+                              <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-medium">{user.email || user.uid}</div>
                                   {user.displayName && (
                                     <div className="text-sm text-muted-foreground">{user.displayName}</div>
                                   )}
-                                  <div className="text-xs text-muted-foreground mt-1">UID: {user.uid}</div>
+                                  <div className="mt-1 truncate text-xs text-muted-foreground">UID: {user.uid}</div>
                                   {user.is_linked && user.tenant_name && (
-                                    <Badge variant="default" className="mt-1">
-                                      ✓ Linked to: {user.tenant_name}
+                                    <Badge variant="default" className="mt-2">
+                                      Linked to {user.tenant_name}
                                     </Badge>
                                   )}
                                 </div>
                                 {!user.is_linked && (
-                                  <div className="ml-4 flex gap-2">
+                                  <div className="flex flex-col gap-2 sm:flex-row">
                                     <Select
                                       value={selectedTenantForUser[user.uid] || ''}
                                       onValueChange={(value) =>
@@ -392,7 +457,7 @@ export default function TenantsPage() {
                                         }))
                                       }
                                     >
-                                      <SelectTrigger className="w-[180px]">
+                                      <SelectTrigger className="h-9 w-full sm:w-[180px]">
                                         <SelectValue placeholder="Select tenant..." />
                                       </SelectTrigger>
                                       <SelectContent>
@@ -417,7 +482,14 @@ export default function TenantsPage() {
                                       }
                                       size="sm"
                                     >
-                                      {linkingUser === user.uid ? 'Linking...' : 'Link to Tenant'}
+                                      {linkingUser === user.uid ? (
+                                        'Linking...'
+                                      ) : (
+                                        <>
+                                          <UserPlus className="mr-2 h-4 w-4" />
+                                          Link
+                                        </>
+                                      )}
                                     </Button>
                                   </div>
                                 )}
@@ -433,17 +505,17 @@ export default function TenantsPage() {
             )}
 
             {/* Database Users List */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Users in Database</CardTitle>
+            <Card className="rounded-md">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Database users</CardTitle>
               </CardHeader>
               <CardContent>
                 {usersLoading ? (
-                  <div className="flex h-full items-center justify-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  <div className="flex h-36 items-center justify-center">
+                    <div className="h-7 w-7 animate-spin rounded-full border-b-2 border-primary"></div>
                   </div>
                 ) : databaseUsers.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">
+                  <p className="py-8 text-center text-sm text-muted-foreground">
                     No users found in database. Search Firebase users above to link them to tenants.
                   </p>
                 ) : (
@@ -451,7 +523,7 @@ export default function TenantsPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Email</TableHead>
+                          <TableHead className="h-9">Email</TableHead>
                           <TableHead>Name</TableHead>
                           <TableHead>Tenant</TableHead>
                           <TableHead>Role</TableHead>
@@ -461,8 +533,8 @@ export default function TenantsPage() {
                       <TableBody>
                         {databaseUsers.map((user) => (
                           <TableRow key={user.id}>
-                            <TableCell className="font-medium">{user.email}</TableCell>
-                            <TableCell>{user.name || '-'}</TableCell>
+                            <TableCell className="max-w-[260px] truncate py-2 font-medium">{user.email}</TableCell>
+                            <TableCell className="py-2">{user.name || '-'}</TableCell>
                             <TableCell>
                               {user.tenant_name || (
                                 <span className="text-destructive">Not assigned</span>
@@ -481,7 +553,7 @@ export default function TenantsPage() {
                                 }}
                                 disabled={linkingUser === user.id}
                               >
-                                <SelectTrigger className="w-[180px]">
+                                <SelectTrigger className="h-9 w-[180px]">
                                   <SelectValue placeholder="Change tenant..." />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -507,7 +579,6 @@ export default function TenantsPage() {
     </Layout>
   );
 }
-
 
 
 
