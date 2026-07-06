@@ -67,12 +67,12 @@ export default function TenantLayout({ children }: { children: React.ReactNode }
 
   return (
     <div className="h-full relative">
-      <div className="hidden h-full md:flex md:w-72 md:flex-col md:fixed md:inset-y-0 z-[80] bg-gray-900">
+      <div className="hidden h-full md:flex md:w-60 md:flex-col md:fixed md:inset-y-0 z-[80] bg-slate-950">
         <TenantSidebar />
       </div>
-      <main className="md:pl-72 min-h-screen bg-slate-50 dark:bg-slate-900">
+      <main className="md:pl-60 min-h-screen bg-slate-50 dark:bg-slate-950">
         <TenantHeader tenantName={tenantName} />
-        <div className="p-8">
+        <div className="px-4 py-5 sm:px-6 lg:px-7">
           {children}
         </div>
       </main>

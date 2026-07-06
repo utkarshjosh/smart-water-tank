@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
-import { AlertCircle, RefreshCw, CheckCircle2, Wifi } from 'lucide-react';
+import { AlertCircle, ArrowRight, CheckCircle2, Clock3, RefreshCw, Router, Wifi } from 'lucide-react';
 
 const GlassTank = lazy(() => import('@/components/GlassTank'));
 
@@ -93,92 +93,136 @@ export function AddDeviceWizard() {
 
   if (step === 'success') {
     return (
-      <div className="rounded-3xl border-2 border-border/80 bg-card shadow-xl">
-        <div className="space-y-2 px-6 pb-0 pt-6 text-center">
-          <div className="flex justify-center">
-            <CheckCircle2 className="h-10 w-10 text-green-500" />
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+          <div className="flex items-start gap-3">
+            <div className="rounded-md bg-emerald-100 p-2 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+              <CheckCircle2 className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight text-slate-950 dark:text-white">Device paired</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {claimedDevice?.name || claimedDevice?.id} is connected to your account.
+              </p>
+            </div>
           </div>
-          <h2 className="text-2xl font-semibold tracking-tight">Device paired!</h2>
-          <p className="text-sm text-muted-foreground">
-            {claimedDevice?.name || claimedDevice?.id} is connected to your account.
-          </p>
         </div>
-        <div className="flex flex-col items-center gap-6 p-6">
-          <div className="rounded-3xl bg-[#0f172a] p-6 w-full flex justify-center">
-            <div className="scale-75 origin-top">
+        <div className="grid gap-4 p-4 md:grid-cols-[0.95fr_1.05fr]">
+          <div className="flex items-center justify-center rounded-lg bg-slate-950 px-4 py-5 text-slate-100">
+            <div className="scale-[0.68] origin-center">
               <Suspense fallback={tankFallback}>
                 <GlassTank level={70} alert={null} />
               </Suspense>
             </div>
           </div>
-          <button
-            type="button"
-            className="inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-            onClick={() => navigate(`/app/onboarding/tank-setup/${claimedDevice?.id}`)}
-          >
-            Set up your tank
-          </button>
-          <button
-            type="button"
-            className="text-xs text-muted-foreground hover:underline"
-            onClick={() => navigate('/app/devices')}
-          >
-            Go to my devices
-          </button>
+          <div className="flex flex-col justify-between gap-4">
+            <div className="space-y-3">
+              <div className="rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Next step</p>
+                <p className="mt-1 text-sm font-medium text-slate-900 dark:text-white">Add tank dimensions to calibrate readings.</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Status</p>
+                <p className="mt-1 text-sm font-medium text-emerald-700 dark:text-emerald-300">Ready for setup</p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <button
+                type="button"
+                className="inline-flex h-10 w-full items-center justify-center rounded-md bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100 dark:focus:ring-offset-slate-950"
+                onClick={() => navigate(`/app/onboarding/tank-setup/${claimedDevice?.id}`)}
+              >
+                Set up tank
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-9 w-full items-center justify-center rounded-md border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                onClick={() => navigate('/app/devices')}
+              >
+                View devices
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="rounded-3xl border-2 border-border/80 bg-card shadow-xl">
-      <div className="space-y-2 px-6 pb-0 pt-6 text-center">
-        <div className="flex justify-center">
-          <Wifi className="h-10 w-10 text-primary" />
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="rounded-md bg-sky-100 p-2 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300">
+              <Wifi className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight text-slate-950 dark:text-white">Pair device</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Generate a short-lived code and complete setup from the device hotspot.
+              </p>
+            </div>
+          </div>
+          <span className="hidden rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300 sm:inline-flex">
+            {step === 'waiting' ? 'Waiting' : 'Ready'}
+          </span>
         </div>
-        <h2 className="text-2xl font-semibold tracking-tight">Pair your device</h2>
-        <p className="text-sm text-muted-foreground">
-          {step === 'idle'
-            ? "When you're ready, generate a pairing code for your AquaMind device."
-            : (
-              <>
-                Long-press the button on your AquaMind device until it starts blinking, then
-                connect your phone or laptop to the <span className="font-medium">WaterTank-Setup</span> WiFi
-                network it creates. Choose your home WiFi, enter its password, and when prompted,
-                type in the pairing code below.
-              </>
-            )}
-        </p>
       </div>
-      <div className="flex flex-col items-center gap-6 p-6">
+      <div className="grid gap-4 p-4 md:grid-cols-[0.9fr_1.1fr]">
+        <div className="space-y-2">
+          {[
+            ['1', 'Hold the device button until the setup light blinks.'],
+            ['2', 'Join the WaterTank-Setup WiFi network.'],
+            ['3', 'Choose home WiFi and enter the pairing code.'],
+          ].map(([number, label]) => (
+            <div key={number} className="flex gap-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">
+              <span className="flex h-6 w-6 flex-none items-center justify-center rounded-md bg-slate-100 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                {number}
+              </span>
+              <p className="text-sm leading-6 text-slate-600 dark:text-slate-300">{label}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-4">
         {error && (
-          <div className="w-full rounded-lg border border-destructive/50 bg-background p-4 text-destructive">
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
             <div className="flex items-start gap-3">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
-                <h3 className="mb-1 text-sm font-medium leading-none">Error</h3>
-                <p className="text-sm leading-relaxed">{error}</p>
+                <h3 className="text-sm font-semibold leading-none">Error</h3>
+                <p className="mt-1 text-sm leading-relaxed">{error}</p>
               </div>
             </div>
           </div>
         )}
 
         {claimCode && step === 'waiting' && (
-          <>
-            <div className="text-5xl font-mono font-bold tracking-[0.3em] bg-muted rounded-xl px-8 py-6">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Pairing code</p>
+            <div className="mt-2 rounded-lg bg-white px-4 py-4 text-center font-mono text-4xl font-semibold tracking-[0.22em] text-slate-950 shadow-sm dark:bg-slate-900 dark:text-white">
               {claimCode}
             </div>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-              Waiting for your device to connect... expires in {secondsLeft}s
+            <div className="mt-3 flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+              <Clock3 className="h-4 w-4 text-amber-500" />
+              Waiting for connection. Expires in {secondsLeft}s.
             </div>
-          </>
+          </div>
+        )}
+
+        {step === 'idle' && (
+          <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center dark:border-slate-700 dark:bg-slate-950">
+            <Router className="mx-auto h-6 w-6 text-slate-500 dark:text-slate-400" />
+            <p className="mt-2 text-sm font-medium text-slate-900 dark:text-white">No active pairing code</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Codes expire quickly to keep account linking controlled.</p>
+          </div>
         )}
 
         <button
           type="button"
           onClick={generateCode}
-          className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+          className="inline-flex h-10 w-full items-center justify-center rounded-md bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100 dark:focus:ring-offset-slate-950"
         >
           {step === 'idle' ? (
             <>
@@ -192,6 +236,7 @@ export function AddDeviceWizard() {
             </>
           )}
         </button>
+        </div>
       </div>
     </div>
   );

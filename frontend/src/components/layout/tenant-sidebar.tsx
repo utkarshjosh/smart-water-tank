@@ -23,10 +23,10 @@ export function TenantSidebar({ onNavigate }: { onNavigate?: () => void }) {
     const [imageError, setImageError] = useState(false);
 
     return (
-        <div className="space-y-4 py-4 flex flex-col h-full bg-slate-900 text-white">
-            <div className="px-3 py-2 flex-1">
-                <Link to="/app/devices" className="flex items-center pl-3 mb-14" onClick={onNavigate}>
-                    <div className="relative w-8 h-8 mr-4 flex-shrink-0">
+        <div className="flex h-full flex-col bg-slate-950 py-3 text-white">
+            <div className="flex-1 px-2">
+                <Link to="/app/devices" className="mb-8 flex h-11 items-center rounded-lg px-2" onClick={onNavigate}>
+                    <div className="relative mr-3 h-7 w-7 flex-shrink-0">
                         {!imageError ? (
                             <img
                                 src="/logo.png"
@@ -40,23 +40,23 @@ export function TenantSidebar({ onNavigate }: { onNavigate?: () => void }) {
                             </div>
                         )}
                     </div>
-                    <h1 className="text-xl font-bold">
+                    <h1 className="text-base font-semibold">
                         AquaMind
                     </h1>
                 </Link>
-                <div className="space-y-1">
+                <div className="space-y-0.5">
                     {routes.map((route) => (
                         <Link
                             key={route.href}
                             to={route.href}
                             onClick={onNavigate}
                             className={cn(
-                                "text-sm group flex p-3 w-full justify-start font-medium cursor-pointer hover:text-white hover:bg-white/10 rounded-lg transition",
-                                pathname.startsWith(route.href) ? "text-white bg-white/10" : "text-zinc-400"
+                                "group flex h-10 w-full cursor-pointer items-center justify-start rounded-md px-2.5 text-sm font-medium transition hover:bg-white/10 hover:text-white",
+                                pathname.startsWith(route.href) ? "bg-white/10 text-white" : "text-slate-400"
                             )}
                         >
                             <div className="flex items-center flex-1">
-                                <route.icon className={cn("h-5 w-5 mr-3", route.color)} />
+                                <route.icon className={cn("mr-3 h-4 w-4", route.color)} />
                                 {route.label}
                             </div>
                         </Link>

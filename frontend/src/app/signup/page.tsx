@@ -1,10 +1,14 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { AlertCircle, UserPlus } from 'lucide-react';
+import { AlertCircle, BellRing, Droplets, UserPlus } from 'lucide-react';
 import api from '@/lib/api';
 import { setAuthToken } from '@/lib/cookies';
 import { auth } from '@/lib/firebase';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 export default function SignupPage() {
   const navigate = useNavigate();
@@ -33,107 +37,147 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute left-[-10%] top-[-10%] h-[50%] w-[50%] animate-pulse rounded-full bg-primary/10 blur-[120px]" style={{ animationDuration: '8s' }} />
-        <div className="absolute bottom-[-10%] right-[-10%] h-[50%] w-[50%] animate-pulse rounded-full bg-accent/10 blur-[120px]" style={{ animationDuration: '12s', animationDelay: '2s' }} />
-      </div>
-
-      <div className="relative z-10 w-full max-w-md px-4">
-        <div className="rounded-3xl border-2 border-border/80 bg-card/95 p-8 shadow-xl backdrop-blur">
-          <div className="mb-8 space-y-4 text-center">
-            <div className="mb-4 flex justify-center">
-              <div className="h-16 w-16">
-                <img src="/logo.png" alt="AquaMind Logo" className="h-full w-full object-contain" />
-              </div>
+    <div className="min-h-screen bg-slate-50 text-slate-950">
+      <div className="mx-auto grid min-h-screen w-full max-w-6xl grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px]">
+        <section className="hidden border-r border-slate-200 bg-white px-8 py-7 lg:flex lg:flex-col">
+          <div className="flex items-center gap-3">
+            <img src="/logo.png" alt="AquaMind Logo" className="h-9 w-9 object-contain" />
+            <div>
+              <div className="text-sm font-semibold tracking-tight">AquaMind</div>
+              <div className="text-xs text-slate-500">Water operations console</div>
             </div>
-            <h1 className="text-3xl font-bold">AquaMind</h1>
-            <p className="text-base text-muted-foreground">Create your account</p>
           </div>
 
-          <form onSubmit={handleSignup} className="space-y-4">
-            <div className="space-y-2">
-              <label htmlFor="name" className="text-sm font-medium leading-none">
-                Name
-              </label>
-              <input
-                id="name"
-                type="text"
-                placeholder="Your name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                disabled={loading}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              />
+          <div className="mt-auto max-w-xl pb-10">
+            <div className="mb-5 inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+              <BellRing className="h-3.5 w-3.5" />
+              Tenant monitoring
             </div>
-            <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium leading-none">
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={loading}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              />
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium leading-none">
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                placeholder="At least 6 characters"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-                disabled={loading}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              />
-            </div>
-            {error && (
-              <div className="rounded-lg border border-destructive/50 bg-background p-4 text-destructive">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                  <div>
-                    <h2 className="mb-1 text-sm font-medium leading-none">Error</h2>
-                    <p className="text-sm leading-relaxed">{error}</p>
-                  </div>
+            <h1 className="max-w-lg text-4xl font-semibold leading-tight tracking-tight">
+              Start with the essential signals, not a crowded dashboard.
+            </h1>
+            <p className="mt-4 max-w-md text-sm leading-6 text-slate-500">
+              Create an account to pair devices, set tank dimensions, and track live water levels from a focused workspace.
+            </p>
+
+            <div className="mt-8 rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <div className="mb-4 flex items-center justify-between text-xs text-slate-500">
+                <span>Setup progress</span>
+                <span>2 min</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="h-1.5 rounded-full bg-slate-950" />
+                <div className="h-1.5 rounded-full bg-cyan-500" />
+                <div className="h-1.5 rounded-full bg-slate-200" />
+              </div>
+              <div className="mt-5 flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-md bg-cyan-100 text-cyan-700">
+                  <Droplets className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="text-sm font-medium">Pair device, calibrate tank, monitor.</div>
+                  <div className="mt-0.5 text-xs text-slate-500">No manual tenant setup required.</div>
                 </div>
               </div>
-            )}
-            <button
-              type="submit"
-              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
-              disabled={loading}
-            >
-              {loading ? (
-                <>
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
-                  Creating account...
-                </>
-              ) : (
-                <>
-                  <UserPlus className="h-4 w-4" />
-                  Sign up
-                </>
+            </div>
+          </div>
+        </section>
+
+        <main className="flex min-h-screen items-center px-4 py-8 sm:px-6 lg:px-8">
+          <div className="mx-auto w-full max-w-sm">
+            <div className="mb-8 flex items-center gap-3 lg:hidden">
+              <img src="/logo.png" alt="AquaMind Logo" className="h-9 w-9 object-contain" />
+              <div>
+                <div className="text-sm font-semibold tracking-tight">AquaMind</div>
+                <div className="text-xs text-slate-500">Water operations console</div>
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <h1 className="text-2xl font-semibold tracking-tight">Create account</h1>
+              <p className="mt-2 text-sm text-slate-500">Set up your water monitoring workspace.</p>
+            </div>
+
+            <form onSubmit={handleSignup} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name" className="text-slate-700">
+                  Name
+                </Label>
+                <Input
+                  id="name"
+                  type="text"
+                  placeholder="Your name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  disabled={loading}
+                  className="border-slate-200 bg-white"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-slate-700">
+                  Email
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  disabled={loading}
+                  className="border-slate-200 bg-white"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-slate-700">
+                  Password
+                </Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="At least 6 characters"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  disabled={loading}
+                  className="border-slate-200 bg-white"
+                />
+              </div>
+              {error && (
+                <Alert variant="destructive" className="bg-white">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle className="text-sm">Error</AlertTitle>
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
               )}
-            </button>
-            <p className="text-center text-sm text-muted-foreground">
-              Already have an account?{' '}
-              <Link to="/login" className="text-primary hover:underline">
-                Log in
-              </Link>
-            </p>
-          </form>
-        </div>
+              <Button
+                type="submit"
+                className="w-full bg-slate-950 text-white hover:bg-slate-800"
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
+                    Creating account...
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="h-4 w-4" />
+                    Sign up
+                  </>
+                )}
+              </Button>
+              <p className="text-center text-sm text-muted-foreground">
+                Already have an account?{' '}
+                <Link to="/login" className="font-medium text-slate-950 hover:underline">
+                  Log in
+                </Link>
+              </p>
+            </form>
+          </div>
+        </main>
       </div>
     </div>
   );

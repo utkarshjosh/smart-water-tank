@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertCircle, CheckCircle2, Download, Upload, FileUp } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Download, Upload, FileUp, Cpu, HardDrive, RadioTower, PackageCheck } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
@@ -265,13 +265,63 @@ export default function FirmwarePage() {
     );
   }
 
+  const activeFirmware = firmware.find((fw) => fw.is_active);
+  const latestFirmware = firmware[0];
+  const totalFirmwareBytes = firmware.reduce((total, fw) => total + fw.file_size, 0);
+  const averageRollout = firmware.length > 0
+    ? Math.round(firmware.reduce((total, fw) => total + fw.rollout_percentage, 0) / firmware.length)
+    : 0;
+  const firmwareStats = [
+    {
+      label: 'Versions',
+      value: firmware.length,
+      detail: activeFirmware ? `Active v${activeFirmware.version}` : 'No active build',
+      icon: PackageCheck,
+      color: 'text-slate-700 dark:text-slate-200',
+    },
+    {
+      label: 'Managed devices',
+      value: devices.length,
+      detail: `${tenants.length} tenants`,
+      icon: Cpu,
+      color: 'text-sky-600 dark:text-sky-300',
+    },
+    {
+      label: 'Storage',
+      value: `${(totalFirmwareBytes / 1024).toFixed(1)} KB`,
+      detail: latestFirmware ? `Latest v${latestFirmware.version}` : 'No uploads',
+      icon: HardDrive,
+      color: 'text-emerald-600 dark:text-emerald-300',
+    },
+    {
+      label: 'Avg rollout',
+      value: `${averageRollout}%`,
+      detail: 'Across versions',
+      icon: RadioTower,
+      color: 'text-amber-600 dark:text-amber-300',
+    },
+  ];
+
   return (
     <Layout>
-      <div className="px-4 py-6 sm:px-0">
-        <h1 className="text-3xl font-bold mb-6">Firmware Management</h1>
+      <div className="space-y-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-950 dark:text-white">Firmware management</h1>
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              Upload binaries, track deployed builds, and stage rollouts.
+            </p>
+          </div>
+          {activeFirmware && (
+            <div className="inline-flex h-9 w-fit items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
+              v{activeFirmware.version} active
+            </div>
+          )}
+        </div>
 
         {error && (
-          <Alert variant="destructive" className="mb-4">
+          <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Error</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
@@ -279,33 +329,55 @@ export default function FirmwarePage() {
         )}
 
         {successMessage && (
-          <Alert className="mb-4">
+          <Alert>
             <CheckCircle2 className="h-4 w-4" />
             <AlertTitle>Success</AlertTitle>
             <AlertDescription>{successMessage}</AlertDescription>
           </Alert>
         )}
 
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Upload Firmware</CardTitle>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {firmwareStats.map((stat) => {
+            const Icon = stat.icon;
+            return (
+              <Card key={stat.label} className="border-slate-200 shadow-sm dark:border-slate-800">
+                <CardContent className="flex items-center justify-between gap-3 p-4">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">{stat.label}</p>
+                    <p className={`mt-1 truncate text-xl font-semibold ${stat.color}`}>{stat.value}</p>
+                    <p className="truncate text-xs text-slate-500 dark:text-slate-400">{stat.detail}</p>
+                  </div>
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
+                    <Icon className={`h-4 w-4 ${stat.color}`} />
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        <div className="grid gap-3 xl:grid-cols-[0.82fr_1.18fr]">
+        <Card className="border-slate-200 shadow-sm dark:border-slate-800">
+          <CardHeader className="border-b border-slate-100 p-4 dark:border-slate-800">
+            <CardTitle className="text-base font-semibold tracking-normal">Upload firmware</CardTitle>
+            <CardDescription>Binary package and release metadata.</CardDescription>
           </CardHeader>
-          <CardContent>
-            <form onSubmit={handleUpload} className="space-y-4">
+          <CardContent className="p-4">
+            <form onSubmit={handleUpload} className="space-y-3">
               <div className="space-y-2">
-                <Label htmlFor="firmware">Firmware File</Label>
+                <Label htmlFor="firmware">Firmware file</Label>
                 <div
                   onDragEnter={handleDragEnter}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
                   className={`
-                    relative border-2 border-dashed rounded-lg p-8 text-center transition-all
+                    relative rounded-lg border border-dashed p-5 text-center transition-all
                     ${isDragging 
-                      ? 'border-primary bg-primary/10 scale-[1.02]' 
-                      : 'border-muted-foreground/25 hover:border-primary/50'
+                      ? 'border-sky-500 bg-sky-50 dark:bg-sky-500/10'
+                      : 'border-slate-300 hover:border-sky-400 dark:border-slate-700'
                     }
-                    ${selectedFile ? 'border-primary bg-primary/5' : ''}
+                    ${selectedFile ? 'border-sky-500 bg-sky-50 dark:bg-sky-500/10' : ''}
                   `}
                 >
                   <input
@@ -317,22 +389,22 @@ export default function FirmwarePage() {
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     required
                   />
-                  <div className="flex flex-col items-center justify-center space-y-3">
-                    <FileUp className={`h-10 w-10 ${isDragging ? 'text-primary' : 'text-muted-foreground'}`} />
+                  <div className="flex flex-col items-center justify-center space-y-2">
+                    <FileUp className={`h-8 w-8 ${isDragging || selectedFile ? 'text-sky-600 dark:text-sky-300' : 'text-slate-400'}`} />
                     <div className="space-y-1">
                       <p className="text-sm font-medium">
                         {selectedFile ? (
-                          <span className="text-primary">{selectedFile.name}</span>
+                          <span className="text-sky-700 dark:text-sky-200">{selectedFile.name}</span>
                         ) : isDragging ? (
-                          <span className="text-primary">Drop the file here</span>
+                          <span className="text-sky-700 dark:text-sky-200">Drop the file here</span>
                         ) : (
                           <>
-                            <span className="text-primary hover:underline">Click to upload</span>
+                            <span className="text-sky-700 hover:underline dark:text-sky-200">Click to upload</span>
                             {' or drag and drop'}
                           </>
                         )}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
                         {selectedFile 
                           ? `${(selectedFile.size / 1024).toFixed(2)} KB`
                           : 'Firmware file (.bin)'
@@ -353,52 +425,68 @@ export default function FirmwarePage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="description">Description (optional)</Label>
+                <Label htmlFor="description">Description</Label>
                 <Textarea
                   id="description"
                   name="description"
                   rows={3}
+                  placeholder="Release notes or compatibility details"
                 />
               </div>
-              <Button type="submit" disabled={uploading}>
-                <Upload className="mr-2 h-4 w-4" />
+              <Button type="submit" disabled={uploading} size="sm">
+                <Upload className="h-4 w-4" />
                 {uploading ? 'Uploading...' : 'Upload Firmware'}
               </Button>
             </form>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Firmware Versions</CardTitle>
+        <Card className="border-slate-200 shadow-sm dark:border-slate-800">
+          <CardHeader className="border-b border-slate-100 p-4 dark:border-slate-800">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-base font-semibold tracking-normal">Firmware versions</CardTitle>
+                <CardDescription>Build inventory and rollout controls.</CardDescription>
+              </div>
+              <Badge variant="outline" className="shrink-0">{firmware.length} total</Badge>
+            </div>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {firmware.map((fw) => (
-                <Card key={fw.id}>
-                  <CardContent className="pt-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <CardTitle>Version {fw.version}</CardTitle>
+          <CardContent className="p-0">
+            {firmware.length === 0 ? (
+              <div className="p-8 text-center">
+                <PackageCheck className="mx-auto h-8 w-8 text-slate-400" />
+                <p className="mt-3 text-sm font-medium text-slate-700 dark:text-slate-200">No firmware uploaded</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Upload a .bin package to begin rollout management.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {firmware.map((fw) => (
+                  <div key={fw.id} className="grid gap-3 p-4 lg:grid-cols-[1fr_150px_210px] lg:items-center">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold text-slate-950 dark:text-white">Version {fw.version}</p>
                           {fw.is_active && (
                             <Badge variant="default">Active</Badge>
                           )}
-                        </div>
+                      </div>
                         {fw.description && (
-                          <CardDescription className="mt-1">{fw.description}</CardDescription>
+                        <p className="mt-1 line-clamp-2 text-sm text-slate-600 dark:text-slate-300">{fw.description}</p>
                         )}
-                        <p className="text-sm text-muted-foreground mt-1">
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                           {(fw.file_size / 1024).toFixed(2)} KB • Uploaded{' '}
                           {new Date(fw.created_at).toLocaleString()}
-                        </p>
+                      </p>
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                        <span>Rollout</span>
+                        <span className="font-medium text-slate-700 dark:text-slate-200">{fw.rollout_percentage}%</span>
                       </div>
-                      <div className="flex items-center gap-3">
-                        {fw.rollout_percentage > 0 && (
-                          <span className="text-xs text-muted-foreground">
-                            {fw.rollout_percentage}% rolled out
-                          </span>
-                        )}
+                      <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                        <div className="h-full rounded-full bg-sky-500" style={{ width: `${fw.rollout_percentage}%` }} />
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                         <Button
                           onClick={() => handleOpenRolloutModal(fw)}
                           size="sm"
@@ -413,18 +501,18 @@ export default function FirmwarePage() {
                           <a
                             href={`${API_BASE_URL}/api/v1/admin/firmware/${fw.id}/download`}
                           >
-                            <Download className="mr-2 h-4 w-4" />
+                            <Download className="h-4 w-4" />
                             Download
                           </a>
                         </Button>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
+        </div>
 
         {/* Rollout Modal */}
         <Dialog open={showRolloutModal} onOpenChange={setShowRolloutModal}>
@@ -606,7 +694,5 @@ export default function FirmwarePage() {
     </Layout>
   );
 }
-
-
 
 
