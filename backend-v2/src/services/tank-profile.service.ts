@@ -47,9 +47,12 @@ export function computeTotalCapacityL(profile: {
 // surface - shape-independent. levelFullCm/levelEmptyCm are derived from the
 // tank profile's own calibration, not firmware's compile-time constants.
 export function computeLevelPercent(
-  levelCm: number,
+  levelCm: number | null,
   profile: { heightCm: number; sensorOffsetCm: number }
-): number {
+): number | null {
+  // No reading this cycle (sensor disconnected/no echo) - unknown, not 0%.
+  if (levelCm == null) return null;
+
   const levelFullCm = profile.sensorOffsetCm;
   const levelEmptyCm = profile.sensorOffsetCm + profile.heightCm;
   const span = levelEmptyCm - levelFullCm;

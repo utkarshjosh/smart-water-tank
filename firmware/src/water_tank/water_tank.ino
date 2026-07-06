@@ -61,7 +61,15 @@ void setup() {
     
     Sensor::init();
     Alerts::init();
-    
+
+    // Take a real measurement now, before any WiFi/report timer can fire.
+    // Without this, state.waterLevelCm stays at its zero-initialized value
+    // until the first MEASUREMENT_INTERVAL_MS elapses (60s) - but reports
+    // can go out after just FAST_REPORT_INTERVAL_MS (20s), which sent a
+    // fabricated "0cm" reading (read as tank-full) on every boot/reconnect.
+    takeMeasurement();
+    state.lastMeasurement = millis();
+
     // Initialize state timers
     state.lastOtaCheck = 0;  // Will check on first loop after WiFi connects
     
@@ -180,11 +188,11 @@ void takeMeasurement() {
     Serial.println(F("[Sensor] Taking measurement..."));
     
     // Read water level
-    state.waterLevelCm = Sensor::readWaterLevel();
-    state.volumeLiters = Sensor::calculateVolume(state.waterLevelCm);
-    
+    state.waterLevelCm = Sensor::readWaterLevel(state.waterLevelValid);
+    state.volumeLiters = state.waterLevelValid ? Sensor::calculateVolume(state.waterLevelCm) : 0;
+
     // Read temperature
-    state.temperatureC = Sensor::readTemperature();
+    state.temperatureC = Sensor::readTemperature(state.temperatureValid);
     
     // Read battery voltage
     state.batteryVoltage = Sensor::readBatteryVoltage();
@@ -205,15 +213,9 @@ void takeMeasurement() {
 
 void reportData() {
     Serial.println(F("[Report] Sending data..."));
-    
-    bool success = DataReporter::send(
-        state.waterLevelCm,
-        state.volumeLiters,
-        state.temperatureC,
-        state.batteryVoltage,
-        state.wifiRssi
-    );
-    
+
+    bool success = DataReporter::send(state);
+
     if (success) {
         Serial.println(F("[Report] Data sent successfully"));
         // Try to send any buffered data
@@ -231,32 +233,35 @@ void reportData() {
 }
 
 void checkAlerts() {
-    // Check for tank full
-    if (state.volumeLiters >= Config::tankFullThreshold) {
-        if (!state.alertActive) {
-            Serial.println(F("[Alert] Tank is FULL!"));
-            Alerts::triggerTankFull();
-            state.alertActive = true;
+    bool alertTriggered = false;
+
+    // Tank full/low checks need a real water level reading - a disconnected
+    // sensor's placeholder volume (0L) must never be read as "tank LOW".
+    if (state.waterLevelValid) {
+        if (state.volumeLiters >= Config::tankFullThreshold) {
+            if (!state.alertActive) {
+                Serial.println(F("[Alert] Tank is FULL!"));
+                Alerts::triggerTankFull();
+            }
+            alertTriggered = true;
+        } else if (state.volumeLiters <= Config::tankLowThreshold) {
+            if (!state.alertActive) {
+                Serial.println(F("[Alert] Tank is LOW!"));
+                Alerts::triggerTankLow();
+            }
+            alertTriggered = true;
         }
     }
-    // Check for tank low
-    else if (state.volumeLiters <= Config::tankLowThreshold) {
-        if (!state.alertActive) {
-            Serial.println(F("[Alert] Tank is LOW!"));
-            Alerts::triggerTankLow();
-            state.alertActive = true;
-        }
-    }
+
     // Check for battery low
-    else if (state.batteryVoltage < Config::batteryLowThreshold) {
+    if (!alertTriggered && state.batteryVoltage < Config::batteryLowThreshold) {
         if (!state.alertActive) {
             Serial.println(F("[Alert] Battery LOW!"));
             Alerts::triggerBatteryLow();
-            state.alertActive = true;
         }
+        alertTriggered = true;
     }
-    else {
-        state.alertActive = false;
-    }
+
+    state.alertActive = alertTriggered;
 }
 

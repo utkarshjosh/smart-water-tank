@@ -34,22 +34,33 @@ namespace DataReporter {
         );
     }
 
-    bool send(float levelCm, float volumeL, float tempC, float batteryV, int rssi) {
+    bool send(const SystemState &state) {
         HTTPClient http;
-        
+
         String url = String(USE_HTTPS ? "https://" : "http://") +
                      serverHost + ":" + String(serverPort) + serverEndpoint;
-        
-        // Build JSON payload
+
+        // Build JSON payload. A sensor that couldn't be read sends null,
+        // not a placeholder number - the server must never mistake "no
+        // reading" for a real 0cm/-127°C measurement.
         JsonDocument doc;
         doc["device_id"] = Config::deviceId;
         doc["firmware_version"] = FIRMWARE_VERSION;
         doc["timestamp"] = millis();  // Server should use its own timestamp
-        doc["level_cm"] = levelCm;
-        doc["volume_l"] = volumeL;
-        doc["temperature_c"] = tempC;
-        doc["battery_v"] = batteryV;
-        doc["rssi"] = rssi;
+        if (state.waterLevelValid) {
+            doc["level_cm"] = state.waterLevelCm;
+            doc["volume_l"] = state.volumeLiters;
+        } else {
+            doc["level_cm"] = nullptr;
+            doc["volume_l"] = nullptr;
+        }
+        if (state.temperatureValid) {
+            doc["temperature_c"] = state.temperatureC;
+        } else {
+            doc["temperature_c"] = nullptr;
+        }
+        doc["battery_v"] = state.batteryVoltage;
+        doc["rssi"] = state.wifiRssi;
         
         String payload;
         serializeJson(doc, payload);

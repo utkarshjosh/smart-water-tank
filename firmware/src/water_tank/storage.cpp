@@ -83,9 +83,18 @@ namespace Storage {
         doc["device_id"] = Config::deviceId;
         doc["firmware_version"] = FIRMWARE_VERSION;
         doc["timestamp"] = millis();
-        doc["level_cm"] = state.waterLevelCm;
-        doc["volume_l"] = state.volumeLiters;
-        doc["temperature_c"] = state.temperatureC;
+        if (state.waterLevelValid) {
+            doc["level_cm"] = state.waterLevelCm;
+            doc["volume_l"] = state.volumeLiters;
+        } else {
+            doc["level_cm"] = nullptr;
+            doc["volume_l"] = nullptr;
+        }
+        if (state.temperatureValid) {
+            doc["temperature_c"] = state.temperatureC;
+        } else {
+            doc["temperature_c"] = nullptr;
+        }
         doc["battery_v"] = state.batteryVoltage;
         doc["rssi"] = state.wifiRssi;
         doc["buffered"] = true;

@@ -2,8 +2,8 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 
 export interface MeasurementPoint {
   timestamp: string;
-  level_cm: number | string;
-  volume_l: number | string;
+  level_cm: number | string | null;
+  volume_l: number | string | null;
   level_percent: number | string | null;
   temperature_c: number | string | null;
   battery_v: number | string | null;

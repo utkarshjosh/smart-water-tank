@@ -124,8 +124,8 @@ model Measurement {
   id           String   @id @default(uuid()) @db.Char(36)
   deviceId     String   @map("device_id") @db.Char(36)
   timestamp    DateTime @default(now())
-  levelCm      Decimal  @map("level_cm") @db.Decimal(10, 2)
-  volumeL      Decimal  @map("volume_l") @db.Decimal(10, 2)
+  levelCm      Decimal? @map("level_cm") @db.Decimal(10, 2)
+  volumeL      Decimal? @map("volume_l") @db.Decimal(10, 2)
   temperatureC Decimal? @map("temperature_c") @db.Decimal(5, 2)
   batteryV     Decimal? @map("battery_v") @db.Decimal(5, 2)
   rssi         Int?

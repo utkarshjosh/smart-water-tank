@@ -15,8 +15,10 @@
  */
 struct SystemState {
     float waterLevelCm;
+    bool waterLevelValid;    // false when the ultrasonic sensor got no echo at all
     float volumeLiters;
     float temperatureC;
+    bool temperatureValid;   // false when the DS18B20 reports disconnected
     float batteryVoltage;
     int wifiRssi;
     unsigned long lastMeasurement;

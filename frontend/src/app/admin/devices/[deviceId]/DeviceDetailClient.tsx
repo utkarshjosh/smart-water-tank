@@ -20,8 +20,8 @@ interface DeviceDetail {
   created_at: string;
   config: any;
   latest_measurement: {
-    volume_l: number;
-    level_cm: number;
+    volume_l: number | null;
+    level_cm: number | null;
     temperature_c?: number | null;
     battery_v?: number | null;
     rssi?: number | null;

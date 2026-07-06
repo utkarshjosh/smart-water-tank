@@ -6,16 +6,16 @@ import { createDeviceToken } from '../lib/device-token';
 
 export function toMeasurementDto(m: {
   timestamp: Date;
-  levelCm: Prisma.Decimal;
-  volumeL: Prisma.Decimal;
+  levelCm: Prisma.Decimal | null;
+  volumeL: Prisma.Decimal | null;
   temperatureC: Prisma.Decimal | null;
   batteryV: Prisma.Decimal | null;
   rssi: number | null;
 }) {
   return {
     timestamp: m.timestamp,
-    level_cm: m.levelCm.toNumber(),
-    volume_l: m.volumeL.toNumber(),
+    level_cm: m.levelCm?.toNumber() ?? null,
+    volume_l: m.volumeL?.toNumber() ?? null,
     temperature_c: m.temperatureC?.toNumber() ?? null,
     battery_v: m.batteryV?.toNumber() ?? null,
     rssi: m.rssi,
@@ -124,9 +124,11 @@ export async function claimDevice(claimCode: string, hardwareId: string): Promis
 
 export interface MeasurementInput {
   firmwareVersion?: string;
-  levelCm: number;
-  volumeL: number;
-  temperatureC?: number;
+  // null means the device couldn't get a real reading this cycle - stored
+  // as-is (never coerced to 0) so it's excluded from percent/aggregate math.
+  levelCm: number | null;
+  volumeL: number | null;
+  temperatureC?: number | null;
   batteryV?: number;
   rssi?: number;
 }

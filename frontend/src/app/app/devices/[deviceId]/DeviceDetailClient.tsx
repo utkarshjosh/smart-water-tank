@@ -25,9 +25,11 @@ interface DeviceInfo {
 }
 
 interface CurrentMeasurement {
-  level_cm: number;
-  volume_l: number;
+  level_cm: number | null;
+  volume_l: number | null;
   level_percent: number | null;
+  level_percent_stale: boolean;
+  level_percent_as_of: string | null;
   temperature_c: number | null;
   battery_v: number | null;
   timestamp: string;
@@ -205,7 +207,12 @@ export default function DeviceDetailClient() {
           </CardHeader>
           <CardContent className="flex flex-col items-center gap-3 px-4 pb-4">
             {profile && current?.level_percent != null ? (
-              <div className="rounded-lg bg-[#0f172a] px-6 py-4">
+              <div className="relative rounded-lg bg-[#0f172a] px-6 py-4">
+                {current.level_percent_stale && (
+                  <div className="absolute left-1/2 top-2 z-50 -translate-x-1/2 rounded-full bg-slate-800/90 px-2.5 py-1 text-[11px] font-medium text-slate-200 shadow-sm">
+                    Last known {current.level_percent_as_of ? new Date(current.level_percent_as_of).toLocaleString() : ''}
+                  </div>
+                )}
                 <div className="scale-[0.68] origin-center">
                   <Suspense fallback={<div className="h-60 w-48" />}>
                     <GlassTank level={current.level_percent} alert={glassAlert} />
@@ -215,7 +222,7 @@ export default function DeviceDetailClient() {
             ) : (
               <div className="flex w-full flex-col items-center gap-3 rounded-lg border border-dashed border-border p-6 text-center">
                 <p className="text-sm text-muted-foreground">
-                  {profile ? 'No measurements yet' : 'Set up your tank to see accurate levels'}
+                  {profile ? 'Level unknown - no sensor reading yet' : 'Set up your tank to see accurate levels'}
                 </p>
                 {!profile && (
                   <Button size="sm" onClick={() => setEditingTank(true)}>

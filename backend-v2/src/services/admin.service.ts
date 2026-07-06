@@ -46,7 +46,7 @@ export async function listDevices(filters: { tenantId?: string; status?: DeviceS
         status: device.status,
         firmware_version: device.firmwareVersion,
         last_seen: device.lastSeen,
-        current_volume: latest ? latest.volumeL.toNumber() : null,
+        current_volume: latest?.volumeL != null ? latest.volumeL.toNumber() : null,
         last_measurement: latest ? latest.timestamp : null,
         created_at: device.createdAt,
       };
@@ -117,8 +117,8 @@ export async function getDeviceDetail(deviceId: string) {
     latest_measurement: latestMeasurement
       ? {
           timestamp: latestMeasurement.timestamp,
-          level_cm: latestMeasurement.levelCm.toNumber(),
-          volume_l: latestMeasurement.volumeL.toNumber(),
+          level_cm: latestMeasurement.levelCm?.toNumber() ?? null,
+          volume_l: latestMeasurement.volumeL?.toNumber() ?? null,
           temperature_c: latestMeasurement.temperatureC?.toNumber() ?? null,
           battery_v: latestMeasurement.batteryV?.toNumber() ?? null,
           rssi: latestMeasurement.rssi,

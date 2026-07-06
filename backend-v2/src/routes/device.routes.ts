@@ -41,9 +41,11 @@ router.post(
 // has no reliable RTC so the server always stamps its own receipt time.
 const measurementSchema = z.object({
   firmware_version: z.string().optional(),
-  level_cm: z.number(),
-  volume_l: z.number(),
-  temperature_c: z.number().optional(),
+  // null means the sensor couldn't be read this cycle (e.g. no echo /
+  // disconnected) - it must be stored as "no data", never coerced to 0.
+  level_cm: z.number().nullable(),
+  volume_l: z.number().nullable(),
+  temperature_c: z.number().nullable().optional(),
   battery_v: z.number().optional(),
   rssi: z.number().optional(),
 });

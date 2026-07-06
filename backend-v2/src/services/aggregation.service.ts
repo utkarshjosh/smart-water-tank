@@ -23,8 +23,11 @@ async function aggregateDeviceDailySummary(deviceId: string, deviceIdString: str
   const yesterdayEnd = new Date(yesterday);
   yesterdayEnd.setHours(23, 59, 59, 999);
 
+  // Exclude readings where the sensor couldn't be read (volumeL null) -
+  // they're not real data points and must not drag down min/avg or be
+  // read as sudden drains/refills.
   const measurements = await prisma.measurement.findMany({
-    where: { deviceId, timestamp: { gte: yesterday, lte: yesterdayEnd } },
+    where: { deviceId, timestamp: { gte: yesterday, lte: yesterdayEnd }, volumeL: { not: null } },
     orderBy: { timestamp: 'asc' },
     select: { volumeL: true, timestamp: true },
   });
@@ -34,7 +37,8 @@ async function aggregateDeviceDailySummary(deviceId: string, deviceIdString: str
     return;
   }
 
-  const volumes = measurements.map((m) => m.volumeL.toNumber());
+  // Safe: the query above filtered to volumeL not null.
+  const volumes = measurements.map((m) => m.volumeL!.toNumber());
   const minVolume = Math.min(...volumes);
   const maxVolume = Math.max(...volumes);
   const avgVolume = volumes.reduce((a, b) => a + b, 0) / volumes.length;

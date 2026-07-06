@@ -18,9 +18,12 @@ namespace Sensor {
     
     /**
      * Read water level using ultrasonic sensor
+     * @param valid Set to false if no echo was received on any sample
+     *              (no sensor connected) - the returned distance is
+     *              meaningless in that case and must not be reported.
      * @return Distance from sensor to water surface in cm
      */
-    float readWaterLevel();
+    float readWaterLevel(bool &valid);
     
     /**
      * Calculate water volume from level
@@ -31,9 +34,11 @@ namespace Sensor {
     
     /**
      * Read temperature
+     * @param valid Set to false if the DS18B20 is disconnected - the
+     *              returned value is a sentinel and must not be reported.
      * @return Temperature in Celsius
      */
-    float readTemperature();
+    float readTemperature(bool &valid);
     
     /**
      * Read battery voltage

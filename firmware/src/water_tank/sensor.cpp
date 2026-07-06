@@ -45,23 +45,34 @@ namespace Sensor {
         Serial.println(F("[Sensor] Initialized"));
     }
 
-    float readWaterLevel() {
-        if (!sonar) return -1;
-        
+    float readWaterLevel(bool &valid) {
+        if (!sonar) {
+            valid = false;
+            return -1;
+        }
+
         // Take multiple readings and use median
         float readings[NUM_SAMPLES];
-        
+        int echoCount = 0;
+
         for (int i = 0; i < NUM_SAMPLES; i++) {
             unsigned int uS = sonar->ping();
             readings[i] = sonar->convert_cm(uS);
-            
+
             // If reading is 0, sensor didn't get echo
             if (readings[i] == 0) {
                 readings[i] = MAX_DISTANCE_CM;
+            } else {
+                echoCount++;
             }
-            
+
             delay(SAMPLE_DELAY_MS);
         }
+
+        // No echo on any sample - no sensor connected. The substituted
+        // MAX_DISTANCE_CM readings above are placeholders, not a real
+        // measurement, so the caller must not report/act on this reading.
+        valid = echoCount > 0;
         
         // Simple bubble sort for median
         for (int i = 0; i < NUM_SAMPLES - 1; i++) {
@@ -103,18 +114,23 @@ namespace Sensor {
         return volumeCm3 / 1000.0;
     }
 
-    float readTemperature() {
-        if (!tempSensor) return -127;
-        
+    float readTemperature(bool &valid) {
+        if (!tempSensor) {
+            valid = false;
+            return -127;
+        }
+
         tempSensor->requestTemperatures();
         float tempC = tempSensor->getTempCByIndex(0);
-        
+
         // Check for error (-127 means no sensor or disconnected)
         if (tempC == DEVICE_DISCONNECTED_C) {
             Serial.println(F("[Sensor] Temperature sensor disconnected"));
+            valid = false;
             return -127;
         }
-        
+
+        valid = true;
         return tempC;
     }
 
@@ -155,7 +171,8 @@ namespace Sensor {
         }
         Serial.read();
         
-        float emptyReading = readWaterLevel();
+        bool emptyValid;
+        float emptyReading = readWaterLevel(emptyValid);
         Serial.printf("  Empty level: %.1f cm\n", emptyReading);
         
         Serial.println(F("  3. Fill the tank to maximum level"));
@@ -166,7 +183,8 @@ namespace Sensor {
         }
         Serial.read();
         
-        float fullReading = readWaterLevel();
+        bool fullValid;
+        float fullReading = readWaterLevel(fullValid);
         Serial.printf("  Full level: %.1f cm\n", fullReading);
         
         // Update config

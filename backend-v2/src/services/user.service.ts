@@ -8,12 +8,53 @@ import { CLAIM_CODE_TTL_MS, generateClaimCode, hashClaimCode } from '../lib/clai
 import { toMeasurementDto } from './device.service';
 import { computeLevelPercent, getTankProfileRaw } from './tank-profile.service';
 
-function levelPercentFor(profile: { heightCm: { toNumber(): number }; sensorOffsetCm: { toNumber(): number } } | null, levelCm: number): number | null {
+type TankProfileRaw = { heightCm: { toNumber(): number }; sensorOffsetCm: { toNumber(): number } };
+
+function levelPercentFor(profile: TankProfileRaw | null, levelCm: number | null): number | null {
   if (!profile) return null;
   return computeLevelPercent(levelCm, {
     heightCm: profile.heightCm.toNumber(),
     sensorOffsetCm: profile.sensorOffsetCm.toNumber(),
   });
+}
+
+interface LevelPercentInfo {
+  level_percent: number | null;
+  level_percent_stale: boolean;
+  level_percent_as_of: Date | null;
+}
+
+// The latest measurement's level_cm can be null (sensor unreadable this
+// cycle). Rather than showing a fabricated 0%/100%, fall back to the most
+// recent reading that was actually valid and flag it as stale, so the UI
+// can show "last known" instead of guessing.
+async function resolveLevelPercent(
+  deviceId: string,
+  latest: { levelCm: { toNumber(): number } | null; timestamp: Date } | null,
+  profile: TankProfileRaw | null
+): Promise<LevelPercentInfo> {
+  if (!profile) return { level_percent: null, level_percent_stale: false, level_percent_as_of: null };
+
+  if (latest?.levelCm != null) {
+    return {
+      level_percent: levelPercentFor(profile, latest.levelCm.toNumber()),
+      level_percent_stale: false,
+      level_percent_as_of: latest.timestamp,
+    };
+  }
+
+  const lastGood = await prisma.measurement.findFirst({
+    where: { deviceId, levelCm: { not: null } },
+    orderBy: { timestamp: 'desc' },
+    select: { levelCm: true, timestamp: true },
+  });
+  if (!lastGood?.levelCm) return { level_percent: null, level_percent_stale: false, level_percent_as_of: null };
+
+  return {
+    level_percent: levelPercentFor(profile, lastGood.levelCm.toNumber()),
+    level_percent_stale: true,
+    level_percent_as_of: lastGood.timestamp,
+  };
 }
 
 function toUserDto(user: { id: string; email: string; name: string | null; role: string; tenantId: string | null; tenant?: { name: string } | null }) {
@@ -92,14 +133,17 @@ export async function listDevicesForTenant(tenantId: string, userId: string) {
           select: { type: true },
         }),
       ]);
+      const levelInfo = await resolveLevelPercent(device.id, latest, profile);
       return {
         id: device.deviceId,
         name: device.name || device.deviceId,
         status: device.status,
         firmware_version: device.firmwareVersion,
         last_seen: device.lastSeen,
-        current_volume: latest ? latest.volumeL.toNumber() : null,
-        level_percent: latest ? levelPercentFor(profile, latest.levelCm.toNumber()) : null,
+        current_volume: latest?.volumeL != null ? latest.volumeL.toNumber() : null,
+        level_percent: levelInfo.level_percent,
+        level_percent_stale: levelInfo.level_percent_stale,
+        level_percent_as_of: levelInfo.level_percent_as_of,
         has_tank_profile: !!profile,
         last_measurement: latest ? latest.timestamp : null,
         active_alert: activeAlert ? (activeAlert.type === 'leak_detected' ? 'leak' : 'low') : null,
@@ -125,7 +169,14 @@ export async function getDeviceCurrent(device: Device) {
     getTankProfileRaw(device.id),
   ]);
   if (!m) throw new HttpError(404, 'No measurements found');
-  return { device_id: device.deviceId, ...toMeasurementDto(m), level_percent: levelPercentFor(profile, m.levelCm.toNumber()) };
+  const levelInfo = await resolveLevelPercent(device.id, m, profile);
+  return {
+    device_id: device.deviceId,
+    ...toMeasurementDto(m),
+    level_percent: levelInfo.level_percent,
+    level_percent_stale: levelInfo.level_percent_stale,
+    level_percent_as_of: levelInfo.level_percent_as_of,
+  };
 }
 
 export async function getDeviceHistory(device: Device, days: number, limit: number) {
@@ -140,7 +191,12 @@ export async function getDeviceHistory(device: Device, days: number, limit: numb
   ]);
   return {
     device_id: device.deviceId,
-    measurements: rows.map((m) => ({ ...toMeasurementDto(m), level_percent: levelPercentFor(profile, m.levelCm.toNumber()) })),
+    // Per-row: a null reading stays null here (a gap in the chart), unlike
+    // the "current status" endpoints above which fall back to last-known.
+    measurements: rows.map((m) => ({
+      ...toMeasurementDto(m),
+      level_percent: levelPercentFor(profile, m.levelCm?.toNumber() ?? null),
+    })),
   };
 }
 
