@@ -44,3 +44,7 @@ config.h.local
 
 # Logs
 *.log
+
+# Hardware/KiCad generated files
+hardware-schematic.txt
+hardware/kicad/
