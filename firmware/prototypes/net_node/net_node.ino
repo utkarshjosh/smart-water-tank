@@ -38,8 +38,8 @@
 // ---------------------------------------------------------------------------
 // Configuration (edit these)
 // ---------------------------------------------------------------------------
-#define WIFI_SSID     "Champs"
-#define WIFI_PASS     "@susChamps@11"
+#define WIFI_SSID     "Airtel_Phontuli"
+#define WIFI_PASS     "#@1billu1@#"
 
 #define DEVICE_ID     "tank-01"
 #define DEVICE_ROLE   "tank"        // "tank" or "control"
@@ -51,9 +51,9 @@
 #define DISCOVERY_MAGIC "AQUAMIND_HUB"
 
 // Pins (match sensor_sanity)
-#define TRIG_PIN   D1
-#define ECHO_PIN   D2
-#define TEMP_PIN   D3
+#define TRIG_PIN   5 // D1 
+#define ECHO_PIN   4 // D2
+#define TEMP_PIN   0 // D3
 #define MAX_DISTANCE_CM 400
 #define BURST 10
 
