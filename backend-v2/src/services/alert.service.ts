@@ -28,6 +28,7 @@ export async function processAlertsForMeasurement(
       const levelPercent = computeLevelPercent(levelCm, {
         heightCm: profile.heightCm.toNumber(),
         sensorOffsetCm: profile.sensorOffsetCm.toNumber(),
+        deadZoneCm: profile.deadZoneCm.toNumber(),
       });
 
       if (

@@ -15,13 +15,13 @@ export interface TankProfileDto {
   width_cm: number | null;
   nominal_unit_volume_l: number | null;
   sensor_offset_cm: number;
+  dead_zone_cm: number;
   unit_capacity_l: number;
   total_capacity_l: number;
 }
 
 type Step = 'shape' | 'parallel' | 'dimensions' | 'summary';
 
-const NOMINAL_SIZES = [500, 1000, 2000];
 const STEPS: Array<{ key: Step; label: string }> = [
   { key: 'shape', label: 'Shape' },
   { key: 'parallel', label: 'Units' },
@@ -36,9 +36,8 @@ interface FormState {
   diameterCm: string;
   lengthCm: string;
   widthCm: string;
-  nominalUnitVolumeL: number | null;
-  useExactDimensions: boolean;
   sensorOffsetCm: string;
+  deadZoneCm: string;
 }
 
 function initialFormState(initialData?: TankProfileDto | null): FormState {
@@ -50,9 +49,8 @@ function initialFormState(initialData?: TankProfileDto | null): FormState {
       diameterCm: '',
       lengthCm: '',
       widthCm: '',
-      nominalUnitVolumeL: null,
-      useExactDimensions: false,
       sensorOffsetCm: '0',
+      deadZoneCm: '20',
     };
   }
   return {
@@ -62,15 +60,12 @@ function initialFormState(initialData?: TankProfileDto | null): FormState {
     diameterCm: initialData.diameter_cm != null ? String(initialData.diameter_cm) : '',
     lengthCm: initialData.length_cm != null ? String(initialData.length_cm) : '',
     widthCm: initialData.width_cm != null ? String(initialData.width_cm) : '',
-    nominalUnitVolumeL: initialData.nominal_unit_volume_l,
-    useExactDimensions: initialData.nominal_unit_volume_l == null,
     sensorOffsetCm: String(initialData.sensor_offset_cm),
+    deadZoneCm: initialData.dead_zone_cm != null ? String(initialData.dead_zone_cm) : '20',
   };
 }
 
 function computeUnitCapacityL(form: FormState): number {
-  if (!form.useExactDimensions && form.nominalUnitVolumeL != null) return form.nominalUnitVolumeL;
-
   const height = Number(form.heightCm) || 0;
   if (form.shape === 'cylindrical') {
     const radius = (Number(form.diameterCm) || 0) / 2;
@@ -101,11 +96,9 @@ export function TankSetupWizard({
 
   const canProceedFromDimensions =
     Number(form.heightCm) > 0 &&
-    (form.useExactDimensions
-      ? form.shape === 'cylindrical'
-        ? Number(form.diameterCm) > 0
-        : Number(form.lengthCm) > 0 && Number(form.widthCm) > 0
-      : form.nominalUnitVolumeL != null);
+    (form.shape === 'cylindrical'
+      ? Number(form.diameterCm) > 0
+      : Number(form.lengthCm) > 0 && Number(form.widthCm) > 0);
 
   const save = async () => {
     setSaving(true);
@@ -115,11 +108,12 @@ export function TankSetupWizard({
         shape: form.shape,
         parallel_unit_count: form.parallelUnitCount,
         height_cm: Number(form.heightCm),
-        diameter_cm: form.shape === 'cylindrical' && form.useExactDimensions ? Number(form.diameterCm) : null,
-        length_cm: form.shape === 'cuboidal' && form.useExactDimensions ? Number(form.lengthCm) : null,
-        width_cm: form.shape === 'cuboidal' && form.useExactDimensions ? Number(form.widthCm) : null,
-        nominal_unit_volume_l: form.useExactDimensions ? null : form.nominalUnitVolumeL,
+        diameter_cm: form.shape === 'cylindrical' ? Number(form.diameterCm) : null,
+        length_cm: form.shape === 'cuboidal' ? Number(form.lengthCm) : null,
+        width_cm: form.shape === 'cuboidal' ? Number(form.widthCm) : null,
+        nominal_unit_volume_l: null,
         sensor_offset_cm: Number(form.sensorOffsetCm) || 0,
+        dead_zone_cm: Number(form.deadZoneCm) || 0,
       });
       onComplete();
     } catch (err: any) {
@@ -300,76 +294,42 @@ export function TankSetupWizard({
               />
             </div>
 
-            {!form.useExactDimensions && (
+            {form.shape === 'cylindrical' ? (
               <div className="space-y-2">
-                <p className="text-sm font-semibold text-slate-950 dark:text-white">Nominal tank size</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {NOMINAL_SIZES.map((size) => (
-                    <Button
-                      key={size}
-                      type="button"
-                      variant={form.nominalUnitVolumeL === size ? 'default' : 'outline'}
-                      onClick={() => setForm((f) => ({ ...f, nominalUnitVolumeL: size }))}
-                    >
-                      {size}L
-                    </Button>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  className="text-xs font-medium text-sky-600 hover:underline dark:text-sky-400"
-                  onClick={() => setForm((f) => ({ ...f, useExactDimensions: true }))}
-                >
-                  I'd rather enter exact dimensions
-                </button>
+                <Label htmlFor="diameter-cm">Diameter (cm)</Label>
+                <Input
+                  id="diameter-cm"
+                  type="number"
+                  min={1}
+                  placeholder="e.g. 90"
+                  value={form.diameterCm}
+                  onChange={(e) => setForm((f) => ({ ...f, diameterCm: e.target.value }))}
+                />
               </div>
-            )}
-
-            {form.useExactDimensions && (
-              <div className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-                {form.shape === 'cylindrical' ? (
-                  <div className="space-y-2">
-                    <Label htmlFor="diameter-cm">Diameter (cm)</Label>
-                    <Input
-                      id="diameter-cm"
-                      type="number"
-                      min={1}
-                      placeholder="e.g. 90"
-                      value={form.diameterCm}
-                      onChange={(e) => setForm((f) => ({ ...f, diameterCm: e.target.value }))}
-                    />
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="length-cm">Length (cm)</Label>
-                      <Input
-                        id="length-cm"
-                        type="number"
-                        min={1}
-                        value={form.lengthCm}
-                        onChange={(e) => setForm((f) => ({ ...f, lengthCm: e.target.value }))}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="width-cm">Width (cm)</Label>
-                      <Input
-                        id="width-cm"
-                        type="number"
-                        min={1}
-                        value={form.widthCm}
-                        onChange={(e) => setForm((f) => ({ ...f, widthCm: e.target.value }))}
-                      />
-                    </div>
-                  </div>
-                )}
-                <button
-                  type="button"
-                  className="text-xs font-medium text-sky-600 hover:underline dark:text-sky-400"
-                  onClick={() => setForm((f) => ({ ...f, useExactDimensions: false }))}
-                >
-                  Use a nominal size instead
-                </button>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="length-cm">Length (cm)</Label>
+                  <Input
+                    id="length-cm"
+                    type="number"
+                    min={1}
+                    placeholder="e.g. 100"
+                    value={form.lengthCm}
+                    onChange={(e) => setForm((f) => ({ ...f, lengthCm: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="width-cm">Width (cm)</Label>
+                  <Input
+                    id="width-cm"
+                    type="number"
+                    min={1}
+                    placeholder="e.g. 80"
+                    value={form.widthCm}
+                    onChange={(e) => setForm((f) => ({ ...f, widthCm: e.target.value }))}
+                  />
+                </div>
               </div>
             )}
 
@@ -379,21 +339,41 @@ export function TankSetupWizard({
                 className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
                 onClick={() => setShowAdvanced((v) => !v)}
               >
-                Advanced: sensor mounting offset
+                Advanced: sensor calibration
                 {showAdvanced ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
               </button>
               {showAdvanced && (
-                <div className="mt-2 space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-                  <p className="text-xs text-muted-foreground">
-                    How far below the tank's rim is the sensor mounted? Leave as 0 unless your sensor sits noticeably
-                    below the rim.
-                  </p>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={form.sensorOffsetCm}
-                    onChange={(e) => setForm((f) => ({ ...f, sensorOffsetCm: e.target.value }))}
-                  />
+                <div className="mt-2 space-y-4 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                  <div className="space-y-2">
+                    <Label htmlFor="sensor-offset-cm">Sensor mounting offset (cm)</Label>
+                    <p className="text-xs text-muted-foreground">
+                      How far below the tank's rim is the sensor mounted? Leave as 0 unless your sensor sits noticeably
+                      below the rim.
+                    </p>
+                    <Input
+                      id="sensor-offset-cm"
+                      type="number"
+                      min={0}
+                      placeholder="0"
+                      value={form.sensorOffsetCm}
+                      onChange={(e) => setForm((f) => ({ ...f, sensorOffsetCm: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="dead-zone-cm">Sensor dead zone (cm)</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Minimum distance the ultrasonic sensor can measure. Water closer than this reads as full. Most
+                      SR04-style sensors are ~20-25cm.
+                    </p>
+                    <Input
+                      id="dead-zone-cm"
+                      type="number"
+                      min={0}
+                      placeholder="20"
+                      value={form.deadZoneCm}
+                      onChange={(e) => setForm((f) => ({ ...f, deadZoneCm: e.target.value }))}
+                    />
+                  </div>
                 </div>
               )}
             </div>

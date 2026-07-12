@@ -8,13 +8,18 @@ import { CLAIM_CODE_TTL_MS, generateClaimCode, hashClaimCode } from '../lib/clai
 import { toMeasurementDto } from './device.service';
 import { computeLevelPercent, getTankProfileRaw } from './tank-profile.service';
 
-type TankProfileRaw = { heightCm: { toNumber(): number }; sensorOffsetCm: { toNumber(): number } };
+type TankProfileRaw = {
+  heightCm: { toNumber(): number };
+  sensorOffsetCm: { toNumber(): number };
+  deadZoneCm: { toNumber(): number };
+};
 
 function levelPercentFor(profile: TankProfileRaw | null, levelCm: number | null): number | null {
   if (!profile) return null;
   return computeLevelPercent(levelCm, {
     heightCm: profile.heightCm.toNumber(),
     sensorOffsetCm: profile.sensorOffsetCm.toNumber(),
+    deadZoneCm: profile.deadZoneCm.toNumber(),
   });
 }
 

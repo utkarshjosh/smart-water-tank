@@ -214,6 +214,7 @@ model TankProfile {
   widthCm            Decimal?  @map("width_cm") @db.Decimal(10, 2)
   nominalUnitVolumeL Decimal?  @map("nominal_unit_volume_l") @db.Decimal(10, 2)
   sensorOffsetCm     Decimal   @default(0) @map("sensor_offset_cm") @db.Decimal(10, 2)
+  deadZoneCm         Decimal   @default(25) @map("dead_zone_cm") @db.Decimal(10, 2)
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @updatedAt @map("updated_at")
 

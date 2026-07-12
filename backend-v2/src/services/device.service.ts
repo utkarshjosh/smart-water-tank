@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http-error';
 import { hashClaimCode } from '../lib/claim-code';
 import { createDeviceToken } from '../lib/device-token';
+import { computeVolumeL, getTankProfileRaw } from './tank-profile.service';
 
 export function toMeasurementDto(m: {
   timestamp: Date;
@@ -137,11 +138,34 @@ export async function recordMeasurement(
   device: Device,
   data: MeasurementInput
 ): Promise<{ measurementId: string; config: ConfigDto | null }> {
+  // Canonical volume is computed server-side from the measured level and the
+  // tank's calibration profile, so liters and percent are always derived from
+  // the same geometry and can never disagree on the dashboard. The device-sent
+  // volumeL (computed on-chip from compile-time constants) is only trusted as a
+  // fallback for unprovisioned devices that have no TankProfile yet.
+  const profile = await getTankProfileRaw(device.id);
+  const volumeL = profile
+    ? computeVolumeL(
+        {
+          shape: profile.shape,
+          parallelUnitCount: profile.parallelUnitCount,
+          heightCm: profile.heightCm.toNumber(),
+          diameterCm: profile.diameterCm?.toNumber() ?? null,
+          lengthCm: profile.lengthCm?.toNumber() ?? null,
+          widthCm: profile.widthCm?.toNumber() ?? null,
+          nominalUnitVolumeL: profile.nominalUnitVolumeL?.toNumber() ?? null,
+          sensorOffsetCm: profile.sensorOffsetCm.toNumber(),
+          deadZoneCm: profile.deadZoneCm.toNumber(),
+        },
+        data.levelCm
+      )
+    : data.volumeL;
+
   const measurement = await prisma.measurement.create({
     data: {
       deviceId: device.id,
       levelCm: data.levelCm,
-      volumeL: data.volumeL,
+      volumeL,
       temperatureC: data.temperatureC ?? null,
       batteryV: data.batteryV ?? null,
       rssi: data.rssi ?? null,
@@ -162,7 +186,7 @@ export async function recordMeasurement(
   // Fire-and-forget: the device shouldn't wait on alert delivery.
   processAlertsForMeasurement(device.id, {
     levelCm: data.levelCm,
-    volumeL: data.volumeL,
+    volumeL,
     batteryV: data.batteryV ?? null,
   }).catch((err) => {
     console.error('Error processing alerts:', err);
