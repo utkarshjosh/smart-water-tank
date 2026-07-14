@@ -48,6 +48,9 @@ const measurementSchema = z.object({
   temperature_c: z.number().nullable().optional(),
   battery_v: z.number().optional(),
   rssi: z.number().optional(),
+  // Config version the device currently holds. The server piggybacks the full
+  // config on the response only when this is missing or older than its own.
+  config_version: z.number().int().optional(),
 });
 
 // POST /api/v1/measurements - Device sends sensor data
@@ -63,11 +66,16 @@ router.post(
       temperatureC: validated.temperature_c,
       batteryV: validated.battery_v,
       rssi: validated.rssi,
+      configVersion: validated.config_version,
     });
 
     res.status(201).json({
       success: true,
       measurement_id: result.measurementId,
+      // Always echo the current version so the device can confirm it's in sync
+      // even when no full config is piggybacked.
+      config_version: result.configVersion,
+      // Full merged config included only when the device is stale.
       ...(result.config ? { config: result.config } : {}),
     });
   })

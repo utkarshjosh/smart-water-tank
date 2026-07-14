@@ -6,7 +6,7 @@ import { getAuth } from '../config/firebase';
 import { provisionPersonalTenantAndUser } from './onboarding.service';
 import { CLAIM_CODE_TTL_MS, generateClaimCode, hashClaimCode } from '../lib/claim-code';
 import { toMeasurementDto } from './device.service';
-import { computeLevelPercent, getTankProfileRaw } from './tank-profile.service';
+import { computeLevelPercent, getTankProfileRaw, volumeLForProfile } from './tank-profile.service';
 
 type TankProfileRaw = {
   heightCm: { toNumber(): number };
@@ -145,7 +145,15 @@ export async function listDevicesForTenant(tenantId: string, userId: string) {
         status: device.status,
         firmware_version: device.firmwareVersion,
         last_seen: device.lastSeen,
-        current_volume: latest?.volumeL != null ? latest.volumeL.toNumber() : null,
+        // Volume is derived at read time from the current profile + level (like
+        // level_percent), so profile edits correct it with no re-report/backfill.
+        // No profile -> fall back to the stored snapshot; null level -> null.
+        current_volume:
+          profile != null
+            ? volumeLForProfile(profile, latest?.levelCm?.toNumber() ?? null)
+            : latest?.volumeL != null
+              ? latest.volumeL.toNumber()
+              : null,
         level_percent: levelInfo.level_percent,
         level_percent_stale: levelInfo.level_percent_stale,
         level_percent_as_of: levelInfo.level_percent_as_of,
@@ -175,9 +183,14 @@ export async function getDeviceCurrent(device: Device) {
   ]);
   if (!m) throw new HttpError(404, 'No measurements found');
   const levelInfo = await resolveLevelPercent(device.id, m, profile);
+  const dto = toMeasurementDto(m);
   return {
     device_id: device.deviceId,
-    ...toMeasurementDto(m),
+    ...dto,
+    // Volume is derived at read time from the current profile + level (like
+    // level_percent) instead of echoing the stored column. No profile ->
+    // fall back to the stored snapshot; null level -> null (never 0).
+    volume_l: profile != null ? volumeLForProfile(profile, dto.level_cm) : dto.volume_l,
     level_percent: levelInfo.level_percent,
     level_percent_stale: levelInfo.level_percent_stale,
     level_percent_as_of: levelInfo.level_percent_as_of,
@@ -198,10 +211,16 @@ export async function getDeviceHistory(device: Device, days: number, limit: numb
     device_id: device.deviceId,
     // Per-row: a null reading stays null here (a gap in the chart), unlike
     // the "current status" endpoints above which fall back to last-known.
-    measurements: rows.map((m) => ({
-      ...toMeasurementDto(m),
-      level_percent: levelPercentFor(profile, m.levelCm?.toNumber() ?? null),
-    })),
+    // volume_l is derived at read time from each row's level + the current
+    // profile (like level_percent); no profile -> stored snapshot per row.
+    measurements: rows.map((m) => {
+      const dto = toMeasurementDto(m);
+      return {
+        ...dto,
+        volume_l: profile != null ? volumeLForProfile(profile, dto.level_cm) : dto.volume_l,
+        level_percent: levelPercentFor(profile, m.levelCm?.toNumber() ?? null),
+      };
+    }),
   };
 }
 

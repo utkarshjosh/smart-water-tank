@@ -5,6 +5,7 @@ import { isUniqueConstraintError } from '../lib/prisma-errors';
 import { getAuth } from '../config/firebase';
 import { createDeviceToken } from '../lib/device-token';
 import { toConfigDto } from './device.service';
+import { getTankProfileRaw, volumeLForProfile } from './tank-profile.service';
 
 function toRawUserDto(user: User) {
   return {
@@ -32,11 +33,14 @@ export async function listDevices(filters: { tenantId?: string; status?: DeviceS
 
   return Promise.all(
     devices.map(async (device) => {
-      const latest = await prisma.measurement.findFirst({
-        where: { deviceId: device.id },
-        orderBy: { timestamp: 'desc' },
-        select: { volumeL: true, timestamp: true },
-      });
+      const [latest, profile] = await Promise.all([
+        prisma.measurement.findFirst({
+          where: { deviceId: device.id },
+          orderBy: { timestamp: 'desc' },
+          select: { levelCm: true, volumeL: true, timestamp: true },
+        }),
+        getTankProfileRaw(device.id),
+      ]);
       return {
         id: device.id,
         device_id: device.deviceId,
@@ -46,7 +50,14 @@ export async function listDevices(filters: { tenantId?: string; status?: DeviceS
         status: device.status,
         firmware_version: device.firmwareVersion,
         last_seen: device.lastSeen,
-        current_volume: latest?.volumeL != null ? latest.volumeL.toNumber() : null,
+        // Volume derived at read time from the current profile + level (like
+        // level_percent); no profile -> stored snapshot; null level -> null.
+        current_volume:
+          profile != null
+            ? volumeLForProfile(profile, latest?.levelCm?.toNumber() ?? null)
+            : latest?.volumeL != null
+              ? latest.volumeL.toNumber()
+              : null,
         last_measurement: latest ? latest.timestamp : null,
         created_at: device.createdAt,
       };

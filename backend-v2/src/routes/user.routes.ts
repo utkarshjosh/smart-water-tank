@@ -175,6 +175,22 @@ router.put(
   })
 );
 
+const syncModeSchema = z.object({
+  sync_mode: z.enum(['live', 'piggyback']),
+});
+
+// PUT /api/v1/user/devices/:deviceId/sync-mode - Toggle a device's MQTT config
+// sync mode (live push vs. piggyback). Bumps config version + pushes on change.
+router.put(
+  '/devices/:deviceId/sync-mode',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    const { sync_mode } = syncModeSchema.parse(req.body);
+    const applied = await deviceService.setSyncMode(req.device!, sync_mode);
+    res.json({ sync_mode: applied });
+  })
+);
+
 // GET /api/v1/user/devices/:deviceId/firmware-status - Read-only OTA status
 router.get(
   '/devices/:deviceId/firmware-status',

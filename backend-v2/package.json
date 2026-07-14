@@ -17,7 +17,8 @@
     "seed": "prisma db seed",
     "test": "node --test --require ts-node/register/transpile-only 'src/**/*.test.ts'",
     "typecheck": "tsc --noEmit",
-    "simulate-device": "ts-node --transpile-only scripts/simulate-device.ts"
+    "simulate-device": "ts-node --transpile-only scripts/simulate-device.ts",
+    "mqtt:smoke": "ts-node --transpile-only scripts/mqtt-e2e-smoke.ts"
   },
   "keywords": [],
   "author": "",
@@ -30,6 +31,7 @@
     "dotenv": "^16.3.1",
     "express-rate-limit": "^7.1.5",
     "helmet": "^7.1.0",
+    "mqtt": "^5.10.1",
     "multer": "^1.4.5-lts.1",
     "node-cron": "^3.0.3",
     "zod": "^3.22.4"

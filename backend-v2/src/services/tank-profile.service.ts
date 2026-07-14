@@ -1,6 +1,8 @@
 import { Device, TankProfile } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http-error';
+import { bumpConfigVersion } from '../lib/config-version';
+import { pushConfigToDevice } from '../gateway/registry';
 
 export interface TankProfileInput {
   shape: 'cylindrical' | 'cuboidal';
@@ -94,6 +96,28 @@ export function computeVolumeL(
   return (percent / 100) * computeTotalCapacityL(profile);
 }
 
+// Read-time volume derivation: recompute liters from a raw TankProfile row +
+// a measured levelCm, mirroring how level_percent is resolved at read time.
+// Returns null when there is no profile (caller falls back to the stored
+// snapshot) or when the level is unreadable (never 0).
+export function volumeLForProfile(profile: TankProfile | null, levelCm: number | null): number | null {
+  if (!profile) return null;
+  return computeVolumeL(
+    {
+      shape: profile.shape,
+      parallelUnitCount: profile.parallelUnitCount,
+      heightCm: profile.heightCm.toNumber(),
+      diameterCm: profile.diameterCm?.toNumber() ?? null,
+      lengthCm: profile.lengthCm?.toNumber() ?? null,
+      widthCm: profile.widthCm?.toNumber() ?? null,
+      nominalUnitVolumeL: profile.nominalUnitVolumeL?.toNumber() ?? null,
+      sensorOffsetCm: profile.sensorOffsetCm.toNumber(),
+      deadZoneCm: profile.deadZoneCm.toNumber(),
+    },
+    levelCm
+  );
+}
+
 export function toTankProfileDto(profile: TankProfile) {
   const plain = {
     shape: profile.shape,
@@ -163,6 +187,14 @@ export async function upsertTankProfile(device: Device, input: TankProfileInput)
     create: { deviceId: device.id, ...data },
     update: data,
   });
+
+  // Geometry changed -> device is now stale on its next check-in.
+  await bumpConfigVersion(device.id);
+
+  // Fire-and-forget MQTT push so a live/subscribed device gets the new geometry
+  // immediately. pushConfigToDevice never throws (a down broker is swallowed +
+  // logged), so a broker outage can never break this HTTP response.
+  void pushConfigToDevice(device.id);
 
   return toTankProfileDto(profile);
 }

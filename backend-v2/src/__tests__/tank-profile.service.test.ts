@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeLevelPercent, computeVolumeL } from '../services/tank-profile.service';
+import { computeLevelPercent, computeVolumeL, volumeLForProfile } from '../services/tank-profile.service';
 
 // User's real tank: sensor flush at the full line (s=0), 90 cm column (H=90),
 // 20 cm ultrasonic dead zone (z=20) => levelEmpty=90, levelFullEff=20, span=70.
@@ -67,4 +67,33 @@ test('computeVolumeL: null level stays null, never 0', () => {
 
 test('computeVolumeL: honours parallel unit count', () => {
   assert.equal(computeVolumeL({ ...volProfile, parallelUnitCount: 2 }, 20), 1800);
+});
+
+// Read-time derivation: volumeLForProfile takes a raw TankProfile row (Decimal
+// fields expose .toNumber()) and a measured level. Mirror the same 900 L
+// nameplate cuboid, but as a DB-shaped row.
+const dec = (n: number) => ({ toNumber: () => n });
+const rawProfile = {
+  shape: 'cuboidal',
+  parallelUnitCount: 1,
+  heightCm: dec(90),
+  diameterCm: null,
+  lengthCm: dec(100),
+  widthCm: dec(100),
+  nominalUnitVolumeL: null,
+  sensorOffsetCm: dec(0),
+  deadZoneCm: dec(20),
+} as unknown as import('@prisma/client').TankProfile;
+
+test('volumeLForProfile: derives liters from a raw profile row + level', () => {
+  assert.ok(Math.abs(volumeLForProfile(rawProfile, 50)! - 514.2857) < 1e-3);
+  assert.equal(volumeLForProfile(rawProfile, 20), 900);
+});
+
+test('volumeLForProfile: null level stays null, never 0', () => {
+  assert.equal(volumeLForProfile(rawProfile, null), null);
+});
+
+test('volumeLForProfile: no profile returns null (caller falls back to stored)', () => {
+  assert.equal(volumeLForProfile(null, 50), null);
 });
