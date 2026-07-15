@@ -4,6 +4,7 @@
 
 #include "data_reporter.h"
 #include "config.h"
+#include "tls_client.h"
 #include <ESP8266HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
@@ -15,15 +16,14 @@ static String serverEndpoint = SERVER_ENDPOINT;
 // WiFi clients
 static WiFiClient wifiClient;
 static WiFiClientSecure wifiClientSecure;
+static bool secureReady = false;
 
 namespace DataReporter {
     void init() {
         Serial.println(F("[Reporter] Initializing..."));
         
         #if USE_HTTPS
-        // For testing, accept any certificate
-        // In production, use certificate fingerprint or CA cert
-        wifiClientSecure.setInsecure();
+        secureReady = TlsClient::configure(wifiClientSecure);
         #endif
         
         Serial.printf("[Reporter] Endpoint: %s://%s:%d%s\n",
@@ -36,6 +36,11 @@ namespace DataReporter {
 
     bool send(const SystemState &state) {
         HTTPClient http;
+
+        #if USE_HTTPS
+        if (!secureReady) secureReady = TlsClient::configure(wifiClientSecure);
+        if (!secureReady) return false;
+        #endif
 
         String url = String(USE_HTTPS ? "https://" : "http://") +
                      serverHost + ":" + String(serverPort) + serverEndpoint;
@@ -61,7 +66,12 @@ namespace DataReporter {
         }
         doc["battery_v"] = state.batteryVoltage;
         doc["rssi"] = state.wifiRssi;
-        
+        // Report the config version we currently hold so the server can
+        // piggyback the full config on the response only when we're stale.
+        if (Config::configVersion >= 0) {
+            doc["config_version"] = Config::configVersion;
+        }
+
         String payload;
         serializeJson(doc, payload);
         
@@ -86,13 +96,16 @@ namespace DataReporter {
                 String response = http.getString();
                 Serial.printf("[Reporter] Body: %s\n", response.c_str());
                 
-                // Check for config updates in response
+                // Check for config updates in response. The server always
+                // echoes config_version and includes the full "config" object
+                // only when we're stale (piggyback).
                 JsonDocument respDoc;
                 if (deserializeJson(respDoc, response) == DeserializationError::Ok) {
-                    if (respDoc.containsKey("config")) {
-                        String configJson;
-                        serializeJson(respDoc["config"], configJson);
-                        Config::applyFromJson(configJson.c_str());
+                    if (respDoc["config"].is<JsonObjectConst>()) {
+                        Config::applyServerConfig(respDoc["config"]);
+                    } else if (respDoc["config_version"].is<long>()) {
+                        // Up to date: adopt the echoed version (in-memory).
+                        Config::adoptConfigVersion(respDoc["config_version"].as<long>(), false);
                     }
                 }
                 
@@ -109,6 +122,10 @@ namespace DataReporter {
 
     bool sendBuffered(const char* jsonData) {
         HTTPClient http;
+        #if USE_HTTPS
+        if (!secureReady) secureReady = TlsClient::configure(wifiClientSecure);
+        if (!secureReady) return false;
+        #endif
         
         String url = String(USE_HTTPS ? "https://" : "http://") +
                      serverHost + ":" + String(serverPort) + serverEndpoint;
@@ -131,6 +148,10 @@ namespace DataReporter {
 
     bool checkConfigUpdate() {
         HTTPClient http;
+        #if USE_HTTPS
+        if (!secureReady) secureReady = TlsClient::configure(wifiClientSecure);
+        if (!secureReady) return false;
+        #endif
         
         String url = String(USE_HTTPS ? "https://" : "http://") +
                      serverHost + ":" + String(serverPort) + 
@@ -163,5 +184,4 @@ namespace DataReporter {
         serverEndpoint = path;
     }
 }
-
 

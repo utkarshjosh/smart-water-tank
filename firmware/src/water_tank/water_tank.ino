@@ -29,6 +29,7 @@
 #include "sensor.h"
 #include "alerts.h"
 #include "data_reporter.h"
+#include "mqtt_reporter.h"
 #include "ota_handler.h"
 #include "storage.h"
 
@@ -37,6 +38,11 @@
 // ============================================================================
 
 SystemState state;
+
+#if MQTT_ENABLED
+static uint8_t mqttPublishFailures = 0;
+constexpr uint8_t MQTT_FAILURES_BEFORE_HTTP_FALLBACK = 3;
+#endif
 
 // ============================================================================
 // Setup
@@ -88,8 +94,8 @@ void setup() {
         // A device that's connected to WiFi but never completed pairing has
         // no usable device id/token - send it back into the config portal
         // instead of reporting with an empty token forever.
-        if (!Config::claimed) {
-            Serial.println(F("[WiFi] Device not yet paired, entering config portal..."));
+        if (!Config::isMqttProvisioned()) {
+            Serial.println(F("[WiFi] MQTT provisioning proof missing, entering config portal..."));
             WifiManager::connect(true); // blocks; always restarts the device when it returns
             return;
         }
@@ -97,9 +103,16 @@ void setup() {
         // Initialize OTA after WiFi is connected
         OTAHandler::init();
         
-        // Initialize data reporter
+        // Initialize data reporter (HTTP path; also used as the buffered-data
+        // flush fallback even when MQTT is the primary transport).
         DataReporter::init();
-        
+
+        #if MQTT_ENABLED
+        // MQTT transport: connect, announce, and subscribe to config/cmd.
+        MqttReporter::init();
+        MqttReporter::connect();
+        #endif
+
         // Check for OTA updates immediately after connecting
         // (will also check periodically in loop)
         Serial.println(F("[OTA] Checking for updates on startup..."));
@@ -128,7 +141,14 @@ void loop() {
     
     // Handle OTA updates
     OTAHandler::handle();
-    
+
+    #if MQTT_ENABLED
+    // Service the MQTT link (reconnect + inbound config/cmd) once paired.
+    if (Config::isMqttProvisioned() && state.wifiConnected) {
+        MqttReporter::loop();
+    }
+    #endif
+
     // Check WiFi connection
     if (!WifiManager::isConnected()) {
         if (state.wifiConnected) {
@@ -153,7 +173,7 @@ void loop() {
     // A device that hasn't completed the claim-code pairing flow has no
     // device id/token to report under - never send or buffer telemetry
     // until it's claimed, even if it's technically connected to WiFi.
-    if (Config::claimed) {
+    if (Config::isMqttProvisioned()) {
         unsigned long reportInterval = state.fastReportMode ? FAST_REPORT_INTERVAL_MS : Config::reportIntervalMs;
         if (now - state.lastReport >= reportInterval) {
             if (state.wifiConnected) {
@@ -214,12 +234,38 @@ void takeMeasurement() {
 void reportData() {
     Serial.println(F("[Report] Sending data..."));
 
+    // Transport selection: MQTT when enabled (telemetry carries config_version;
+    // config arrives via the retained config topic), HTTP otherwise.
+#if MQTT_ENABLED
+    bool success = MqttReporter::connected() && MqttReporter::publishTelemetry(state);
+    if (success) {
+        mqttPublishFailures = 0;
+    } else if (mqttPublishFailures < MQTT_FAILURES_BEFORE_HTTP_FALLBACK) {
+        mqttPublishFailures++;
+    }
+
+    // HTTP remains a deliberately bounded recovery transport for Part I. It
+    // is attempted once only after repeated normal MQTT failures, never as a
+    // second permanently active ingestion path.
+    if (!success && mqttPublishFailures >= MQTT_FAILURES_BEFORE_HTTP_FALLBACK) {
+        Serial.println(F("[Report] MQTT failure threshold reached; trying one HTTP recovery send"));
+        success = DataReporter::send(state);
+        mqttPublishFailures = 0;
+    }
+#else
     bool success = DataReporter::send(state);
+#endif
 
     if (success) {
         Serial.println(F("[Report] Data sent successfully"));
+#if MQTT_ENABLED
+        // A broker write is not an application receipt. Keep legacy buffered
+        // readings for the bounded HTTP recovery path; Part II replaces this
+        // with message IDs plus backend commit receipts.
+#else
         // Try to send any buffered data
         Storage::flushBuffer();
+#endif
 
         // Caught up - back off to the normal, slower report cadence
         if (state.fastReportMode && Storage::getBufferCount() == 0) {
@@ -264,4 +310,3 @@ void checkAlerts() {
 
     state.alertActive = alertTriggered;
 }
-

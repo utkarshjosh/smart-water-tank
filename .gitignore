@@ -11,6 +11,8 @@
 *.secret
 *service-account*.json
 backend/firbase-service-account.json
+mosquitto/passwd
+mosquitto/certs/
 
 # Arduino IDE local data
 .arduino-data/

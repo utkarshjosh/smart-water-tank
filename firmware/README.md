@@ -63,6 +63,26 @@ For board settings, edit `config.mk`:
 - Upload speed
 - Debug mode
 
+### Part I production transport
+
+The checked-in firmware defaults to `aquamind-mqtt.utkarshjoshi.com:8883` with
+certificate validation. It contains no Wi-Fi credentials or device token.
+Those are received only through AP claim onboarding. A legacy flash state with
+Wi-Fi plus an HTTP token is deliberately not MQTT-provisioned: it must claim
+again, authenticate to MQTT/TLS, and receive retained configuration before it
+can publish telemetry.
+
+Plain MQTT is only for an explicit local development build, for example:
+
+```bash
+make build MQTT_HOST=192.168.1.10 MQTT_PORT=1883 MQTT_TLS=0
+```
+
+The current `PubSubClient` dependency only supports outbound QoS 0. Do not use
+this binary as the Part I production artifact until that dependency is replaced
+with a client that proves outbound QoS 1 delivery; this is tracked as a launch
+blocker in `plans/mqtt-reliability-next-release.md`.
+
 ## Commands
 
 | Command | Description |
@@ -175,4 +195,3 @@ SERIAL_PORT := /dev/ttyUSB0
 make erase
 make upload
 ```
-

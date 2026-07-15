@@ -4,6 +4,7 @@
 
 #include "ota_handler.h"
 #include "config.h"
+#include "tls_client.h"
 #include <ArduinoOTA.h>
 #include <ESP8266httpUpdate.h>
 #include <ArduinoJson.h>
@@ -83,7 +84,7 @@ namespace OTAHandler {
         {
             // Use secure client for HTTPS
             WiFiClientSecure clientSecure;
-            clientSecure.setInsecure();  // Accept any certificate (for now)
+            if (!TlsClient::configure(clientSecure)) return false;
             HTTPClient http;
             
             // Construct URL: /api/v1/devices/{deviceId}/ota/latest
@@ -142,7 +143,7 @@ namespace OTAHandler {
         
         // Use secure client for HTTPS URLs
         WiFiClientSecure clientSecure;
-        clientSecure.setInsecure();  // Accept any certificate (for now)
+        if (!TlsClient::configure(clientSecure)) return false;
         HTTPClient http;
         
         http.begin(clientSecure, url);
@@ -233,4 +234,3 @@ namespace OTAHandler {
         return true;
     }
 }
-

@@ -89,29 +89,30 @@ namespace Sensor {
         return readings[NUM_SAMPLES / 2];
     }
 
+    // Full nameplate capacity in liters, derived from the RUNTIME geometry
+    // (server-pushed TankProfile, falling back to compile-time TANK_* defines
+    // on first boot). Prefers the server-supplied total_capacity_l when set.
+    float totalCapacityL() {
+        if (Config::totalCapacityL > 0) return Config::totalCapacityL;
+
+        float unitCm3;
+        if (Config::tankShape == "cylindrical") {
+            float radiusCm = Config::diameterCm / 2.0;
+            unitCm3 = PI * radiusCm * radiusCm * Config::heightCm;
+        } else {
+            unitCm3 = Config::lengthCm * Config::widthCm * Config::heightCm;
+        }
+        return (unitCm3 / 1000.0) * (float)Config::parallelUnitCount;
+    }
+
     float calculateVolume(float levelCm) {
-        // Calculate water height from distance reading
-        // levelCm is distance from sensor to water surface
-        // waterHeight = emptyDistance - levelCm
-        
-        float waterHeightCm = Config::levelEmptyCm - levelCm;
-        
-        // Clamp to valid range
-        if (waterHeightCm < 0) waterHeightCm = 0;
-        float maxHeight = Config::levelEmptyCm - Config::levelFullCm;
-        if (waterHeightCm > maxHeight) waterHeightCm = maxHeight;
-        
-        #ifdef TANK_IS_CYLINDRICAL
-            // Cylindrical tank: V = π * r² * h
-            float radiusCm = TANK_DIAMETER_CM / 2.0;
-            float volumeCm3 = PI * radiusCm * radiusCm * waterHeightCm;
-        #else
-            // Rectangular tank: V = L * W * H
-            float volumeCm3 = TANK_LENGTH_CM * TANK_WIDTH_CM * waterHeightCm;
-        #endif
-        
-        // Convert cm³ to liters (1000 cm³ = 1 L)
-        return volumeCm3 / 1000.0;
+        // Clamp-to-full nameplate model (matches the server's computeVolumeL):
+        // volume = fill-percentage * total nameplate capacity. This keeps the
+        // device's local (display-only) liters self-consistent with the
+        // canonical server value derived from the same geometry. The percentage
+        // itself uses the dead-zone clamp-to-full model in getPercentage().
+        float pct = getPercentage(levelCm);   // 0..100
+        return (pct / 100.0) * totalCapacityL();
     }
 
     float readTemperature(bool &valid) {

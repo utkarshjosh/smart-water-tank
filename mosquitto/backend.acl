@@ -1,0 +1,6 @@
+user aquamind-backend
+topic read devices/+/telemetry
+topic read devices/+/announce
+topic read devices/+/ack
+topic write devices/+/config
+topic write devices/+/cmd

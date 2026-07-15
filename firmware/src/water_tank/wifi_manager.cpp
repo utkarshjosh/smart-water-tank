@@ -6,6 +6,7 @@
 #include "wifi_manager.h"
 #include "config.h"
 #include "claim_client.h"
+#include "mqtt_reporter.h"
 #include <ESP8266WiFi.h>
 #include <WiFiManager.h>
 
@@ -95,7 +96,10 @@ namespace WifiManager {
         // Check if we should force the config portal open (either the caller
         // asked for it directly, e.g. an unclaimed device, or we've restarted
         // too many times in a row without ever connecting)
-        if (forceConfigPortal || shouldEnterConfigPortal()) {
+        // A successfully MQTT-provisioned device must never turn a temporary
+        // Wi-Fi/DNS/broker outage into an unattended access point. It retries
+        // and lets the main loop use the bounded recovery policy instead.
+        if (forceConfigPortal || (!Config::isMqttProvisioned() && shouldEnterConfigPortal())) {
             startConfigPortal();
             return false; // Will return after portal closes
         }
@@ -126,9 +130,12 @@ namespace WifiManager {
         }
         
         if (!connected) {
-            // Connection failed, start config portal
-            Serial.println(F("[WiFi] Connection failed, starting config portal..."));
-            startConfigPortal();
+            if (Config::isMqttProvisioned()) {
+                Serial.println(F("[WiFi] Connection failed; staying provisioned for bounded recovery"));
+            } else {
+                Serial.println(F("[WiFi] Connection failed, starting config portal..."));
+                startConfigPortal();
+            }
             return false;
         }
         
@@ -217,10 +224,26 @@ namespace WifiManager {
             bool claimedNow = ClaimClient::claim(claimCode, hardwareId, newDeviceToken, newDeviceId);
 
             if (claimedNow) {
+                // Keep the legacy HTTP-era identity in RAM until the fresh
+                // credential has proven MQTT/TLS and received retained config.
+                const String oldDeviceId = Config::deviceId;
+                const String oldDeviceToken = Config::deviceToken;
+                const bool oldClaimed = Config::claimed;
                 Config::deviceId = newDeviceId;
                 Config::deviceToken = newDeviceToken;
                 Config::claimed = true;
-                break;
+                Config::mqttProvisioned = false;
+
+                MqttReporter::init();
+                if (MqttReporter::verifyProvisioning()) {
+                    break;
+                }
+
+                Config::deviceId = oldDeviceId;
+                Config::deviceToken = oldDeviceToken;
+                Config::claimed = oldClaimed;
+                Config::mqttProvisioned = false;
+                Serial.println(F("[WiFi] MQTT proof failed; keeping legacy credentials"));
             }
 
             Serial.printf("[WiFi] Pairing failed (attempt %d/%d)\n", attempt, MAX_CLAIM_ATTEMPTS);

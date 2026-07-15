@@ -4,6 +4,7 @@
 
 #include "claim_client.h"
 #include "config.h"
+#include "tls_client.h"
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
 #include <WiFiClientSecure.h>
@@ -38,7 +39,7 @@ namespace ClaimClient {
         Serial.printf("[Claim] Claiming device at %s\n", url.c_str());
 
         #if USE_HTTPS
-        wifiClientSecure.setInsecure();
+        if (!TlsClient::configure(wifiClientSecure)) return false;
         http.begin(wifiClientSecure, url);
         #else
         http.begin(wifiClient, url);

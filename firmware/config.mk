@@ -26,6 +26,30 @@ BUILD_FLAGS     := \
     -DFIRMWARE_VERSION=\"$(VERSION)\" \
     -DPROJECT_NAME=\"$(PROJECT_NAME)\"
 
+# Optional command-line compile flags. The checked-in defaults are production
+# MQTT/TLS. Plaintext MQTT is only for an intentional local development build:
+#   make build MQTT_HOST=192.168.1.10 MQTT_PORT=1883 MQTT_TLS=0
+EXTRA_BUILD_FLAGS ?=
+BUILD_FLAGS += $(EXTRA_BUILD_FLAGS)
+
+# MQTT build overrides. These only affect the binary being compiled.
+MQTT_BUILD ?= 1
+MQTT_HOST  ?=
+MQTT_PORT  ?=
+MQTT_TLS   ?=
+ifeq ($(MQTT_BUILD),1)
+    BUILD_FLAGS += -DMQTT_ENABLED=1
+endif
+ifneq ($(MQTT_HOST),)
+    BUILD_FLAGS += -DMQTT_BROKER=\"$(MQTT_HOST)\"
+endif
+ifneq ($(MQTT_PORT),)
+    BUILD_FLAGS += -DMQTT_PORT=$(MQTT_PORT)
+endif
+ifneq ($(MQTT_TLS),)
+    BUILD_FLAGS += -DMQTT_USE_TLS=$(MQTT_TLS)
+endif
+
 # Extra Build Properties (board-specific)
 BUILD_PROPS     := \
     build.flash_size=4M \
@@ -76,5 +100,3 @@ OTA_PASSWORD    :=
 # BOARD_FQBN := esp32:esp32:esp32
 # BOARD_PLATFORM := esp32:esp32
 # PLATFORM_URL := https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
-
-

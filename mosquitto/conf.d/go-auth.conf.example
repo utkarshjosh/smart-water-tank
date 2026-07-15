@@ -1,0 +1,24 @@
+# mosquitto-go-auth native production configuration. Copy to go-auth.conf after
+# installing the plugin. The backend is bound to 127.0.0.1, so the hook is
+# private and no unsupported custom-header option is needed.
+
+auth_plugin /usr/local/lib/mosquitto/go-auth.so
+auth_opt_backends files,http
+auth_opt_check_prefix true
+auth_opt_prefixes files,http
+auth_opt_disable_superuser true
+
+# Backend service account and its ACL are local only.
+auth_opt_files_register user,acl
+auth_opt_files_password_path /etc/mosquitto/auth/passwords
+auth_opt_files_acl_path /etc/mosquitto/auth/backend.acl
+
+# Device credentials and per-topic ACL are verified by backend-v2.
+auth_opt_http_register user,acl
+auth_opt_http_host 127.0.0.1
+auth_opt_http_port 3011
+auth_opt_http_getuser_uri /api/v1/mqtt-auth/user
+auth_opt_http_aclcheck_uri /api/v1/mqtt-auth/acl
+auth_opt_http_response_mode status
+auth_opt_http_params_mode json
+auth_opt_retry_count 1

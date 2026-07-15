@@ -16,7 +16,8 @@ SRC_DIR         := $(FIRMWARE_DIR)/src
 LIB_DIR         := $(FIRMWARE_DIR)/lib
 BUILD_DIR       := $(FIRMWARE_DIR)/build
 SCRIPTS_DIR     := $(FIRMWARE_DIR)/scripts
-SKETCH          := $(SRC_DIR)/$(PROJECT_NAME).ino
+SKETCH_SRC_DIR  := $(SRC_DIR)/$(PROJECT_NAME)
+SKETCH          := $(SKETCH_SRC_DIR)/$(PROJECT_NAME).ino
 SKETCH_DIR      := $(BUILD_DIR)/$(PROJECT_NAME)
 
 # arduino-cli command with config
@@ -55,6 +56,9 @@ compile: check-sketch prepare-sketch
 		--fqbn $(BOARD_FQBN) \
 		--output-dir $(BUILD_DIR) \
 		--libraries $(LIB_DIR) \
+		--build-property compiler.cpp.extra_flags="$(BUILD_FLAGS)" \
+		--build-property compiler.c.extra_flags="$(BUILD_FLAGS)" \
+		$(foreach prop,$(BUILD_PROPS),--build-property $(prop)) \
 		--warnings $(WARNINGS) \
 		$(SKETCH_DIR)
 
@@ -246,6 +250,7 @@ prepare-sketch: check-sketch
 	@mkdir -p $(SKETCH_DIR)
 	@echo "$(CYAN)→ Preparing sketch directory...$(NC)"
 	@cp $(SKETCH) $(SKETCH_DIR)/$(PROJECT_NAME).ino
+	@cp $(SKETCH_SRC_DIR)/*.cpp $(SKETCH_SRC_DIR)/*.h $(SKETCH_DIR)/ 2>/dev/null || true
 	@if [ -d "$(SRC_DIR)/modules" ]; then \
 		cp $(SRC_DIR)/modules/*.cpp $(SRC_DIR)/modules/*.h $(SKETCH_DIR)/ 2>/dev/null || true; \
 	fi
@@ -328,4 +333,6 @@ help:
 	@echo "$(CYAN)Debug Build:$(NC)"
 	@echo "  make build DEBUG=1"
 	@echo ""
-
+	@echo "$(CYAN)Local MQTT Build:$(NC)"
+	@echo "  make build MQTT_BUILD=1 MQTT_HOST=192.168.1.10 MQTT_PORT=1883 MQTT_TLS=0"
+	@echo ""

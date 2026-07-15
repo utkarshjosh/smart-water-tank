@@ -10,6 +10,7 @@
 #define CONFIG_H
 
 #include <Arduino.h>
+#include <ArduinoJson.h>
 
 // ============================================================================
 // Firmware Version
@@ -49,26 +50,61 @@
 // Server Configuration
 // ============================================================================
 
+#ifndef SERVER_HOST
 #define SERVER_HOST         "aquamind-api.utkarshjoshi.com"
+#endif
+#ifndef SERVER_PORT
 #define SERVER_PORT         443
+#endif
+#ifndef SERVER_ENDPOINT
 #define SERVER_ENDPOINT     "/api/v1/measurements"
+#endif
 
 // Device ID and token are no longer hardcoded defaults - a fresh device has
 // neither until it's paired via the claim-code flow in the config portal
 // (see ClaimClient / WifiManager::startConfigPortal).
+#ifndef DEVICE_ID_DEFAULT
 #define DEVICE_ID_DEFAULT   ""
+#endif
+#ifndef DEVICE_TOKEN_DEFAULT
 #define DEVICE_TOKEN_DEFAULT ""
+#endif
 
 // Use HTTPS (recommended)
+#ifndef USE_HTTPS
 #define USE_HTTPS           true
+#endif
 
-// MQTT (alternative to HTTP)
-#define MQTT_ENABLED        false
-#define MQTT_BROKER         "mqtt.your-server.com"
+// MQTT (alternative transport to HTTP). When enabled, telemetry/config flow
+// over MQTT per the Phase 2 wire contract; when disabled the HTTP path is used.
+// Auth is per-device: username = Config::deviceId, password = Config::deviceToken
+// (the same bearer token used for HTTP), so MQTT_USER/MQTT_PASSWORD below are
+// unused for device auth and kept only for reference/testing.
+#ifndef MQTT_ENABLED
+#define MQTT_ENABLED        true
+#endif
+#ifndef MQTT_BROKER
+#define MQTT_BROKER         "aquamind-mqtt.utkarshjoshi.com"
+#endif
+#ifndef MQTT_PORT
 #define MQTT_PORT           8883
+#endif
+// Production builds only use TLS. A local plaintext broker is permitted solely
+// through an explicit development build override.
+#ifndef MQTT_USE_TLS
+#define MQTT_USE_TLS        true
+#endif
+// Topic base per the wire contract: devices/{deviceId}/{telemetry|announce|ack|config|cmd}
+#ifndef MQTT_TOPIC_BASE
+#define MQTT_TOPIC_BASE     "devices"
+#endif
+// Legacy/testing statics (not used for per-device auth).
+#ifndef MQTT_USER
 #define MQTT_USER           ""
+#endif
+#ifndef MQTT_PASSWORD
 #define MQTT_PASSWORD       ""
-#define MQTT_TOPIC          "watertank/device1"
+#endif
 
 // ============================================================================
 // Hardware Pin Configuration
@@ -106,6 +142,14 @@
 
 // Sensor mounting offset (distance from sensor to max water level)
 #define SENSOR_OFFSET_CM        10.0
+
+// Ultrasonic dead zone (min measurable distance; below this the sensor is
+// blind and the reading clamps to full). Fallback only - the server's
+// TankProfile.deadZoneCm overrides this at runtime.
+#define TANK_DEAD_ZONE_CM       25.0
+
+// Number of identical tanks plumbed together as one (fallback only).
+#define TANK_PARALLEL_UNIT_COUNT 1
 
 // Empty/Full calibration
 #define LEVEL_EMPTY_CM          140.0   // Distance when tank is empty
@@ -177,13 +221,42 @@ namespace Config {
     extern float tankFullThreshold;
     extern float tankLowThreshold;
     extern float batteryLowThreshold;
+    // Percentage-based alert thresholds (null on the server => negative here).
+    extern float tankFullThresholdPct;
+    extern float tankLowThresholdPct;
+    // Derived calibration: level_empty_cm = sensorOffset + height (raw distance
+    // when empty); level_full_cm = max(sensorOffset, deadZone) (closest
+    // measurable distance). The server sends these directly; on first boot they
+    // fall back to the compile-time LEVEL_* defines.
     extern float levelEmptyCm;
     extern float levelFullCm;
-    
+
+    // ---- Runtime tank geometry (Phase 2) ---------------------------------
+    // These OVERRIDE the compile-time TANK_* #defines once the server pushes a
+    // config payload. The #defines are only first-boot fallbacks.
+    extern String tankShape;          // "cylindrical" | "cuboidal"
+    extern float  diameterCm;         // cylindrical cross-section
+    extern float  lengthCm;           // cuboidal
+    extern float  widthCm;            // cuboidal
+    extern float  heightCm;           // full water column height
+    extern float  sensorOffsetCm;     // gap sensor -> full-water line
+    extern float  deadZoneCm;         // ultrasonic dead zone
+    extern int    parallelUnitCount;  // identical tanks plumbed as one
+    // Server-supplied total capacity (liters). <= 0 means "compute locally".
+    extern float  totalCapacityL;
+
+    // ---- Config sync/versioning (Phase 2) --------------------------------
+    // Monotonic version of the config the device currently holds. -1 = never
+    // synced. Reported in telemetry/announce so the server's piggyback stale
+    // check works end-to-end.
+    extern long   configVersion;
+    // MQTT sync mode advertised by the server: "piggyback" | "live".
+    extern String syncMode;
+
     // WiFi credentials (configurable via portal)
     extern String wifiSsid;
     extern String wifiPassword;
-    
+
     // Device identification (configurable via portal)
     extern String deviceId;
     extern String deviceToken;
@@ -192,21 +265,44 @@ namespace Config {
     // a fresh device or after a factory reset (long-press).
     extern bool claimed;
 
+    // A claim is not sufficient to use MQTT: a production broker proof and a
+    // retained-config round trip must complete before normal telemetry starts.
+    extern bool mqttProvisioned;
+    extern String mqttBrokerHost;
+    extern int mqttCredentialSchemaVersion;
+
     // Load config from flash
     void load();
-    
+
     // Save config to flash
     void save();
-    
+
     // Reset to defaults
     void reset();
-    
-    // Apply config from JSON (for remote updates)
+
+    // Apply config from a raw JSON string (deserializes, then applyServerConfig).
+    // Used by the HTTP path (measurement response / GET /config).
     bool applyFromJson(const char* json);
-    
+
+    // Apply an already-parsed server config object (the buildDeviceConfig
+    // payload: operational + geometry + config_version + sync_mode). Persists
+    // to flash. Used by both the HTTP and MQTT config paths.
+    bool applyServerConfig(JsonVariantConst config, bool persist = true);
+
+    // Adopt just the config_version echoed by the server (no full payload).
+    // In-memory only unless it differs and `persist` is true.
+    void adoptConfigVersion(long version, bool persist = false);
+
+    // True only for the exact production MQTT endpoint and schema supported by
+    // this image. Legacy HTTP-era config deliberately returns false.
+    bool isMqttProvisioned();
+
+    // Commit MQTT readiness only after MqttReporter has authenticated and
+    // applied retained config. This persists all claim/config fields together.
+    void markMqttProvisioned();
+
     // Get OTA hostname (uses deviceId)
     String getOtaHostname();
 }
 
 #endif // CONFIG_H
-

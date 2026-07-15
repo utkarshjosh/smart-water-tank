@@ -26,11 +26,18 @@ namespace Sensor {
     float readWaterLevel(bool &valid);
     
     /**
-     * Calculate water volume from level
+     * Calculate water volume from level (nameplate clamp-to-full model, using
+     * the runtime geometry). Local/display use only - the server computes the
+     * canonical volume.
      * @param levelCm Distance reading in cm
      * @return Volume in liters
      */
     float calculateVolume(float levelCm);
+
+    /**
+     * Full nameplate capacity in liters from the runtime geometry.
+     */
+    float totalCapacityL();
     
     /**
      * Read temperature

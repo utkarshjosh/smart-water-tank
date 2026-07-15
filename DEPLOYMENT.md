@@ -552,6 +552,87 @@ pm2 status
 
 ---
 
+## Step 11: MQTT Broker (native Mosquitto) — device transport
+
+The production broker runs as the native Ubuntu `mosquitto` systemd service on
+the same host as `backend-v2`; it is not containerized. `1883` is loopback-only
+for the backend, while devices use TLS on public `8883`.
+
+### 11.1 Install and configure
+
+```bash
+sudo apt-get update
+sudo apt-get install -y mosquitto mosquitto-clients
+
+# Install the tracked templates. Generate passwords and certificates on the
+# server; neither is committed to git.
+sudo install -m 0644 mosquitto/mosquitto.conf /etc/mosquitto/mosquitto.conf
+sudo install -D -m 0644 mosquitto/conf.d/go-auth.conf /etc/mosquitto/conf.d/go-auth.conf
+sudo install -D -m 0644 mosquitto/backend.acl /etc/mosquitto/auth/backend.acl
+```
+
+Build `mosquitto-go-auth` for the server architecture and install its shared
+object at `/usr/local/lib/mosquitto/go-auth.so`. Create
+`/etc/mosquitto/auth/passwords` in the plugin's PBKDF2 format for the backend
+service account, owned by `root:mosquitto` and not readable by other users.
+
+Copy the active Certbot `fullchain.pem` and `privkey.pem` to
+`/etc/mosquitto/certs/` with `root:mosquitto` ownership; `privkey.pem` must be
+mode `0640`. Add a Certbot deploy hook that refreshes those copies and runs
+`systemctl reload mosquitto`. The private key must never be inside this repo.
+
+Enable public TCP `8883` in both the cloud security rule and host firewall.
+Keep public `1883` closed. Confirm the listeners and service after each change:
+
+```bash
+sudo systemctl enable --now mosquitto
+sudo systemctl status mosquitto --no-pager
+sudo ss -ltnp | grep -E ':(1883|8883)'
+sudo journalctl -u mosquitto -n 50 --no-pager
+```
+
+### 11.2 Topics (JSON payloads; `{id}` = deviceId)
+| Topic | Direction | Retained | `type` |
+|---|---|---|---|
+| `devices/{id}/announce`  | device → server | no  | `announce` |
+| `devices/{id}/telemetry` | device → server | no  | `telemetry` |
+| `devices/{id}/ack`       | device → server | no  | `ack` |
+| `devices/{id}/config`    | server → device | **yes** | `config` (QoS 1) |
+| `devices/{id}/cmd`       | server → device | no  | `cmd` |
+
+### 11.3 Authentication and backend settings
+- **Devices**: connect with `username = deviceId`, `password = <device bearer
+  token>` (the same token as HTTP `deviceAuth`). Mosquitto validates via the
+  mosquitto-go-auth HTTP backend, which POSTs to the backend's
+  `POST /api/v1/mqtt-auth/user` → `verifyDeviceCredentials()` (same
+  `hashToken` + `DeviceToken` lookup as HTTP auth). Topic ACLs
+  (`POST /api/v1/mqtt-auth/acl`) confine each device to `devices/{deviceId}/#`.
+- **Backend**: connects using the static credentials in
+  `/etc/mosquitto/auth/passwords`. Its ACL is the server-local
+  `/etc/mosquitto/auth/backend.acl`.
+- **Auth hook**: the production API binds to `127.0.0.1:3011`; go-auth calls it
+  directly. Nginx must return `404` for public `/api/v1/mqtt-auth/*` routes.
+  `MQTT_AUTH_HOOK_SECRET` remains available as defence in depth for any future
+  non-loopback deployment, but go-auth has no arbitrary-header option.
+
+### 11.4 Backend `.env`
+
+On this colocated deployment the backend uses loopback plaintext MQTT; the
+public device listener remains TLS-only:
+
+```bash
+MQTT_URL=mqtt://127.0.0.1:1883
+MQTT_USERNAME=aquamind-backend
+MQTT_PASSWORD=<the password you set above>
+API_BIND_HOST=127.0.0.1
+```
+
+After deployment, run `npm run mqtt:smoke` locally on the server and verify the
+measurement through the authenticated API. The broker must retain config across
+both a Mosquitto restart and a backend restart.
+
+---
+
 ## Additional Considerations
 
 ### 1. **Environment-Specific Configurations**
@@ -683,7 +764,6 @@ For issues or questions:
 - Check PM2 logs: `pm2 logs`
 - Check Nginx logs: `/var/log/nginx/`
 - Check system logs: `journalctl -u nginx` or `journalctl -u postgresql`
-
 
 
 
