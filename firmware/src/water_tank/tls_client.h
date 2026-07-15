@@ -85,6 +85,11 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
     // refusing TLS; never fall back to insecure certificate verification.
     constexpr unsigned long TIME_SYNC_ATTEMPT_MS = 15000;
     constexpr uint8_t TIME_SYNC_ATTEMPTS = 3;
+    // Several clients (HTTP recovery, MQTT, OTA) may ask for TLS during one
+    // boot. After one 45-second NTP failure, do not immediately spend another
+    // full window before the duty-cycle awake budget can put the device back to
+    // sleep. A later reconnect in always-on mode can retry after this cooldown.
+    constexpr unsigned long TIME_SYNC_FAILURE_COOLDOWN_MS = 60000;
 
     // ESP8266 BearSSL defaults to a 16 KiB receive buffer, which cannot be
     // allocated reliably after WiFiManager's provisioning portal. The broker
@@ -95,6 +100,12 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
 
     inline bool ensureClock() {
         if (time(nullptr) >= MIN_VALID_EPOCH) return true;
+
+        static unsigned long lastFailedSyncAt = 0;
+        if (lastFailedSyncAt != 0 && millis() - lastFailedSyncAt < TIME_SYNC_FAILURE_COOLDOWN_MS) {
+            Serial.println(F("[TLS] Clock sync cooldown active"));
+            return false;
+        }
 
         for (uint8_t attempt = 1; attempt <= TIME_SYNC_ATTEMPTS; ++attempt) {
             Serial.printf("[TLS] Syncing clock via NTP (attempt %u/%u)...\n", attempt, TIME_SYNC_ATTEMPTS);
@@ -108,6 +119,7 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
                 return true;
             }
         }
+        lastFailedSyncAt = millis();
         Serial.println(F("[TLS] Clock sync failed; refusing unverified TLS"));
         return false;
     }

@@ -31,6 +31,7 @@
 #include "data_reporter.h"
 #include "mqtt_reporter.h"
 #include "ota_handler.h"
+#include "power_manager.h"
 #include "storage.h"
 
 // ============================================================================
@@ -42,6 +43,42 @@ SystemState state;
 #if MQTT_ENABLED
 static uint8_t mqttPublishFailures = 0;
 constexpr uint8_t MQTT_FAILURES_BEFORE_HTTP_FALLBACK = 3;
+#endif
+
+static bool reportData();
+
+#if ENABLE_DEEP_SLEEP
+static void runDutyCycle() {
+    // We reached this point only after Wi-Fi, config, and transport modules
+    // have initialized. One normal wake reports once, keeps a short receive
+    // window for retained config/commands, then sleeps regardless of outcome.
+    const bool delivered = reportData();
+
+    if (delivered && !PowerManager::awakeBudgetExceeded()) {
+        const unsigned long receiveStarted = millis();
+        while (millis() - receiveStarted < POST_PUBLISH_RECEIVE_MS && !PowerManager::awakeBudgetExceeded()) {
+            OTAHandler::handle();
+            #if MQTT_ENABLED
+            MqttReporter::loop();
+            #endif
+            delay(10);
+        }
+
+        // OTA is deliberately deferred until after telemetry and config are
+        // complete. The RTC scheduler prevents a check on every wake.
+        if (PowerManager::otaCheckDue() && !PowerManager::awakeBudgetExceeded()) {
+            Serial.println(F("[OTA] Scheduled update check..."));
+            PowerManager::markOtaCheckAttempted();
+            OTAHandler::checkForUpdate();
+        }
+    }
+
+    #if MQTT_ENABLED
+    MqttReporter::disconnect();
+    #endif
+    PowerManager::finishCycle(delivered);
+    PowerManager::sleepUntilNextCycle(Config::reportIntervalMs);
+}
 #endif
 
 // ============================================================================
@@ -64,6 +101,7 @@ void setup() {
     // Initialize modules
     Storage::init();
     Config::load();
+    PowerManager::init();
     
     Sensor::init();
     Alerts::init();
@@ -113,16 +151,29 @@ void setup() {
         MqttReporter::connect();
         #endif
 
-        // Check for OTA updates immediately after connecting
-        // (will also check periodically in loop)
-        Serial.println(F("[OTA] Checking for updates on startup..."));
-        OTAHandler::checkForUpdate();
-        state.lastOtaCheck = millis();
+        #if ENABLE_DEEP_SLEEP
+        runDutyCycle();
+        return; // ESP.deepSleep() does not return; keeps static analysis sane.
+        #else
+        // RTC scheduling prevents an OTA HTTP request on every reboot.
+        if (PowerManager::otaCheckDue()) {
+            Serial.println(F("[OTA] Scheduled update check..."));
+            PowerManager::markOtaCheckAttempted();
+            OTAHandler::checkForUpdate();
+            state.lastOtaCheck = millis();
+        }
+        #endif
     } else {
         // If connect() returns false, it might have started config portal
         // Config portal will restart the device when done, so we won't reach here
         Serial.println(F("[WiFi] Connection failed, will retry..."));
         state.wifiConnected = false;
+        #if ENABLE_DEEP_SLEEP
+        Storage::bufferMeasurement(state);
+        PowerManager::finishCycle(false);
+        PowerManager::sleepUntilNextCycle(Config::reportIntervalMs);
+        return;
+        #endif
     }
     
     // Play startup sound
@@ -186,9 +237,10 @@ void loop() {
         }
     }
     
-    // Check for OTA updates at configured interval
-    if (state.wifiConnected && (now - state.lastOtaCheck >= OTA_CHECK_INTERVAL_MS)) {
+    // RTC scheduling survives reboot/deep sleep, unlike millis().
+    if (state.wifiConnected && PowerManager::otaCheckDue()) {
         Serial.println(F("[OTA] Periodic update check..."));
+        PowerManager::markOtaCheckAttempted();
         OTAHandler::checkForUpdate();
         state.lastOtaCheck = now;
     }
@@ -231,7 +283,7 @@ void takeMeasurement() {
     );
 }
 
-void reportData() {
+static bool reportData() {
     Serial.println(F("[Report] Sending data..."));
 
     // Transport selection: MQTT when enabled (telemetry carries config_version;
@@ -247,7 +299,7 @@ void reportData() {
     // HTTP remains a deliberately bounded recovery transport for Part I. It
     // is attempted once only after repeated normal MQTT failures, never as a
     // second permanently active ingestion path.
-    if (!success && mqttPublishFailures >= MQTT_FAILURES_BEFORE_HTTP_FALLBACK) {
+    if (!success && (mqttPublishFailures >= MQTT_FAILURES_BEFORE_HTTP_FALLBACK || PowerManager::httpRecoveryDue())) {
         Serial.println(F("[Report] MQTT failure threshold reached; trying one HTTP recovery send"));
         success = DataReporter::send(state);
         mqttPublishFailures = 0;
@@ -276,6 +328,8 @@ void reportData() {
         Serial.println(F("[Report] Failed to send, buffering locally"));
         Storage::bufferMeasurement(state);
     }
+
+    return success;
 }
 
 void checkAlerts() {

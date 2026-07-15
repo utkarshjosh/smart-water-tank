@@ -934,6 +934,11 @@ release notes and removed in Part II.
 - Use a hardware-tested MQTT client/configuration that can publish at QoS 1 and
   expose delivery completion before sleep. The device must not interpret a local
   socket write alone as broker acceptance.
+- The firmware now contains the bounded normal wake path behind an explicit
+  deep-sleep build flag: 90-second awake budget, retained-config receive window,
+  six-hour RTC-backed OTA schedule, and one HTTPS recovery attempt after two
+  failed MQTT wake cycles. Keep the flag off until GPIO16-to-RST wiring and the
+  power budget are measured on the exact installed hardware.
 - Implement the bounded normal wake cycle:
 
   ```text

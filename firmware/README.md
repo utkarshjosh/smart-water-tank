@@ -82,6 +82,21 @@ The firmware uses `ArduinoMqttClient` for outbound QoS 1. Telemetry, announce,
 and acknowledgement publishes count as successful only after Mosquitto returns
 the corresponding PUBACK; a local socket write is not enough.
 
+### Opt-in duty-cycle mode
+
+The checked-in binary stays always-on by default. Enable deep sleep only after
+verifying GPIO16/D0 is physically wired to RST on the installed ESP8266:
+
+```bash
+make build EXTRA_BUILD_FLAGS=-DENABLE_DEEP_SLEEP=1
+```
+
+In this mode each normal wake has a 90-second maximum budget: it samples,
+connects, applies retained config, waits for telemetry PUBACK, receives for
+1.5 seconds, optionally performs the six-hour OTA check, then sleeps. Failed
+network wakes back off from one minute to one hour; the third consecutive MQTT
+failure attempts HTTPS recovery once before sleeping.
+
 ## Commands
 
 | Command | Description |

@@ -227,6 +227,10 @@ namespace MqttReporter {
 
     bool connected() { return mqtt.connected(); }
 
+    void disconnect() {
+        if (mqtt.connected()) mqtt.stop();
+    }
+
     bool publishTelemetry(const SystemState &state) {
         if (!mqtt.connected()) return false;
 

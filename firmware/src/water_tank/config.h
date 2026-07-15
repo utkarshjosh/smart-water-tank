@@ -187,7 +187,19 @@
 #define FAST_REPORT_INTERVAL_MS     20000   // 20 seconds
 
 // How often to check for OTA updates (milliseconds)
-#define OTA_CHECK_INTERVAL_MS       3600000  // 1 hour
+#define OTA_CHECK_INTERVAL_MS       21600000 // 6 hours
+
+// Power-safe normal mode. Deep sleep on ESP8266 requires GPIO16 (D0) wired to
+// RST; leave it disabled until that exact hardware wiring is verified. The
+// duty-cycle code is compiled either way, but only an explicit build flag such
+// as `EXTRA_BUILD_FLAGS=-DENABLE_DEEP_SLEEP=1` can put the board to sleep.
+#ifndef ENABLE_DEEP_SLEEP
+#define ENABLE_DEEP_SLEEP           0
+#endif
+#define MAX_AWAKE_TIME_MS           90000
+#define POST_PUBLISH_RECEIVE_MS     1500
+#define MIN_SLEEP_INTERVAL_MS       60000
+#define MAX_FAILURE_SLEEP_MS        3600000
 
 // Sensor stabilization delay
 #define SENSOR_WARMUP_MS            100

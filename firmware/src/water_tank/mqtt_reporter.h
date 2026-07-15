@@ -40,6 +40,9 @@ namespace MqttReporter {
     // True when connected to the broker.
     bool connected();
 
+    // End the current session before an intentional duty-cycle sleep.
+    void disconnect();
+
     // Publish a telemetry frame for the current state. Never sends liters
     // (the server computes canonical volume). Returns true only after PUBACK.
     bool publishTelemetry(const SystemState &state);
