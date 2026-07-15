@@ -5,6 +5,11 @@ dotenv.config();
 export const env = {
   port: parseInt(process.env.PORT || '3000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
+  // In production the API is served publicly by Nginx. Keep the Node process
+  // on loopback so broker-only routes are never reachable directly from the
+  // internet. Development remains convenient with the normal all-interface
+  // bind unless API_BIND_HOST is set explicitly.
+  apiBindHost: process.env.API_BIND_HOST || (process.env.NODE_ENV === 'production' ? '127.0.0.1' : undefined),
   corsOrigin: process.env.CORS_ORIGIN,
   apiBaseUrl: process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3000}`,
   firmwareStoragePath: process.env.FIRMWARE_STORAGE_PATH || './storage/firmware',

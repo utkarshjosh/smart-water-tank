@@ -20,17 +20,24 @@ import { verifyDeviceCredentials } from '../lib/device-token';
 
 const router = express.Router();
 
-// Optional shared-secret guard so only the broker can reach these endpoints.
-// If MQTT_AUTH_HOOK_SECRET is unset, calls are accepted (rely on network
-// isolation between broker and backend).
+function isLoopbackRequest(req: Request): boolean {
+  const address = req.socket.remoteAddress;
+  return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
+}
+
+// Mosquitto-go-auth's HTTP backend does not support arbitrary static request
+// headers. A local broker is therefore trusted by its loopback connection;
+// production binds Node to loopback and Nginx must not proxy this route. The
+// shared secret remains useful for any non-loopback deployment or test setup.
 function requireHookSecret(req: Request, res: Response, next: NextFunction): void {
-  const secret = env.mqttAuthHookSecret;
-  if (!secret) {
+  if (isLoopbackRequest(req)) {
     next();
     return;
   }
+
+  const secret = env.mqttAuthHookSecret;
   const provided = req.headers['x-broker-auth'];
-  if (provided !== secret) {
+  if (!secret || provided !== secret) {
     res.status(403).json({ Ok: false, Error: 'forbidden' });
     return;
   }
@@ -73,15 +80,15 @@ router.post(
 const aclSchema = z.object({
   username: z.string().min(1),
   topic: z.string().min(1),
-  // acc / clientid are provided by the broker but the only rule we enforce is
-  // topic-subtree ownership, so they are accepted-but-unused.
-  acc: z.number().optional(),
+  // Mosquitto access values: 1 read, 2 write, 3 read/write, 4 subscribe.
+  acc: z.number().int().min(1).max(4),
   clientid: z.string().optional(),
 });
 
-// POST /api/v1/mqtt-auth/acl - a device may only touch its own subtree
-// devices/{deviceId}/# (deviceId == its broker username). This stops one
-// authenticated device from reading/publishing another device's topics.
+// POST /api/v1/mqtt-auth/acl - devices get only the exact transport topics
+// they need: publish telemetry/announce/ack; read or subscribe config/cmd.
+// This prevents a device from overwriting its retained config or sending a
+// command, while also preventing cross-device access.
 router.post(
   '/acl',
   asyncHandler(async (req: Request, res: Response) => {
@@ -91,9 +98,15 @@ router.post(
       res.status(403).json({ Ok: false, Error: 'bad acl request' });
       return;
     }
-    const prefix = `devices/${parsed.data.username}/`;
-    if (!parsed.data.topic.startsWith(prefix)) {
-      res.status(403).json({ Ok: false, Error: 'topic outside device subtree' });
+    const { username, topic, acc } = parsed.data;
+    const base = `devices/${username}`;
+    const deviceWrites = new Set([`${base}/telemetry`, `${base}/announce`, `${base}/ack`]);
+    const deviceReads = new Set([`${base}/config`, `${base}/cmd`]);
+    const allowed = (acc === 2 && deviceWrites.has(topic)) ||
+      ((acc === 1 || acc === 4) && deviceReads.has(topic));
+
+    if (!allowed) {
+      res.status(403).json({ Ok: false, Error: 'topic access denied' });
       return;
     }
     res.status(200).json({ Ok: true });

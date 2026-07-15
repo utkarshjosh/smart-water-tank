@@ -99,13 +99,20 @@ function startMqttIfConfigured(): void {
   }
 }
 
-app.listen(env.port, () => {
+function onServerListening(): void {
   console.log(`Server running on port ${env.port}`);
+  if (env.apiBindHost) console.log(`Server bound to ${env.apiBindHost}`);
   console.log(`Environment: ${env.nodeEnv}`);
 
   startCronJobs();
   startMqttIfConfigured();
-});
+}
+
+if (env.apiBindHost) {
+  app.listen(env.port, env.apiBindHost, onServerListening);
+} else {
+  app.listen(env.port, onServerListening);
+}
 
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully');
