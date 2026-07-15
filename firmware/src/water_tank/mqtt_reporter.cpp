@@ -4,42 +4,55 @@
 
 #include "mqtt_reporter.h"
 #include "config.h"
-#include "sensor.h"
 #include "tls_client.h"
 #include <ESP8266WiFi.h>
 #include <WiFiClientSecure.h>
-#include <PubSubClient.h>
+#include <ArduinoMqttClient.h>
 #include <ArduinoJson.h>
 
-// Transport clients: TLS on 8883 (prod), plain otherwise. Both are declared;
-// only the selected one is wired into PubSubClient at init().
+// TLS on 8883 is the production transport. Plain MQTT is available only via
+// an explicit local-development build override.
 static WiFiClientSecure secureClient;
 static WiFiClient plainClient;
-static PubSubClient mqtt;
+static MqttClient mqtt(plainClient);
 
-// Larger than PubSubClient's 256B default so a full retained config payload
-// (operational + geometry + version) fits in a single frame.
+// The merged retained config must fit in this bounded buffer. Rejecting an
+// oversize server frame is safer than exhausting ESP8266 heap.
 #define MQTT_BUFFER_SIZE 1024
+static char inboundPayload[MQTT_BUFFER_SIZE + 1];
 
-// Throttle reconnect attempts so a down broker never busy-loops.
+// ArduinoMqttClient waits for PUBACK in endMessage() for QoS 1. This timeout
+// bounds the delivery proof window.
+#define MQTT_CONNECTION_TIMEOUT_MS 8000
+#define MQTT_KEEP_ALIVE_MS 60000
 #define MQTT_RECONNECT_INTERVAL_MS 5000
+
 static unsigned long lastConnectAttempt = 0;
 static bool tlsReady = false;
 static bool receivedRetainedConfig = false;
 static bool provisioningAttempt = false;
 
-// ---- topic helpers ---------------------------------------------------------
-static String topicBase() {
-    return String(MQTT_TOPIC_BASE) + "/" + Config::deviceId;
-}
+static String topicBase() { return String(MQTT_TOPIC_BASE) + "/" + Config::deviceId; }
 static String topicTelemetry() { return topicBase() + "/telemetry"; }
-static String topicAnnounce()  { return topicBase() + "/announce"; }
-static String topicAck()       { return topicBase() + "/ack"; }
-static String topicConfig()    { return topicBase() + "/config"; }
-static String topicCmd()       { return topicBase() + "/cmd"; }
+static String topicAnnounce() { return topicBase() + "/announce"; }
+static String topicAck() { return topicBase() + "/ack"; }
+static String topicConfig() { return topicBase() + "/config"; }
+static String topicCmd() { return topicBase() + "/cmd"; }
 
-// ---- outbound frames -------------------------------------------------------
-static void publishAnnounce() {
+static bool publishJson(const String& topic, const String& payload, bool retain = false) {
+    if (!mqtt.connected() || !mqtt.beginMessage(topic, retain, 1)) return false;
+    if (mqtt.print(payload) != payload.length()) {
+        mqtt.stop();
+        return false;
+    }
+
+    // QoS 1 succeeds only after the broker has returned the matching PUBACK.
+    const bool acknowledged = mqtt.endMessage();
+    if (!acknowledged) Serial.printf("[MQTT] publish not acknowledged: %s\n", topic.c_str());
+    return acknowledged;
+}
+
+static bool publishAnnounce() {
     JsonDocument d;
     d["type"] = "announce";
     d["id"] = Config::deviceId;
@@ -55,11 +68,12 @@ static void publishAnnounce() {
 
     String payload;
     serializeJson(d, payload);
-    mqtt.publish(topicAnnounce().c_str(), payload.c_str());
-    Serial.printf("[MQTT] announce -> %s\n", topicAnnounce().c_str());
+    const bool ok = publishJson(topicAnnounce(), payload);
+    Serial.printf("[MQTT] announce -> %s (%s)\n", topicAnnounce().c_str(), ok ? "PUBACK" : "failed");
+    return ok;
 }
 
-static void publishAck(const char* cmd, bool ok, const char* msg) {
+static bool publishAck(const char* cmd, bool ok, const char* msg) {
     JsonDocument d;
     d["type"] = "ack";
     d["id"] = Config::deviceId;
@@ -69,41 +83,50 @@ static void publishAck(const char* cmd, bool ok, const char* msg) {
 
     String payload;
     serializeJson(d, payload);
-    mqtt.publish(topicAck().c_str(), payload.c_str());
+    return publishJson(topicAck(), payload);
 }
 
-// ---- inbound handling ------------------------------------------------------
 static void handleCmd(JsonVariantConst d) {
     const char* cmd = d["cmd"] | "";
     Serial.printf("[MQTT] cmd: %s\n", cmd);
 
     if (!strcmp(cmd, "getConfig")) {
-        // The server owns the retained config; we simply confirm our version.
         char msg[32];
         snprintf(msg, sizeof(msg), "config_version=%ld", Config::configVersion);
         publishAck("getConfig", true, msg);
     } else {
-        // Part I deliberately has no remotely executable commands. Retaining
-        // the acknowledgement makes an accidental command observable without
-        // widening the physical device's attack surface.
+        // Part I intentionally does not run remotely executable commands.
         publishAck(cmd, false, "commands disabled in Part I");
     }
 }
 
-static void onMessage(char* topic, byte* payload, unsigned int length) {
+static void onMessage(int messageSize) {
+    const String topic = mqtt.messageTopic();
+    if (messageSize < 0 || messageSize > MQTT_BUFFER_SIZE) {
+        Serial.printf("[MQTT] drop oversized frame on %s (%d bytes)\n", topic.c_str(), messageSize);
+        while (mqtt.available()) mqtt.read();
+        return;
+    }
+
+    const size_t expected = static_cast<size_t>(messageSize);
+    const size_t read = mqtt.read(reinterpret_cast<uint8_t*>(inboundPayload), expected);
+    if (read != expected) {
+        Serial.printf("[MQTT] drop incomplete frame on %s (%u/%u bytes)\n",
+            topic.c_str(), static_cast<unsigned>(read), static_cast<unsigned>(expected));
+        while (mqtt.available()) mqtt.read();
+        return;
+    }
+    inboundPayload[read] = '\0';
+
     JsonDocument d;
-    DeserializationError err = deserializeJson(d, payload, length);
+    DeserializationError err = deserializeJson(d, inboundPayload, read);
     if (err) {
-        Serial.printf("[MQTT] drop malformed frame on %s: %s\n", topic, err.c_str());
+        Serial.printf("[MQTT] drop malformed frame on %s: %s\n", topic.c_str(), err.c_str());
         return;
     }
 
     const char* type = d["type"] | "";
-    String t(topic);
-
-    if (t == topicConfig() || !strcmp(type, "config")) {
-        // Retained/live config push: apply the merged buildDeviceConfig payload
-        // and adopt its config_version.
+    if (topic == topicConfig() || !strcmp(type, "config")) {
         if (d["config"].is<JsonObjectConst>()) {
             receivedRetainedConfig = Config::applyServerConfig(d["config"], !provisioningAttempt);
         } else {
@@ -112,7 +135,7 @@ static void onMessage(char* topic, byte* payload, unsigned int length) {
     } else if (!strcmp(type, "cmd")) {
         handleCmd(d.as<JsonVariantConst>());
     } else {
-        Serial.printf("[MQTT] ignoring frame type '%s' on %s\n", type, topic);
+        Serial.printf("[MQTT] ignoring frame type '%s' on %s\n", type, topic.c_str());
     }
 }
 
@@ -124,43 +147,50 @@ namespace MqttReporter {
             mqtt.setClient(secureClient);
         } else {
             mqtt.setClient(plainClient);
+            tlsReady = true;
         }
-        mqtt.setServer(MQTT_BROKER, MQTT_PORT);
-        mqtt.setBufferSize(MQTT_BUFFER_SIZE);
-        mqtt.setCallback(onMessage);
+        mqtt.setConnectionTimeout(MQTT_CONNECTION_TIMEOUT_MS);
+        mqtt.setKeepAliveInterval(MQTT_KEEP_ALIVE_MS);
+        mqtt.setTxPayloadSize(MQTT_BUFFER_SIZE);
+        mqtt.onMessage(onMessage);
         Serial.printf("[MQTT] Broker: %s:%d (TLS=%d)\n", MQTT_BROKER, MQTT_PORT, MQTT_USE_TLS);
     }
 
     bool connect(bool publishPresence) {
         if (mqtt.connected()) return true;
         if (Config::deviceId.length() == 0) return false;
-        if (MQTT_USE_TLS && !tlsReady) return false;
+        if (MQTT_USE_TLS && !tlsReady) {
+            // NTP/DNS may recover after a transient boot-time failure.
+            tlsReady = TlsClient::configure(secureClient);
+            if (!tlsReady) return false;
+        }
 
         lastConnectAttempt = millis();
         Serial.printf("[MQTT] Connecting as '%s'...\n", Config::deviceId.c_str());
+        mqtt.setId(Config::deviceId);
+        mqtt.setUsernamePassword(Config::deviceId, Config::deviceToken);
+        mqtt.setCleanSession(true);
 
-        // username = deviceId, password = device bearer token.
-        bool ok = mqtt.connect(
-            Config::deviceId.c_str(),
-            Config::deviceId.c_str(),
-            Config::deviceToken.c_str()
-        );
-
-        if (ok) {
-            Serial.println(F("[MQTT] Connected"));
-            // Subscribe to our config (retained, QoS1) and cmd topics.
-            mqtt.subscribe(topicConfig().c_str(), 1);
-            mqtt.subscribe(topicCmd().c_str(), 1);
-            if (publishPresence) publishAnnounce();
-        } else {
-            Serial.printf("[MQTT] Connect failed, state=%d\n", mqtt.state());
+        const bool ok = mqtt.connect(MQTT_BROKER, MQTT_PORT);
+        if (!ok) {
+            Serial.printf("[MQTT] Connect failed, state=%d\n", mqtt.connectError());
             if (MQTT_USE_TLS) {
                 char error[128] = {0};
                 const int code = secureClient.getLastSSLError(error, sizeof(error));
                 Serial.printf("[TLS] connect error=%d: %s\n", code, error);
             }
+            return false;
         }
-        return ok;
+
+        Serial.println(F("[MQTT] Connected"));
+        // subscribe() waits for SUBACK. Retained config may be handled before
+        // it returns, which is precisely what provisioning needs.
+        if (!mqtt.subscribe(topicConfig(), 1) || !mqtt.subscribe(topicCmd(), 1)) {
+            Serial.println(F("[MQTT] Subscribe failed"));
+            mqtt.stop();
+            return false;
+        }
+        return publishPresence ? publishAnnounce() : true;
     }
 
     bool verifyProvisioning() {
@@ -173,34 +203,29 @@ namespace MqttReporter {
 
         const unsigned long started = millis();
         while (!receivedRetainedConfig && millis() - started < 5000) {
-            mqtt.loop();
+            mqtt.poll();
             delay(10);
         }
         if (!receivedRetainedConfig) {
             Serial.println(F("[MQTT] No retained config received during provisioning"));
-            mqtt.disconnect();
+            mqtt.stop();
             provisioningAttempt = false;
             return false;
         }
         provisioningAttempt = false;
         Config::markMqttProvisioned();
-        publishAnnounce();
-        return true;
+        return publishAnnounce();
     }
 
     void loop() {
         if (!mqtt.connected()) {
-            if (millis() - lastConnectAttempt >= MQTT_RECONNECT_INTERVAL_MS) {
-                connect();
-            }
+            if (millis() - lastConnectAttempt >= MQTT_RECONNECT_INTERVAL_MS) connect();
             return;
         }
-        mqtt.loop();
+        mqtt.poll();
     }
 
-    bool connected() {
-        return mqtt.connected();
-    }
+    bool connected() { return mqtt.connected(); }
 
     bool publishTelemetry(const SystemState &state) {
         if (!mqtt.connected()) return false;
@@ -213,9 +238,7 @@ namespace MqttReporter {
         else d["configVersion"] = nullptr;
 
         JsonObject data = d["data"].to<JsonObject>();
-        // Raw ultrasonic distance; null when the sensor got no echo this cycle.
-        // NOTE: liters are deliberately NOT sent - the server computes canonical
-        // volume from geometry. Device keeps its local volume for display only.
+        // The server computes canonical volume from the raw level and geometry.
         if (state.waterLevelValid) data["level_cm"] = state.waterLevelCm;
         else data["level_cm"] = nullptr;
         if (state.temperatureValid) data["temperature_c"] = state.temperatureC;
@@ -225,8 +248,8 @@ namespace MqttReporter {
 
         String payload;
         serializeJson(d, payload);
-        bool ok = mqtt.publish(topicTelemetry().c_str(), payload.c_str());
-        Serial.printf("[MQTT] telemetry -> %s (%s)\n", topicTelemetry().c_str(), ok ? "ok" : "fail");
+        const bool ok = publishJson(topicTelemetry(), payload);
+        Serial.printf("[MQTT] telemetry -> %s (%s)\n", topicTelemetry().c_str(), ok ? "PUBACK" : "failed");
         return ok;
     }
 }

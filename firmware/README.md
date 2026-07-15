@@ -78,10 +78,9 @@ Plain MQTT is only for an explicit local development build, for example:
 make build MQTT_HOST=192.168.1.10 MQTT_PORT=1883 MQTT_TLS=0
 ```
 
-The current `PubSubClient` dependency only supports outbound QoS 0. Do not use
-this binary as the Part I production artifact until that dependency is replaced
-with a client that proves outbound QoS 1 delivery; this is tracked as a launch
-blocker in `plans/mqtt-reliability-next-release.md`.
+The firmware uses `ArduinoMqttClient` for outbound QoS 1. Telemetry, announce,
+and acknowledgement publishes count as successful only after Mosquitto returns
+the corresponding PUBACK; a local socket write is not enough.
 
 ## Commands
 

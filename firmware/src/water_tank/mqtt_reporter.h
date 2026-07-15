@@ -2,7 +2,8 @@
  * ============================================================================
  * MQTT Reporter Module (Phase 2 transport)
  * ============================================================================
- * PubSubClient-based MQTT transport implementing the Phase 2 wire contract:
+ * ArduinoMqttClient-based MQTT transport implementing the Phase 1 wire
+ * contract. Outbound QoS 1 publishing waits for Mosquitto PUBACK.
  *
  *   device -> server : devices/{id}/telemetry | announce | ack
  *   server -> device : devices/{id}/config (retained, QoS1) | cmd
@@ -21,12 +22,12 @@
 #include "types.h"
 
 namespace MqttReporter {
-    // Set up the MQTT client (broker, TLS, buffer size, callback). Call once
+    // Set up the MQTT client (broker, TLS, QoS1 buffer, callback). Call once
     // after WiFi is up.
     void init();
 
     // Ensure a live broker connection. On (re)connect, publishes `announce`
-    // and (re)subscribes to the config + cmd topics. Returns true if connected.
+    // and (re)subscribes to config + cmd. Returns true only after PUBACK.
     bool connect(bool publishPresence = true);
 
     // Used only from AP onboarding. It proves TLS/authentication and waits for
@@ -40,7 +41,7 @@ namespace MqttReporter {
     bool connected();
 
     // Publish a telemetry frame for the current state. Never sends liters
-    // (the server computes canonical volume). Returns true on publish success.
+    // (the server computes canonical volume). Returns true only after PUBACK.
     bool publishTelemetry(const SystemState &state);
 }
 

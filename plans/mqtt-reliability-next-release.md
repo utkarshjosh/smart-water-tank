@@ -99,9 +99,11 @@ than the complete operating model required for production.
 2. Firmware is effectively always awake and services MQTT continuously. It has
    no explicit wake/sample/connect/flush/listen/sleep state machine or battery
    budget.
-3. The current PubSubClient publish path does not provide the end-to-end
-   commit receipt needed to safely delete local buffered samples. The code also
-   clears legacy buffered readings after a successful live MQTT publish.
+3. The current firmware waits for broker QoS 1 PUBACK before treating a publish
+   as delivered, but it still lacks the end-to-end backend commit receipt needed
+   to safely delete local buffered samples. Part I therefore retains only its
+   explicit latest-reading HTTP recovery behavior; Part II adds receipts and
+   durable replay.
 4. Telemetry has no stable `message_id`, `boot_id`, sequence number, sample time
    versus receive time, or database uniqueness constraint. Retries can create
    duplicates and offline replay cannot be ordered confidently.
@@ -544,8 +546,10 @@ Required firmware capabilities:
    starve older buffered normal data.
 3. An MQTT client/library proven on the target ESP8266 build to support QoS 1
    publish acknowledgements, retained messages, Last Will, TLS verification,
-   reconnect backoff, and the required packet size. Select it through a heap,
-   flash-size, and 24-hour soak spike before rewriting the reporter.
+   reconnect backoff, and the required packet size. The Part I reporter now
+   uses `ArduinoMqttClient` and waits for PUBACK; retain the heap, flash-size,
+   and 24-hour soak spike before extending it for Part II receipts and Last
+   Will support.
 4. Certificate validation using a provisioned CA and valid device time. Remove
    `setInsecure()` from production builds.
 5. Desired/reported state reconciliation by revision. Persist applied config
