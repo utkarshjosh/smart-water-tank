@@ -139,17 +139,24 @@ export class MqttAdapter implements DeviceGateway {
     }
   }
 
-  private publishConfig(hardwareDeviceId: string, config: Record<string, unknown>): void {
-    if (!this.client) return;
+  private publishConfig(hardwareDeviceId: string, config: Record<string, unknown>): Promise<void> {
+    if (!this.client || !this.client.connected) {
+      console.warn('[mqtt] publish config skipped: broker is not connected');
+      return Promise.resolve();
+    }
+
     const message = buildConfigMessage(hardwareDeviceId, config);
-    this.client.publish(
-      `${TOPIC_PREFIX}/${hardwareDeviceId}/${TOPIC.config}`,
-      JSON.stringify(message),
-      { retain: true, qos: 1 },
-      (err) => {
-        if (err) console.error('[mqtt] publish config failed for', hardwareDeviceId, err);
-      }
-    );
+    return new Promise((resolve) => {
+      this.client!.publish(
+        `${TOPIC_PREFIX}/${hardwareDeviceId}/${TOPIC.config}`,
+        JSON.stringify(message),
+        { retain: true, qos: 1 },
+        (err) => {
+          if (err) console.error('[mqtt] publish config failed for', hardwareDeviceId, err);
+          resolve();
+        }
+      );
+    });
   }
 
   // Server-initiated push (config-change hook). Resolves the device by internal
@@ -160,6 +167,6 @@ export class MqttAdapter implements DeviceGateway {
       console.warn('[mqtt] pushConfig: device not found for internal id', internalDeviceId);
       return;
     }
-    this.publishConfig(message.id, message.config);
+    await this.publishConfig(message.id, message.config);
   }
 }

@@ -264,7 +264,7 @@ export async function updateAlertThresholds(device: Device, input: AlertThreshol
 export async function claimDevice(claimCode: string, hardwareId: string): Promise<{ deviceToken: string; deviceId: string }> {
   const codeHash = hashClaimCode(claimCode);
 
-  await prisma.$transaction(async (tx) => {
+  const device = await prisma.$transaction(async (tx) => {
     const claim = await tx.deviceClaimCode.findFirst({
       where: { codeHash, consumedAt: null, expiresAt: { gt: new Date() } },
     });
@@ -290,9 +290,17 @@ export async function claimDevice(claimCode: string, hardwareId: string): Promis
     if (consumed.count === 0) {
       throw new HttpError(404, 'Invalid or expired claim code');
     }
+
+    return device;
   });
 
   const deviceToken = await createDeviceToken(hardwareId);
+
+  // The device verifies provisioning by subscribing to its retained MQTT
+  // config immediately after this response. Publish it before replying, so a
+  // brand-new claim is bootstrappable even when no dashboard setting changed.
+  await pushConfigToDevice(device.id);
+
   return { deviceToken, deviceId: hardwareId };
 }
 
