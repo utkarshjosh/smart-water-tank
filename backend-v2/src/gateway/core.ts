@@ -83,8 +83,10 @@ export class GatewayCore {
     };
   }
 
-  // A device came online / (re)connected. Refresh liveness + firmware and hand
-  // back the current config so the adapter can (re)publish the retained topic.
+  // A device came online / (re)connected. Refresh liveness + firmware and
+  // return config only when its announced version differs. Mosquitto retains
+  // the current config for normal reconnects; avoiding an equal-version
+  // republish prevents a needless second delivery immediately after a claim.
   async handleAnnounce(hardwareDeviceId: string, announce: AnnounceMessage): Promise<AnnounceOutcome> {
     const device = await this.resolveByHardwareId(hardwareDeviceId);
     if (!device) return { recognized: false, config: null };
@@ -99,7 +101,11 @@ export class GatewayCore {
     });
 
     const config = await buildDeviceConfig(device);
-    return { recognized: true, device, config };
+    return {
+      recognized: true,
+      device,
+      config: announce.configVersion == null || announce.configVersion !== config.config_version ? config : null,
+    };
   }
 
   // The merged, versioned device config (operational + geometry + version).
