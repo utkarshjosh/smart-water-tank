@@ -962,6 +962,9 @@ release notes and removed in Part II.
   access point indefinitely. On timeout, keep it unconfigured and sleep/retry on
   the documented schedule; a physical reset/button sequence can force the portal
   immediately.
+- The opt-in deep-sleep build now implements this timeout path with the same
+  RTC-backed backoff as a failed network wake; default always-on builds retain
+  restart behavior for bench setup.
 - Use the retained normal report interval as the next wake interval with firmware
   minimum/maximum safety bounds. Do not keep Wi-Fi/MQTT connected between normal
   samples on the battery deployment.

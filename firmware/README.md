@@ -97,6 +97,11 @@ connects, applies retained config, waits for telemetry PUBACK, receives for
 network wakes back off from one minute to one hour; the third consecutive MQTT
 failure attempts HTTPS recovery once before sleeping.
 
+An unattended AP onboarding portal also times out safely in this mode: it keeps
+the device unconfigured and sleeps with the same backoff rather than restarting
+into another indefinite setup cycle. The default always-on build retains the
+restart behavior for USB-powered bench setup.
+
 ## Commands
 
 | Command | Description |

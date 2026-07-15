@@ -7,6 +7,7 @@
 #include "config.h"
 #include "claim_client.h"
 #include "mqtt_reporter.h"
+#include "power_manager.h"
 #include <ESP8266WiFi.h>
 #include <WiFiManager.h>
 
@@ -193,14 +194,21 @@ namespace WifiManager {
             bool portalStarted = wifiManager->startConfigPortal(AP_SSID, AP_PASSWORD);
 
             if (!portalStarted) {
-                // Nobody configured the device within the timeout. Restart
-                // rather than falling through to loop() - the device may
-                // still be sitting on a stale STA connection here, and
-                // without a restart it would carry on into normal operation
-                // still unclaimed and with the reporter never initialized.
+                // Never continue into normal telemetry after an unattended
+                // portal timeout: the device remains deliberately unconfigured.
+                // Battery deployments sleep with the same persisted backoff as
+                // a failed network cycle; always-on builds preserve restart
+                // behavior for bench setup and USB-powered installations.
+                #if ENABLE_DEEP_SLEEP
+                Serial.println(F("[WiFi] Config portal timed out; staying unconfigured and sleeping"));
+                PowerManager::finishCycle(false);
+                PowerManager::sleepUntilNextCycle(Config::reportIntervalMs);
+                return; // ESP.deepSleep() does not return; defensive fallback.
+                #else
                 Serial.println(F("[WiFi] Config portal timed out, restarting..."));
                 delay(1000);
                 ESP.restart();
+                #endif
             }
 
             // Config portal closed - a network was selected and WiFi connected.

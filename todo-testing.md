@@ -70,6 +70,9 @@ wiring on the exact board before enabling it:
 
 - [ ] Verify GPIO16/D0 is wired to RST and the board wakes after a manual short
   deep-sleep sketch test.
+- [ ] With no saved Wi-Fi/claim credentials, leave the AP portal untouched
+  until its timeout. Confirm the deep-sleep canary prints that it is staying
+  unconfigured, sleeps with backoff, and never sends telemetry.
 - [ ] Build the canary explicitly with:
 
   ```bash
