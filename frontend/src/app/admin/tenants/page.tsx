@@ -12,6 +12,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertCircle, Building2, Plus, Search, UserPlus, Users } from 'lucide-react';
 
+type UserRole = 'user' | 'tenant_owner' | 'admin' | 'super_admin';
+
+const roleOptions: { value: UserRole; label: string }[] = [
+  { value: 'user', label: 'User' },
+  { value: 'tenant_owner', label: 'Tenant owner' },
+  { value: 'admin', label: 'Admin' },
+  { value: 'super_admin', label: 'Platform super admin' },
+];
+
 interface Tenant {
   id: string;
   name: string;
@@ -45,6 +54,7 @@ interface FirebaseUser {
   tenant_id: string | null;
   tenant_name: string | null;
   is_linked: boolean;
+  role: UserRole | null;
 }
 
 export default function TenantsPage() {
@@ -67,6 +77,7 @@ export default function TenantsPage() {
   const [showFirebaseSearch, setShowFirebaseSearch] = useState(false);
   const [linkingUser, setLinkingUser] = useState<string | null>(null);
   const [selectedTenantForUser, setSelectedTenantForUser] = useState<{ [key: string]: string }>({});
+  const [selectedRoleForUser, setSelectedRoleForUser] = useState<{ [key: string]: UserRole }>({});
 
   useEffect(() => {
     fetchTenants();
@@ -123,23 +134,28 @@ export default function TenantsPage() {
     }
   };
 
-  const handleLinkUserToTenant = async (firebaseUid: string, email: string, displayName: string | null) => {
-    const tenantId = selectedTenantForUser[firebaseUid];
-    if (!tenantId) {
+  const handleSaveFirebaseUser = async (user: FirebaseUser) => {
+    const role = selectedRoleForUser[user.uid] || user.role || 'user';
+    const tenantId = selectedTenantForUser[user.uid] || user.tenant_id;
+    if (role !== 'super_admin' && !tenantId) {
       setUsersError('Please select a tenant');
       return;
     }
+    if (!user.email) {
+      setUsersError('This Firebase account has no email address and cannot be linked');
+      return;
+    }
 
-    setLinkingUser(firebaseUid);
+    setLinkingUser(user.uid);
     setUsersError('');
 
     try {
       await api.post('/api/v1/admin/users', {
-        firebase_uid: firebaseUid,
-        email: email,
-        name: displayName || null,
-        tenant_id: tenantId,
-        role: 'user',
+        firebase_uid: user.uid,
+        email: user.email,
+        name: user.displayName || undefined,
+        role,
+        ...(role === 'super_admin' ? {} : { tenant_id: tenantId }),
       });
 
       // Refresh both lists
@@ -149,11 +165,31 @@ export default function TenantsPage() {
       // Clear selection
       setSelectedTenantForUser((prev) => {
         const next = { ...prev };
-        delete next[firebaseUid];
+        delete next[user.uid];
+        return next;
+      });
+      setSelectedRoleForUser((prev) => {
+        const next = { ...prev };
+        delete next[user.uid];
         return next;
       });
     } catch (err: any) {
       setUsersError(err.response?.data?.error || err.message || 'Failed to link user to tenant');
+    } finally {
+      setLinkingUser(null);
+    }
+  };
+
+  const handleUpdateUserRole = async (userId: string, role: UserRole) => {
+    setLinkingUser(userId);
+    setUsersError('');
+
+    try {
+      await api.put(`/api/v1/admin/users/${userId}/role`, { role });
+      await fetchDatabaseUsers();
+      if (showFirebaseSearch) await searchFirebaseUsers();
+    } catch (err: any) {
+      setUsersError(err.response?.data?.error || err.message || 'Failed to update user role');
     } finally {
       setLinkingUser(null);
     }
@@ -445,11 +481,33 @@ export default function TenantsPage() {
                                       Linked to {user.tenant_name}
                                     </Badge>
                                   )}
+                                  {user.role === 'super_admin' && (
+                                    <Badge variant="default" className="mt-2">
+                                      Platform super admin
+                                    </Badge>
+                                  )}
                                 </div>
-                                {!user.is_linked && (
-                                  <div className="flex flex-col gap-2 sm:flex-row">
+                                <div className="flex flex-col gap-2 sm:flex-row">
+                                  <Select
+                                    value={selectedRoleForUser[user.uid] || user.role || 'user'}
+                                    onValueChange={(value: UserRole) =>
+                                      setSelectedRoleForUser((prev) => ({ ...prev, [user.uid]: value }))
+                                    }
+                                  >
+                                    <SelectTrigger className="h-9 w-full sm:w-[200px]">
+                                      <SelectValue placeholder="Select role..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {roleOptions.map((role) => (
+                                        <SelectItem key={role.value} value={role.value}>
+                                          {role.label}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  {(selectedRoleForUser[user.uid] || user.role || 'user') !== 'super_admin' && (
                                     <Select
-                                      value={selectedTenantForUser[user.uid] || ''}
+                                      value={selectedTenantForUser[user.uid] || user.tenant_id || ''}
                                       onValueChange={(value) =>
                                         setSelectedTenantForUser((prev) => ({
                                           ...prev,
@@ -468,31 +526,27 @@ export default function TenantsPage() {
                                         ))}
                                       </SelectContent>
                                     </Select>
-                                    <Button
-                                      onClick={() =>
-                                        handleLinkUserToTenant(
-                                          user.uid,
-                                          user.email || '',
-                                          user.displayName
-                                        )
-                                      }
-                                      disabled={
-                                        !selectedTenantForUser[user.uid] ||
-                                        linkingUser === user.uid
-                                      }
-                                      size="sm"
-                                    >
-                                      {linkingUser === user.uid ? (
-                                        'Linking...'
-                                      ) : (
-                                        <>
-                                          <UserPlus className="mr-2 h-4 w-4" />
-                                          Link
-                                        </>
-                                      )}
-                                    </Button>
-                                  </div>
-                                )}
+                                  )}
+                                  <Button
+                                    onClick={() => handleSaveFirebaseUser(user)}
+                                    disabled={
+                                      !user.email ||
+                                      (selectedRoleForUser[user.uid] || user.role || 'user') !== 'super_admin' &&
+                                        !(selectedTenantForUser[user.uid] || user.tenant_id) ||
+                                      linkingUser === user.uid
+                                    }
+                                    size="sm"
+                                  >
+                                    {linkingUser === user.uid ? (
+                                      'Saving...'
+                                    ) : (
+                                      <>
+                                        <UserPlus className="mr-2 h-4 w-4" />
+                                        Save access
+                                      </>
+                                    )}
+                                  </Button>
+                                </div>
                               </div>
                             </CardContent>
                           </Card>
@@ -541,7 +595,22 @@ export default function TenantsPage() {
                               )}
                             </TableCell>
                             <TableCell>
-                              <Badge variant="secondary">{user.role}</Badge>
+                              <Select
+                                value={user.role}
+                                onValueChange={(value: UserRole) => handleUpdateUserRole(user.id, value)}
+                                disabled={linkingUser === user.id}
+                              >
+                                <SelectTrigger className="h-9 w-[190px]">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {roleOptions.map((role) => (
+                                    <SelectItem key={role.value} value={role.value}>
+                                      {role.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
                             </TableCell>
                             <TableCell>
                               <Select
@@ -551,10 +620,10 @@ export default function TenantsPage() {
                                     handleUpdateUserTenant(user.id, value);
                                   }
                                 }}
-                                disabled={linkingUser === user.id}
+                                disabled={linkingUser === user.id || user.role === 'super_admin'}
                               >
                                 <SelectTrigger className="h-9 w-[180px]">
-                                  <SelectValue placeholder="Change tenant..." />
+                                  <SelectValue placeholder={user.role === 'super_admin' ? 'Platform access' : 'Change tenant...'} />
                                 </SelectTrigger>
                                 <SelectContent>
                                   {tenants.map((tenant) => (
@@ -579,8 +648,5 @@ export default function TenantsPage() {
     </Layout>
   );
 }
-
-
-
 
 

@@ -230,30 +230,75 @@ export async function createOrLinkUser(data: {
   firebaseUid: string;
   email: string;
   name?: string;
-  tenantId: string;
+  tenantId?: string;
   role: Role;
 }) {
-  const tenant = await prisma.tenant.findUnique({ where: { id: data.tenantId } });
-  if (!tenant) throw new HttpError(404, 'Tenant not found');
+  // Do not create a local account for an identity that does not exist in
+  // Firebase; this keeps the linking operation genuinely two-way.
+  await getAuth().getUser(data.firebaseUid);
+
+  // A super admin is an AquaMind platform operator, not a member of a
+  // customer organisation. Every other role must remain tenant-scoped.
+  const tenantId = data.role === 'super_admin' ? null : data.tenantId;
+  if (data.role !== 'super_admin' && !tenantId) {
+    throw new HttpError(400, 'A tenant is required unless the role is super_admin');
+  }
+
+  if (tenantId) {
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) throw new HttpError(404, 'Tenant not found');
+  }
 
   const existing = await prisma.user.findUnique({ where: { firebaseUid: data.firebaseUid } });
   if (existing) {
     const updated = await prisma.user.update({
       where: { id: existing.id },
-      data: { email: data.email, name: data.name || null, tenantId: data.tenantId, role: data.role },
+      data: { email: data.email, name: data.name || null, tenantId, role: data.role },
     });
+    await syncFirebaseRole(updated.firebaseUid, updated.role);
     return { user: toRawUserDto(updated), message: 'User updated and linked to tenant' };
   }
 
   try {
     const user = await prisma.user.create({
-      data: { firebaseUid: data.firebaseUid, email: data.email, name: data.name || null, tenantId: data.tenantId, role: data.role },
+      data: { firebaseUid: data.firebaseUid, email: data.email, name: data.name || null, tenantId, role: data.role },
     });
+    await syncFirebaseRole(user.firebaseUid, user.role);
     return { user: toRawUserDto(user), message: 'User created and linked to tenant' };
   } catch (err) {
     if (isUniqueConstraintError(err)) throw new HttpError(409, 'User already exists');
     throw err;
   }
+}
+
+// Firebase is the identity provider; AquaMind's database remains the source
+// of truth for authorisation. Mirroring the role as a custom claim makes the
+// Firebase account observable and keeps the two systems aligned.
+async function syncFirebaseRole(firebaseUid: string, role: Role): Promise<void> {
+  const auth = getAuth();
+  const firebaseUser = await auth.getUser(firebaseUid);
+  await auth.setCustomUserClaims(firebaseUid, { ...(firebaseUser.customClaims || {}), role });
+}
+
+export async function updateUserRole(userIdOrUid: string, role: Role) {
+  const user = await prisma.user.findFirst({ where: { OR: [{ id: userIdOrUid }, { firebaseUid: userIdOrUid }] } });
+  if (!user) throw new HttpError(404, 'User not found in database');
+
+  if (role !== 'super_admin' && !user.tenantId) {
+    throw new HttpError(400, 'Assign a tenant before changing a platform super admin to another role');
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: { role, tenantId: role === 'super_admin' ? null : user.tenantId },
+    include: { tenant: true },
+  });
+  await syncFirebaseRole(updated.firebaseUid, updated.role);
+
+  return {
+    ...toRawUserDto(updated),
+    tenant_name: updated.tenant?.name ?? null,
+  };
 }
 
 export async function reissueDeviceToken(deviceId: string): Promise<string> {
@@ -309,9 +354,9 @@ export async function listFirebaseUsers(search: string | undefined, limit: numbe
 
   const existingUsers = await prisma.user.findMany({
     where: { firebaseUid: { in: filtered.map((u) => u.uid) } },
-    select: { firebaseUid: true, tenantId: true },
+    select: { firebaseUid: true, tenantId: true, role: true },
   });
-  const existingMap = new Map(existingUsers.map((u) => [u.firebaseUid, u.tenantId]));
+  const existingMap = new Map(existingUsers.map((u) => [u.firebaseUid, u]));
 
   const tenantIds = Array.from(new Set(existingUsers.map((u) => u.tenantId).filter((id): id is string => !!id)));
   const tenants = tenantIds.length > 0 ? await prisma.tenant.findMany({ where: { id: { in: tenantIds } } }) : [];
@@ -319,7 +364,8 @@ export async function listFirebaseUsers(search: string | undefined, limit: numbe
 
   return {
     users: filtered.map((u) => {
-      const tenantId = existingMap.get(u.uid);
+      const existingUser = existingMap.get(u.uid);
+      const tenantId = existingUser?.tenantId;
       return {
         uid: u.uid,
         email: u.email || null,
@@ -330,7 +376,8 @@ export async function listFirebaseUsers(search: string | undefined, limit: numbe
         metadata: { creationTime: u.metadata.creationTime, lastSignInTime: u.metadata.lastSignInTime },
         tenant_id: tenantId || null,
         tenant_name: tenantId ? tenantMap.get(tenantId) ?? null : null,
-        is_linked: !!tenantId,
+        role: existingUser?.role ?? null,
+        is_linked: !!existingUser,
       };
     }),
     total: filtered.length,
@@ -392,11 +439,14 @@ export async function syncFirebaseUsers(limit: number | undefined, dryRun: boole
 }
 
 export async function updateUserTenant(userIdOrUid: string, tenantId: string) {
-  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
-  if (!tenant) throw new HttpError(404, 'Tenant not found');
-
   const user = await prisma.user.findFirst({ where: { OR: [{ id: userIdOrUid }, { firebaseUid: userIdOrUid }] } });
   if (!user) throw new HttpError(404, 'User not found in database');
+  if (user.role === 'super_admin') {
+    throw new HttpError(400, 'A platform super admin cannot be assigned to a tenant');
+  }
+
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+  if (!tenant) throw new HttpError(404, 'Tenant not found');
 
   const updated = await prisma.user.update({
     where: { id: user.id },

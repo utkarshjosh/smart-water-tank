@@ -2,7 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import * as fs from 'fs';
 import { z } from 'zod';
-import { firebaseAuth, requireRole } from '../middleware/firebaseAuth.middleware';
+import { AuthRequest, firebaseAuth, requireRole } from '../middleware/firebaseAuth.middleware';
 import { asyncHandler } from '../lib/async-handler';
 import { HttpError } from '../lib/http-error';
 import { env } from '../config/env';
@@ -193,12 +193,12 @@ router.put(
   })
 );
 
-// POST /api/v1/admin/users - Create or link user to tenant
+// POST /api/v1/admin/users - Create/link a Firebase user and assign access.
 const createUserSchema = z.object({
   firebase_uid: z.string().min(1),
   email: z.string().email(),
   name: z.string().optional(),
-  tenant_id: z.string().uuid(),
+  tenant_id: z.string().uuid().optional(),
   role: z.enum(['user', 'tenant_owner', 'admin', 'super_admin']).default('user'),
 });
 
@@ -206,6 +206,9 @@ router.post(
   '/users',
   asyncHandler(async (req, res) => {
     const { firebase_uid, email, name, tenant_id, role } = createUserSchema.parse(req.body);
+    if (role === 'super_admin' && (req as AuthRequest).user!.role !== 'super_admin') {
+      throw new HttpError(403, 'Only a super admin can create another super admin');
+    }
     const result = await adminService.createOrLinkUser({ firebaseUid: firebase_uid, email, name, tenantId: tenant_id, role });
     res.json(result);
   })
@@ -271,6 +274,20 @@ router.put(
     const { tenant_id } = updateUserTenantSchema.parse(req.body);
     const user = await adminService.updateUserTenant(req.params.userId, tenant_id);
     res.json({ user, message: 'User tenant updated successfully' });
+  })
+);
+
+// PUT /api/v1/admin/users/:userId/role - Promote/demote a user. This is kept
+// super-admin only because it can grant platform-wide access.
+const updateUserRoleSchema = z.object({ role: z.enum(['user', 'tenant_owner', 'admin', 'super_admin']) });
+
+router.put(
+  '/users/:userId/role',
+  requireRole('super_admin'),
+  asyncHandler(async (req, res) => {
+    const { role } = updateUserRoleSchema.parse(req.body);
+    const user = await adminService.updateUserRole(req.params.userId, role);
+    res.json({ user, message: 'User role updated successfully' });
   })
 );
 

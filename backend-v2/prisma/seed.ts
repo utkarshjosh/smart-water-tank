@@ -15,7 +15,7 @@ interface SeedConfig {
  *
  * Usage:
  *   Option 1: Create Firebase user automatically
- *     npx prisma db seed -- --email admin@example.com --name "Admin User" --password "securePassword123" --role super_admin
+ *     npx prisma db seed -- --email admin@example.com --name "Platform Admin" --password "securePassword123" --role super_admin
  *
  *   Option 2: Use an existing Firebase UID
  *     npx prisma db seed -- --email admin@example.com --name "Admin User" --firebaseUid "existing-firebase-uid" --role super_admin
@@ -32,7 +32,7 @@ async function seedAdmin(config: SeedConfig) {
   const password = config.password || process.env.ADMIN_PASSWORD;
   const firebaseUid = config.firebaseUid || process.env.ADMIN_FIREBASE_UID;
   const role = (config.role || process.env.ADMIN_ROLE || 'super_admin') as 'admin' | 'super_admin';
-  const tenantName = config.tenantName || process.env.ADMIN_TENANT_NAME || 'Default Tenant';
+  const tenantName = config.tenantName || process.env.ADMIN_TENANT_NAME;
 
   if (!email) {
     throw new Error('Email is required. Provide --email or set ADMIN_EMAIL environment variable');
@@ -64,37 +64,44 @@ async function seedAdmin(config: SeedConfig) {
     throw new Error('Either --password or --firebaseUid must be provided (or set ADMIN_PASSWORD or ADMIN_FIREBASE_UID)');
   }
 
-  console.log(`Creating/getting tenant: ${tenantName}`);
-  let tenant = await prisma.tenant.findFirst({ where: { name: tenantName } });
-  if (!tenant) {
-    tenant = await prisma.tenant.create({ data: { name: tenantName } });
-    console.log(`✓ Created tenant: ${tenantName} (${tenant.id})`);
+  let tenantId: string | null = null;
+  if (role !== 'super_admin') {
+    const resolvedTenantName = tenantName || 'Default Tenant';
+    console.log(`Creating/getting tenant: ${resolvedTenantName}`);
+    let tenant = await prisma.tenant.findFirst({ where: { name: resolvedTenantName } });
+    if (!tenant) {
+      tenant = await prisma.tenant.create({ data: { name: resolvedTenantName } });
+      console.log(`✓ Created tenant: ${resolvedTenantName} (${tenant.id})`);
+    } else {
+      console.log(`✓ Using existing tenant: ${resolvedTenantName} (${tenant.id})`);
+    }
+    tenantId = tenant.id;
   } else {
-    console.log(`✓ Using existing tenant: ${tenantName} (${tenant.id})`);
+    console.log('Creating platform super admin without a tenant');
   }
 
   const existingUser = await prisma.user.findUnique({ where: { firebaseUid: uid } });
   if (existingUser) {
-    if (existingUser.role !== role) {
-      await prisma.user.update({
-        where: { id: existingUser.id },
-        data: { role, tenantId: tenant.id, email, name },
-      });
-      console.log(`✓ Updated existing user to ${role} role`);
-    } else {
-      console.log(`✓ User already exists with ${role} role`);
-    }
+    await prisma.user.update({
+      where: { id: existingUser.id },
+      data: { role, tenantId, email, name },
+    });
+    console.log(`✓ Updated existing user to ${role} role`);
   } else {
     const newUser = await prisma.user.create({
-      data: { firebaseUid: uid, email, name, tenantId: tenant.id, role },
+      data: { firebaseUid: uid, email, name, tenantId, role },
     });
     console.log(`✓ Created admin user:`);
     console.log(`  - ID: ${newUser.id}`);
     console.log(`  - Email: ${newUser.email}`);
     console.log(`  - Role: ${newUser.role}`);
     console.log(`  - Firebase UID: ${uid}`);
-    console.log(`  - Tenant: ${tenantName}`);
+    console.log(`  - Tenant: ${tenantName || 'none (platform access)'}`);
   }
+
+  const firebaseUser = await auth.getUser(uid);
+  await auth.setCustomUserClaims(uid, { ...(firebaseUser.customClaims || {}), role });
+  console.log('✓ Synced role to Firebase custom claims');
 
   console.log('\n✅ Seed completed successfully!');
   console.log(`\nYou can now log in with:`);
