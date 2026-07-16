@@ -4,7 +4,7 @@
 
 # Project Settings
 PROJECT_NAME    := water_tank
-VERSION         := 0.1.0
+VERSION         := 0.1.1
 
 # Board Configuration (ESP8266)
 BOARD_FQBN      := esp8266:esp8266:nodemcuv2
