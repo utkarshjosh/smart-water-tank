@@ -4,6 +4,7 @@ import { Link, Navigate, Route, Routes } from 'react-router-dom';
 const HomePage = lazy(() => import('@/app/page'));
 const WelcomePage = lazy(() => import('@/app/welcome/page'));
 const LoginPage = lazy(() => import('@/app/login/page'));
+const ResetPasswordPage = lazy(() => import('@/app/reset-password/page'));
 const SignupPage = lazy(() => import('@/app/signup/page'));
 const TenantLayout = lazy(() => import('@/components/TenantLayout'));
 const TenantDevicesPage = lazy(() => import('@/app/app/devices/page'));
@@ -58,6 +59,7 @@ export default function AppRouter() {
         <Route path="/" element={<HomePage />} />
         <Route path="/welcome" element={<WelcomePage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/app" element={<Navigate to="/app/devices" replace />} />
         <Route
