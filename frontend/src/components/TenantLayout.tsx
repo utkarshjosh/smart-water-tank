@@ -1,41 +1,20 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '@/lib/api';
-import { useAuthSession } from '@/lib/useAuthSession';
+import { useAuth } from '@/lib/auth-context';
 import { TenantSidebar } from '@/components/layout/tenant-sidebar';
 import { TenantHeader } from '@/components/layout/tenant-header';
 
 export default function TenantLayout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
-  const { user, loading } = useAuthSession();
-  const [isMounted, setIsMounted] = useState(false);
-  const [tenantName, setTenantName] = useState<string | undefined>();
-  const hasInitialAuthCheck = useRef(false);
+  const { status, profile } = useAuth();
 
   useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (!loading && isMounted) {
-      hasInitialAuthCheck.current = true;
-    }
-  }, [loading, isMounted]);
-
-  useEffect(() => {
-    if (!loading && isMounted && !user) {
+    if (status === 'unauthenticated') {
       navigate('/login', { replace: true });
     }
-  }, [isMounted, loading, navigate, user]);
+  }, [status, navigate]);
 
-  useEffect(() => {
-    if (!user) return;
-    api.get('/api/v1/user/me')
-      .then(({ data }) => setTenantName(data.tenant_name))
-      .catch((error) => console.error('Error fetching current user:', error));
-  }, [user]);
-
-  if ((loading || !isMounted) && !hasInitialAuthCheck.current) {
+  if (status === 'initializing') {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background relative overflow-hidden">
         <div className="fixed inset-0 pointer-events-none">
@@ -61,7 +40,7 @@ export default function TenantLayout({ children }: { children: React.ReactNode }
     );
   }
 
-  if (!user) {
+  if (status !== 'authenticated') {
     return null;
   }
 
@@ -71,7 +50,7 @@ export default function TenantLayout({ children }: { children: React.ReactNode }
         <TenantSidebar />
       </div>
       <main className="md:pl-60 min-h-screen bg-slate-50 dark:bg-slate-950">
-        <TenantHeader tenantName={tenantName} />
+        <TenantHeader tenantName={profile?.tenant_name ?? undefined} />
         <div className="px-4 py-5 sm:px-6 lg:px-7">
           {children}
         </div>

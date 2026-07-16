@@ -1,34 +1,23 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuthSession } from '@/lib/useAuthSession';
+import { useAuth } from '@/lib/auth-context';
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
-  const { user, loading } = useAuthSession();
-  const [isMounted, setIsMounted] = useState(false);
-  const hasInitialAuthCheck = useRef(false);
+  const { status, isAdmin } = useAuth();
 
   useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  // Track when initial auth check is complete
-  useEffect(() => {
-    if (!loading && isMounted) {
-      hasInitialAuthCheck.current = true;
-    }
-  }, [loading, isMounted]);
-
-  useEffect(() => {
-    if (!loading && isMounted && !user) {
+    if (status === 'unauthenticated') {
       navigate('/login', { replace: true });
+    } else if (status === 'authenticated' && !isAdmin) {
+      // Admin shell is role-gated: non-admin users go to the tenant app.
+      navigate('/app/devices', { replace: true });
     }
-  }, [isMounted, loading, navigate, user]);
+  }, [status, isAdmin, navigate]);
 
-  // Only show full-page loader on initial mount/auth check, not during navigation
-  if ((loading || !isMounted) && !hasInitialAuthCheck.current) {
+  if (status === 'initializing') {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background relative overflow-hidden">
         {/* Background Gradients - Aquatic Theme */}
@@ -63,7 +52,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user) {
+  if (status !== 'authenticated' || !isAdmin) {
     return null;
   }
 

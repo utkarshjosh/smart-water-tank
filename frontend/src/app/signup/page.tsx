@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { AlertCircle, BellRing, Droplets, UserPlus } from 'lucide-react';
 import api from '@/lib/api';
-import { setAuthToken } from '@/lib/cookies';
 import { auth } from '@/lib/firebase';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -24,9 +23,7 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const token = await userCredential.user.getIdToken();
-      setAuthToken(token);
+      await createUserWithEmailAndPassword(auth, email, password);
       await api.post('/api/v1/user/register', { name });
       navigate('/app/devices');
     } catch (err: any) {

@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { AlertCircle, Droplets, Gauge, LogIn, ShieldCheck } from 'lucide-react';
-import api from '@/lib/api';
-import { setAuthToken } from '@/lib/cookies';
+import { homeRouteForRole, useAuth } from '@/lib/auth-context';
 import { auth } from '@/lib/firebase';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -12,54 +11,48 @@ import { Label } from '@/components/ui/label';
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const { status, profile } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const redirectByRole = async () => {
-    try {
-      const { data } = await api.get('/api/v1/user/me');
-      if (data.role === 'admin' || data.role === 'super_admin') {
-        navigate('/admin/dashboard');
-      } else {
-        navigate('/app/devices');
-      }
-    } catch {
-      navigate('/app/devices');
-    }
-  };
-
+  // The single redirect path: as soon as AuthProvider resolves an
+  // authenticated session (restored or fresh login), leave this page.
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        return;
-      }
-
-      const token = await user.getIdToken();
-      setAuthToken(token);
-      await redirectByRole();
-    });
-
-    return () => unsubscribe();
-  }, [navigate]);
+    if (status === 'authenticated') {
+      navigate(homeRouteForRole(profile?.role), { replace: true });
+    }
+  }, [status, profile, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
+    setSubmitting(true);
 
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const token = await userCredential.user.getIdToken();
-      setAuthToken(token);
-      await redirectByRole();
+      await signInWithEmailAndPassword(auth, email, password);
+      // Navigation happens via the effect above once the profile loads;
+      // keep the button in its busy state until this page unmounts.
     } catch (err: any) {
       setError(err.message || 'Failed to login');
-    } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
+
+  // While Firebase restores a persisted session, show a session check instead
+  // of a form we'd immediately yank away. A fresh form submit keeps the form
+  // visible with its busy button until the redirect.
+  if (status !== 'unauthenticated' && !submitting) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-slate-950" />
+          <p className="text-sm text-slate-500">Checking your session…</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950">
@@ -127,7 +120,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  disabled={loading}
+                  disabled={submitting}
                   className="border-slate-200 bg-white"
                 />
               </div>
@@ -147,7 +140,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  disabled={loading}
+                  disabled={submitting}
                   className="border-slate-200 bg-white"
                 />
               </div>
@@ -161,9 +154,9 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 className="w-full bg-slate-950 text-white hover:bg-slate-800"
-                disabled={loading}
+                disabled={submitting}
               >
-                {loading ? (
+                {submitting ? (
                   <>
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
                     Logging in...
