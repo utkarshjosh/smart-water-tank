@@ -99,7 +99,10 @@ export async function checkOtaUpdate(device: Device, headerVersion?: string) {
   await prisma.device.update({ where: { id: device.id }, data: { lastOtaCheckAt: new Date() } });
 
   const assignment = await prisma.deviceFirmwareAssignment.findFirst({
-    where: { deviceId: device.id, status: 'pending', firmware: { isActive: true } },
+    // A download request can fail after the server has started streaming the
+    // binary. Keep `downloading` assignments eligible so the device can retry
+    // rather than becoming permanently stuck until an operator re-rolls it.
+    where: { deviceId: device.id, status: { in: ['pending', 'downloading'] }, firmware: { isActive: true } },
     include: { firmware: true },
     orderBy: { firmware: { createdAt: 'desc' } },
   });
@@ -141,7 +144,12 @@ export async function getTenantFacingOtaStatus(device: Device) {
 
 export async function getAssignedFirmwareOrThrow(device: Device, firmwareId: string): Promise<FirmwareBinary> {
   const assignment = await prisma.deviceFirmwareAssignment.findFirst({
-    where: { deviceId: device.id, firmwareId, status: 'pending', firmware: { isActive: true } },
+    where: {
+      deviceId: device.id,
+      firmwareId,
+      status: { in: ['pending', 'downloading'] },
+      firmware: { isActive: true },
+    },
     include: { firmware: true },
   });
   if (!assignment) throw new HttpError(404, 'Firmware not found or not assigned to this device');

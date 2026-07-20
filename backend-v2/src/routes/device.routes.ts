@@ -112,16 +112,32 @@ router.get(
       throw new HttpError(404, 'Firmware file not found on server');
     }
 
+    const actualSize = fs.statSync(firmware.filePath).size;
+    if (firmware.fileSize == null || actualSize !== firmware.fileSize) {
+      throw new HttpError(500, 'Stored firmware size does not match its release record');
+    }
+
     res.setHeader('Content-Type', 'application/octet-stream');
     res.setHeader('Content-Disposition', `attachment; filename="firmware-${firmware.version}.bin"`);
-    res.setHeader('Content-Length', firmware.fileSize ?? 0);
+    res.setHeader('Content-Length', actualSize);
     if (firmware.checksum) {
       res.setHeader('X-Firmware-Checksum', firmware.checksum);
     }
 
-    fs.createReadStream(firmware.filePath).pipe(res);
-
-    await firmwareService.markFirmwareDownloading(device.id, firmware.id);
+    const stream = fs.createReadStream(firmware.filePath);
+    stream.once('error', (error) => {
+      if (!res.headersSent) return res.destroy(error);
+      res.destroy(error);
+    });
+    res.once('close', () => {
+      if (!res.writableEnded) stream.destroy();
+    });
+    stream.once('end', () => {
+      // This is only a delivery-start signal. The device still retries a
+      // `downloading` assignment until it has booted the matching version.
+      void firmwareService.markFirmwareDownloading(device.id, firmware.id);
+    });
+    stream.pipe(res);
   })
 );
 
