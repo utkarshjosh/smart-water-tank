@@ -292,6 +292,24 @@ server {
     access_log /var/log/nginx/api-access.log;
     error_log /var/log/nginx/api-error.log;
 
+    # Stream OTA binaries without proxy buffering; ESP8266 downloads can be
+    # slower than normal browser requests and must not inherit WebSocket
+    # connection headers.
+    location ~ ^/api/v1/devices/[^/]+/ota/download/ {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 300s;
+        proxy_read_timeout 300s;
+    }
+
     # Proxy to backend
     location / {
         proxy_pass http://localhost:3000;
