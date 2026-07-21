@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { auth } from './firebase';
+import { auth, waitForAuthState } from './firebase';
 import { getEnv } from './env';
 
 export const API_BASE_URL = getEnv('NEXT_PUBLIC_API_URL', 'http://localhost:3000');
@@ -17,6 +17,11 @@ const api = axios.create({
 // carries the *current* user's token or none at all, so a previous user's
 // session can never leak into API calls.
 api.interceptors.request.use(async (config) => {
+  // On a full-page refresh Firebase restores its persisted user
+  // asynchronously. Waiting here makes auth correct for every API consumer,
+  // including components that issue requests as soon as they mount.
+  await waitForAuthState();
+
   const user = auth.currentUser;
   if (user) {
     try {

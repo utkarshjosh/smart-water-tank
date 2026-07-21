@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import Layout from '@/components/Layout';
-import api, { API_BASE_URL } from '@/lib/api';
+import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -55,6 +55,7 @@ export default function FirmwarePage() {
   const [successMessage, setSuccessMessage] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [downloadingFirmwareId, setDownloadingFirmwareId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchFirmware();
@@ -129,6 +130,29 @@ export default function FirmwarePage() {
       setError(err.response?.data?.error || err.message || 'Failed to upload firmware');
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleDownload = async (fw: Firmware) => {
+    setDownloadingFirmwareId(fw.id);
+    setError('');
+
+    try {
+      const response = await api.get(`/api/v1/admin/firmware/${fw.id}/download`, {
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `firmware-${fw.version}.bin`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (err: any) {
+      setError(err.response?.data?.error || err.message || 'Failed to download firmware');
+    } finally {
+      setDownloadingFirmwareId(null);
     }
   };
 
@@ -496,14 +520,11 @@ export default function FirmwarePage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          asChild
+                          onClick={() => handleDownload(fw)}
+                          disabled={downloadingFirmwareId === fw.id}
                         >
-                          <a
-                            href={`${API_BASE_URL}/api/v1/admin/firmware/${fw.id}/download`}
-                          >
-                            <Download className="h-4 w-4" />
-                            Download
-                          </a>
+                          <Download className="h-4 w-4" />
+                          {downloadingFirmwareId === fw.id ? 'Downloading…' : 'Download'}
                         </Button>
                       </div>
                     </div>
@@ -694,5 +715,3 @@ export default function FirmwarePage() {
     </Layout>
   );
 }
-
-

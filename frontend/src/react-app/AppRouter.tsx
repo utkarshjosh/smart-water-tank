@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
-import { Link, Navigate, Route, Routes } from 'react-router-dom';
+import { Link, Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { useAuth } from '@/lib/auth-context';
 
 const HomePage = lazy(() => import('@/app/page'));
 const WelcomePage = lazy(() => import('@/app/welcome/page'));
@@ -61,46 +62,50 @@ export default function AppRouter() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/signup" element={<SignupPage />} />
-        <Route path="/app" element={<Navigate to="/app/devices" replace />} />
-        <Route
-          path="/app/devices"
-          element={
-            <TenantLayout>
-              <TenantDevicesPage />
-            </TenantLayout>
-          }
-        />
-        <Route
-          path="/app/devices/:deviceId"
-          element={
-            <TenantLayout>
-              <TenantDeviceDetailPage />
-            </TenantLayout>
-          }
-        />
-        <Route
-          path="/app/onboarding"
-          element={
-            <TenantLayout>
-              <OnboardingPage />
-            </TenantLayout>
-          }
-        />
-        <Route
-          path="/app/onboarding/tank-setup/:deviceId"
-          element={
-            <TenantLayout>
-              <TankSetupPage />
-            </TenantLayout>
-          }
-        />
-        <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
-        <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
-        <Route path="/admin/devices" element={<AdminDevicesPage />} />
-        <Route path="/admin/devices/:deviceId" element={<AdminDeviceDetailPage />} />
-        <Route path="/admin/firmware" element={<AdminFirmwarePage />} />
-        <Route path="/admin/tenants" element={<AdminTenantsPage />} />
-        <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
+        <Route element={<AccessGate access="authenticated" />}>
+          <Route path="/app" element={<Navigate to="/app/devices" replace />} />
+          <Route
+            path="/app/devices"
+            element={
+              <TenantLayout>
+                <TenantDevicesPage />
+              </TenantLayout>
+            }
+          />
+          <Route
+            path="/app/devices/:deviceId"
+            element={
+              <TenantLayout>
+                <TenantDeviceDetailPage />
+              </TenantLayout>
+            }
+          />
+          <Route
+            path="/app/onboarding"
+            element={
+              <TenantLayout>
+                <OnboardingPage />
+              </TenantLayout>
+            }
+          />
+          <Route
+            path="/app/onboarding/tank-setup/:deviceId"
+            element={
+              <TenantLayout>
+                <TankSetupPage />
+              </TenantLayout>
+            }
+          />
+        </Route>
+        <Route element={<AccessGate access="admin" />}>
+          <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+          <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+          <Route path="/admin/devices" element={<AdminDevicesPage />} />
+          <Route path="/admin/devices/:deviceId" element={<AdminDeviceDetailPage />} />
+          <Route path="/admin/firmware" element={<AdminFirmwarePage />} />
+          <Route path="/admin/tenants" element={<AdminTenantsPage />} />
+          <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
+        </Route>
         <Route
           path="*"
           element={
@@ -114,6 +119,16 @@ export default function AppRouter() {
       </Routes>
     </Suspense>
   );
+}
+
+function AccessGate({ access }: { access: 'authenticated' | 'admin' }) {
+  const { status, isAdmin } = useAuth();
+
+  if (status === 'initializing') return <RouteLoader />;
+  if (status === 'unauthenticated') return <Navigate to="/login" replace />;
+  if (access === 'admin' && !isAdmin) return <Navigate to="/app/devices" replace />;
+
+  return <Outlet />;
 }
 
 function RouteLoader() {
