@@ -41,18 +41,24 @@ async function checkForUpdate() {
 }
 
 export function startAppUpdateWatcher() {
-  // Clean up the cache-busting query param a previous reload added, and
-  // clear the guard once we've confirmed this load is on the build it
-  // reloaded for.
+  // Keep the build id in the visible URL. Cloudflare currently caches SPA
+  // HTML routes, so removing this parameter meant a later hard refresh could
+  // load an old index.html and revive startup bugs from an obsolete bundle.
+  // replaceState avoids a reload now while making every later refresh use the
+  // cache key for the bundle that is actually running.
   const url = new URL(window.location.href);
-  if (url.searchParams.has(RELOAD_PARAM)) {
-    url.searchParams.delete(RELOAD_PARAM);
+  if (url.searchParams.get(RELOAD_PARAM) !== __APP_BUILD_ID__) {
+    url.searchParams.set(RELOAD_PARAM, __APP_BUILD_ID__);
     window.history.replaceState(null, '', url.toString());
   }
   if (sessionStorage.getItem(RELOAD_GUARD_KEY) === __APP_BUILD_ID__) {
     sessionStorage.removeItem(RELOAD_GUARD_KEY);
   }
 
+  // Do not leave a stale bundle running for the first five minutes. The
+  // cache-busted version request is cheap and lets a hard-refreshed old build
+  // move to the current one before protected pages issue their first request.
+  void checkForUpdate();
   setInterval(checkForUpdate, CHECK_INTERVAL_MS);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') checkForUpdate();
