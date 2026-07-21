@@ -10,7 +10,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertCircle, CheckCircle2, Download, Upload, FileUp, Cpu, HardDrive, RadioTower, PackageCheck } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  Download,
+  Upload,
+  FileUp,
+  Cpu,
+  HardDrive,
+  RadioTower,
+  PackageCheck,
+  RotateCcw,
+  Trash2,
+} from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
@@ -38,6 +50,11 @@ interface Tenant {
   name: string;
 }
 
+type FirmwareAction = {
+  type: 'unroll' | 'delete';
+  firmware: Firmware;
+};
+
 export default function FirmwarePage() {
   const [firmware, setFirmware] = useState<Firmware[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
@@ -56,6 +73,9 @@ export default function FirmwarePage() {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [downloadingFirmwareId, setDownloadingFirmwareId] = useState<string | null>(null);
+  const [firmwareAction, setFirmwareAction] = useState<FirmwareAction | null>(null);
+  const [runningFirmwareAction, setRunningFirmwareAction] = useState(false);
+  const [firmwareActionError, setFirmwareActionError] = useState('');
 
   useEffect(() => {
     fetchFirmware();
@@ -153,6 +173,54 @@ export default function FirmwarePage() {
       setError(err.response?.data?.error || err.message || 'Failed to download firmware');
     } finally {
       setDownloadingFirmwareId(null);
+    }
+  };
+
+  const openFirmwareAction = (type: FirmwareAction['type'], fw: Firmware) => {
+    setFirmwareAction({ type, firmware: fw });
+    setFirmwareActionError('');
+    setError('');
+    setSuccessMessage('');
+  };
+
+  const closeFirmwareAction = () => {
+    if (runningFirmwareAction) return;
+    setFirmwareAction(null);
+    setFirmwareActionError('');
+  };
+
+  const handleFirmwareAction = async () => {
+    if (!firmwareAction) return;
+
+    const { type, firmware: selected } = firmwareAction;
+    setRunningFirmwareAction(true);
+    setFirmwareActionError('');
+
+    try {
+      if (type === 'unroll') {
+        const response = await api.post(`/api/v1/admin/firmware/${selected.id}/unroll`);
+        const cancelled = Number(response.data.cancelled_assignments || 0);
+        setSuccessMessage(
+          `Firmware ${selected.version} unrolled. ${cancelled} in-flight assignment${cancelled === 1 ? '' : 's'} cancelled.`
+        );
+      } else {
+        const response = await api.delete(`/api/v1/admin/firmware/${selected.id}`);
+        setSuccessMessage(
+          response.data.file_deleted
+            ? `Firmware ${selected.version} and its binary were deleted.`
+            : `Firmware ${selected.version} was deleted from the inventory; its binary was already absent.`
+        );
+      }
+
+      await fetchFirmware();
+      setFirmwareAction(null);
+      window.setTimeout(() => setSuccessMessage(''), 5000);
+    } catch (err: any) {
+      setFirmwareActionError(
+        err.response?.data?.error || err.message || `Failed to ${type} firmware`
+      );
+    } finally {
+      setRunningFirmwareAction(false);
     }
   };
 
@@ -485,7 +553,7 @@ export default function FirmwarePage() {
             ) : (
               <div className="divide-y divide-slate-100 dark:divide-slate-800">
                 {firmware.map((fw) => (
-                  <div key={fw.id} className="grid gap-3 p-4 lg:grid-cols-[1fr_150px_210px] lg:items-center">
+                  <div key={fw.id} className="grid gap-3 p-4 lg:grid-cols-[1fr_140px_310px] lg:items-center">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                           <p className="text-sm font-semibold text-slate-950 dark:text-white">Version {fw.version}</p>
@@ -526,6 +594,25 @@ export default function FirmwarePage() {
                           <Download className="h-4 w-4" />
                           {downloadingFirmwareId === fw.id ? 'Downloading…' : 'Download'}
                         </Button>
+                        {fw.is_active ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openFirmwareAction('unroll', fw)}
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                            Unroll
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => openFirmwareAction('delete', fw)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Delete
+                          </Button>
+                        )}
                       </div>
                     </div>
                 ))}
@@ -706,6 +793,58 @@ export default function FirmwarePage() {
                   disabled={rollingOut}
                 >
                   {rollingOut ? 'Rolling out...' : 'Rollout Firmware'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          )}
+        </Dialog>
+
+        {/* Unroll / delete confirmation */}
+        <Dialog
+          open={firmwareAction !== null}
+          onOpenChange={(open) => {
+            if (!open) closeFirmwareAction();
+          }}
+        >
+          {firmwareAction && (
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>
+                  {firmwareAction.type === 'unroll' ? 'Unroll' : 'Delete'} firmware {firmwareAction.firmware.version}?
+                </DialogTitle>
+                <DialogDescription>
+                  {firmwareAction.type === 'unroll'
+                    ? 'This stops offering the release and cancels pending, downloading, and installing assignments. A device that is already writing firmware cannot be interrupted.'
+                    : 'This permanently deletes the withdrawn release metadata and its managed .bin file. This action cannot be undone.'}
+                </DialogDescription>
+              </DialogHeader>
+
+              {firmwareActionError && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Action failed</AlertTitle>
+                  <AlertDescription>{firmwareActionError}</AlertDescription>
+                </Alert>
+              )}
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={closeFirmwareAction}
+                  disabled={runningFirmwareAction}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant={firmwareAction.type === 'delete' ? 'destructive' : 'default'}
+                  onClick={handleFirmwareAction}
+                  disabled={runningFirmwareAction}
+                >
+                  {runningFirmwareAction
+                    ? firmwareAction.type === 'unroll' ? 'Unrolling…' : 'Deleting…'
+                    : firmwareAction.type === 'unroll' ? 'Unroll firmware' : 'Delete firmware'}
                 </Button>
               </DialogFooter>
             </DialogContent>
