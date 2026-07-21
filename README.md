@@ -118,6 +118,8 @@ The PostgreSQL database includes:
 - `POST /api/v1/admin/firmware/upload` - Upload firmware
 - `GET /api/v1/admin/firmware` - List firmware versions
 - `POST /api/v1/admin/firmware/:version/rollout` - Rollout firmware
+- `POST /api/v1/admin/firmware/:firmwareId/unroll` - Stop a rollout and cancel in-flight assignments
+- `DELETE /api/v1/admin/firmware/:firmwareId` - Delete an unrolled firmware release and its binary
 - `GET /api/v1/admin/analytics/summary` - System analytics
 - `GET /api/v1/admin/tenants` - List tenants
 - `POST /api/v1/admin/devices/:deviceId/token` - Generate device token
@@ -231,7 +233,6 @@ EXPO_PUBLIC_FIREBASE_PROJECT_ID=...
 ## License
 
 MIT
-
 
 
 

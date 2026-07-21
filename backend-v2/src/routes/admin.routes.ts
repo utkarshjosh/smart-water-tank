@@ -153,6 +153,34 @@ router.post(
   })
 );
 
+// POST /api/v1/admin/firmware/:firmwareId/unroll - Stop offering a release to devices
+router.post(
+  '/firmware/:firmwareId/unroll',
+  asyncHandler(async (req, res) => {
+    const result = await firmwareService.unrollFirmware(req.params.firmwareId);
+    res.json({
+      success: true,
+      firmware_id: result.firmwareId,
+      version: result.version,
+      cancelled_assignments: result.cancelledAssignments,
+    });
+  })
+);
+
+// DELETE /api/v1/admin/firmware/:firmwareId - Delete an unrolled release and binary
+router.delete(
+  '/firmware/:firmwareId',
+  asyncHandler(async (req, res) => {
+    const result = await firmwareService.deleteFirmware(req.params.firmwareId);
+    res.json({
+      success: true,
+      firmware_id: result.firmwareId,
+      version: result.version,
+      file_deleted: result.fileDeleted,
+    });
+  })
+);
+
 // GET /api/v1/admin/analytics/summary - System-wide analytics
 router.get(
   '/analytics/summary',
