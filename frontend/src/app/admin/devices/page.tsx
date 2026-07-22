@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { AlertCircle, Building2, Copy, Cpu, Droplets, Plus, Radio, Search } from 'lucide-react';
+import MeasurementExportDialog from '@/components/MeasurementExportDialog';
 
 interface Device {
   id: string;
@@ -190,10 +191,20 @@ export default function DevicesPage() {
               Provisioned sensors, tenant ownership, and latest reporting state.
             </p>
           </div>
-          <Button onClick={() => setShowCreateModal(true)} className="h-9 w-fit">
-            <Plus className="mr-2 h-4 w-4" />
-            Create device
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <MeasurementExportDialog
+              devices={devices.map((device) => ({
+                id: device.device_id,
+                name: device.name || device.device_id,
+                context: device.tenant_name,
+              }))}
+              endpoint="/api/v1/admin/measurements/export"
+            />
+            <Button onClick={() => setShowCreateModal(true)} className="h-9 w-fit">
+              <Plus className="mr-2 h-4 w-4" />
+              Create device
+            </Button>
+          </div>
         </div>
 
         {error && (
@@ -443,6 +454,5 @@ export default function DevicesPage() {
     </Layout>
   );
 }
-
 
 

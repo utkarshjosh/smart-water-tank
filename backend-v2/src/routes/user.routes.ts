@@ -9,6 +9,7 @@ import * as deviceService from '../services/device.service';
 import * as tankProfileService from '../services/tank-profile.service';
 import * as firmwareService from '../services/firmware.service';
 import { updateUserFCMToken } from '../services/fcm.service';
+import { exportUserMeasurements } from '../services/measurement-export.service';
 
 const router = express.Router();
 
@@ -83,6 +84,31 @@ router.get(
   '/devices',
   asyncHandler(async (req: AuthRequest, res) => {
     res.json({ devices: await userService.listDevicesForTenant(req.user!.tenantId!, req.user!.id) });
+  })
+);
+
+const measurementExportBodySchema = z.object({
+  device_ids: z.array(z.string().min(1)).min(1).max(100),
+  from: z.coerce.date(),
+  to: z.coerce.date(),
+});
+
+// POST /api/v1/user/measurements/export - Tenant-scoped multi-device CSV export.
+router.post(
+  '/measurements/export',
+  asyncHandler(async (req: AuthRequest, res) => {
+    const { device_ids, from, to } = measurementExportBodySchema.parse(req.body);
+    const result = await exportUserMeasurements(req.user!.tenantId!, req.user!.id, {
+      hardwareDeviceIds: device_ids,
+      from,
+      to,
+    });
+    const dateSuffix = `${from.toISOString().slice(0, 10)}_to_${to.toISOString().slice(0, 10)}`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="aquamind-measurements-${dateSuffix}.csv"`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Export-Row-Count', result.rowCount.toString());
+    res.send(result.csv);
   })
 );
 

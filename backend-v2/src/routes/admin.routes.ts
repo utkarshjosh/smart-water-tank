@@ -8,6 +8,7 @@ import { HttpError } from '../lib/http-error';
 import { env } from '../config/env';
 import * as adminService from '../services/admin.service';
 import * as firmwareService from '../services/firmware.service';
+import { exportAdminMeasurements } from '../services/measurement-export.service';
 
 const router = express.Router();
 
@@ -40,6 +41,27 @@ router.get(
   asyncHandler(async (req, res) => {
     const { tenant_id, status } = listDevicesQuerySchema.parse(req.query);
     res.json({ devices: await adminService.listDevices({ tenantId: tenant_id, status }) });
+  })
+);
+
+const measurementExportBodySchema = z.object({
+  device_ids: z.array(z.string().min(1)).min(1).max(100),
+  from: z.coerce.date(),
+  to: z.coerce.date(),
+});
+
+// POST /api/v1/admin/measurements/export - Fleet-wide multi-device CSV export.
+router.post(
+  '/measurements/export',
+  asyncHandler(async (req, res) => {
+    const { device_ids, from, to } = measurementExportBodySchema.parse(req.body);
+    const result = await exportAdminMeasurements({ hardwareDeviceIds: device_ids, from, to });
+    const dateSuffix = `${from.toISOString().slice(0, 10)}_to_${to.toISOString().slice(0, 10)}`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="aquamind-measurements-${dateSuffix}.csv"`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Export-Row-Count', result.rowCount.toString());
+    res.send(result.csv);
   })
 );
 

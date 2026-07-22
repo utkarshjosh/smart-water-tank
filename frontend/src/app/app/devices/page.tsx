@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
 import { AlertCircle, PlusCircle, Droplets, Settings2 } from 'lucide-react';
 import DeviceCardTankPreview from '@/components/DeviceCardTankPreview';
+import MeasurementExportDialog from '@/components/MeasurementExportDialog';
 
 interface Device {
   id: string;
@@ -53,14 +54,20 @@ export default function TenantDevicesPage() {
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => navigate('/app/onboarding')}
-          className="inline-flex h-10 items-center justify-center rounded-md bg-slate-900 px-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100 dark:focus:ring-offset-slate-950"
-        >
-          <PlusCircle className="mr-2 h-4 w-4" />
-          Add Device
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <MeasurementExportDialog
+            devices={devices.map((device) => ({ id: device.id, name: device.name }))}
+            endpoint="/api/v1/user/measurements/export"
+          />
+          <button
+            type="button"
+            onClick={() => navigate('/app/onboarding')}
+            className="inline-flex h-9 items-center justify-center rounded-md bg-slate-900 px-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100 dark:focus:ring-offset-slate-950"
+          >
+            <PlusCircle className="mr-2 h-4 w-4" />
+            Add Device
+          </button>
+        </div>
       </div>
 
       {devices.length > 0 && (

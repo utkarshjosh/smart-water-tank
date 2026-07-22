@@ -107,6 +107,7 @@ The PostgreSQL database includes:
 - `GET /api/v1/user/devices` - List user's devices
 - `GET /api/v1/user/devices/:deviceId/current` - Latest measurement
 - `GET /api/v1/user/devices/:deviceId/history` - Historical data
+- `POST /api/v1/user/measurements/export` - Export an authorized multi-device UTC timeline as CSV
 - `GET /api/v1/user/devices/:deviceId/alerts` - Alert history
 - `POST /api/v1/user/devices/:deviceId/alerts/:alertId/acknowledge` - Acknowledge alert
 - `POST /api/v1/user/fcm-token` - Update FCM token
@@ -114,6 +115,7 @@ The PostgreSQL database includes:
 ### Admin Endpoints (Admin Role Required)
 - `GET /api/v1/admin/devices` - List all devices
 - `GET /api/v1/admin/devices/:deviceId` - Device details
+- `POST /api/v1/admin/measurements/export` - Export a fleet multi-device UTC timeline as CSV
 - `POST /api/v1/admin/devices/:deviceId/config` - Update device config
 - `POST /api/v1/admin/firmware/upload` - Upload firmware
 - `GET /api/v1/admin/firmware` - List firmware versions
@@ -233,7 +235,6 @@ EXPO_PUBLIC_FIREBASE_PROJECT_ID=...
 ## License
 
 MIT
-
 
 
 
