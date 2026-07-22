@@ -215,9 +215,6 @@
 // OTA Configuration
 // ============================================================================
 
-#define OTA_PASSWORD            ""  // Leave empty for no password
-#define OTA_PORT                8266
-
 // Remote OTA update URL base (deviceId will be appended in code)
 // Final URL format: {OTA_UPDATE_URL_BASE}/{deviceId}/ota/latest
 #define OTA_UPDATE_URL_BASE     "https://aquamind-api.utkarshjoshi.com/api/v1/devices"

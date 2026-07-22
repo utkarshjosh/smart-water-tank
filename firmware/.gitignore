@@ -2,6 +2,7 @@
 build/
 build/**
 *.bin
+!releases/**/*.bin
 *.elf
 *.map
 *.hex

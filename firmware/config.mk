@@ -4,7 +4,7 @@
 
 # Project Settings
 PROJECT_NAME    := water_tank
-VERSION         := 0.1.1
+VERSION         := 1.1.3
 
 # Board Configuration (ESP8266)
 BOARD_FQBN      := esp8266:esp8266:nodemcuv2
@@ -67,11 +67,6 @@ ifeq ($(DEBUG),1)
 else
     BUILD_FLAGS += -DNDEBUG -DCORE_DEBUG_LEVEL=0
 endif
-
-# OTA Settings (for future use)
-OTA_HOST        := 
-OTA_PORT        := 8266
-OTA_PASSWORD    := 
 
 # ============================================================================
 # ESP8266 Board Variants (uncomment the one you're using)

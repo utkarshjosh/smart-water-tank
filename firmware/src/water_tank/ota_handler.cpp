@@ -5,71 +5,43 @@
 #include "ota_handler.h"
 #include "config.h"
 #include "tls_client.h"
-#include <ArduinoOTA.h>
-#include <ESP8266httpUpdate.h>
 #include <ArduinoJson.h>
 #include <WiFiClientSecure.h>
 #include <ESP8266HTTPClient.h>
 #include <Updater.h>
+#include <bearssl/bearssl_hash.h>
+#include <ctype.h>
 
 namespace OTAHandler {
-    void init() {
-        Serial.println(F("[OTA] Initializing..."));
-        
-        // Set hostname
-        ArduinoOTA.setHostname(Config::getOtaHostname().c_str());
-        
-        // Set password if configured
-        #ifdef OTA_PASSWORD
-        if (strlen(OTA_PASSWORD) > 0) {
-            ArduinoOTA.setPassword(OTA_PASSWORD);
+    constexpr uint16_t OTA_DOWNLOAD_TIMEOUT_MS = 60000;
+    constexpr size_t SHA256_BYTES = 32;
+    constexpr size_t SHA256_HEX_LENGTH = SHA256_BYTES * 2;
+
+    static bool isValidSha256(const char* checksum) {
+        if (!checksum || strlen(checksum) != SHA256_HEX_LENGTH) return false;
+        for (size_t i = 0; i < SHA256_HEX_LENGTH; ++i) {
+            if (!isxdigit(static_cast<unsigned char>(checksum[i]))) return false;
         }
-        #endif
-        
-        // Set port
-        ArduinoOTA.setPort(OTA_PORT);
-        
-        // Callbacks
-        ArduinoOTA.onStart([]() {
-            String type = (ArduinoOTA.getCommand() == U_FLASH) ? "sketch" : "filesystem";
-            Serial.printf("[OTA] Start updating %s\n", type.c_str());
-        });
-        
-        ArduinoOTA.onEnd([]() {
-            Serial.println(F("\n[OTA] Update complete!"));
-        });
-        
-        ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-            Serial.printf("[OTA] Progress: %u%%\r", (progress / (total / 100)));
-        });
-        
-        ArduinoOTA.onError([](ota_error_t error) {
-            Serial.printf("[OTA] Error[%u]: ", error);
-            switch (error) {
-                case OTA_AUTH_ERROR:
-                    Serial.println(F("Auth Failed"));
-                    break;
-                case OTA_BEGIN_ERROR:
-                    Serial.println(F("Begin Failed"));
-                    break;
-                case OTA_CONNECT_ERROR:
-                    Serial.println(F("Connect Failed"));
-                    break;
-                case OTA_RECEIVE_ERROR:
-                    Serial.println(F("Receive Failed"));
-                    break;
-                case OTA_END_ERROR:
-                    Serial.println(F("End Failed"));
-                    break;
-            }
-        });
-        
-        ArduinoOTA.begin();
-        Serial.printf("[OTA] Ready at %s.local:%d\n", Config::getOtaHostname().c_str(), OTA_PORT);
+        return true;
+    }
+
+    static String sha256Hex(const uint8_t* digest) {
+        static const char HEX_CHARS[] = "0123456789abcdef";
+        String result;
+        result.reserve(SHA256_HEX_LENGTH);
+        for (size_t i = 0; i < SHA256_BYTES; ++i) {
+            result += HEX_CHARS[digest[i] >> 4];
+            result += HEX_CHARS[digest[i] & 0x0f];
+        }
+        return result;
+    }
+
+    void init() {
+        Serial.println(F("[OTA] Authenticated HTTPS OTA enabled"));
     }
 
     void handle() {
-        ArduinoOTA.handle();
+        // Remote OTA is scheduled by the main loop; there is no LAN listener.
     }
 
     bool checkForUpdate() {
@@ -77,6 +49,8 @@ namespace OTAHandler {
         
         String downloadUrl = "";
         String latestVersion = "";
+        String expectedSha256 = "";
+        size_t expectedSize = 0;
         bool updateFound = false;
         
         // Scope for the update check components (Client, JSON, etc.)
@@ -100,19 +74,22 @@ namespace OTAHandler {
                 String response = http.getString();
                 
                 // Parse response for update info
-                // Expected: {"update_available": true, "download_url": "...", "latest_version": "..."}
+                // Expected: update metadata plus SHA-256 and exact byte size.
                 JsonDocument doc;
                 if (deserializeJson(doc, response) == DeserializationError::Ok) {
                     if (doc["update_available"] == true) {
                         const char* url = doc["download_url"];
                         const char* ver = doc["latest_version"];
+                        const char* checksum = doc["checksum"];
+                        expectedSize = doc["file_size"] | 0U;
                         
-                        if (url && ver) {
+                        if (url && ver && isValidSha256(checksum) && expectedSize > 0) {
                             downloadUrl = String(url);
                             latestVersion = String(ver);
+                            expectedSha256 = String(checksum);
                             updateFound = true;
                         } else {
-                            Serial.println(F("[OTA] Update available but missing URL or version"));
+                            Serial.println(F("[OTA] Rejecting update with incomplete or invalid manifest"));
                         }
                     }
                 } else {
@@ -131,28 +108,45 @@ namespace OTAHandler {
             Serial.printf("[OTA] URL: %s\n", downloadUrl.c_str());
             
             // Now we can safely start the download with freed memory
-            return updateFromUrl(downloadUrl.c_str());
+            return updateFromUrl(downloadUrl.c_str(), expectedSha256.c_str(), expectedSize);
         }
         
         Serial.println(F("[OTA] No updates available"));
         return false;
     }
 
-    bool updateFromUrl(const char* url) {
+    bool updateFromUrl(const char* url, const char* expectedSha256, size_t expectedSize) {
         Serial.printf("[OTA] Downloading from %s\n", url);
+
+        if (!isValidSha256(expectedSha256) || expectedSize == 0) {
+            Serial.println(F("[OTA] Refusing download without valid SHA-256 and size"));
+            return false;
+        }
         
         // Use secure client for HTTPS URLs
         WiFiClientSecure clientSecure;
         if (!TlsClient::configure(clientSecure)) return false;
+        clientSecure.setTimeout(OTA_DOWNLOAD_TIMEOUT_MS);
         HTTPClient http;
         
         http.begin(clientSecure, url);
+        http.setTimeout(OTA_DOWNLOAD_TIMEOUT_MS);
         http.addHeader("Authorization", "Bearer " + Config::deviceToken);
+        const char* checksumHeaders[] = { "X-Firmware-Checksum" };
+        http.collectHeaders(checksumHeaders, 1);
         
         int httpCode = http.GET();
         
         if (httpCode != HTTP_CODE_OK) {
             Serial.printf("[OTA] HTTP error: %d - %s\n", httpCode, http.errorToString(httpCode).c_str());
+            http.end();
+            return false;
+        }
+
+        String responseChecksum = http.header("X-Firmware-Checksum");
+        if (!isValidSha256(responseChecksum.c_str()) ||
+            !responseChecksum.equalsIgnoreCase(expectedSha256)) {
+            Serial.println(F("[OTA] Download checksum header missing or differs from manifest"));
             http.end();
             return false;
         }
@@ -169,6 +163,12 @@ namespace OTAHandler {
         
         // Check if enough space is available
         size_t contentSize = (size_t)contentLength;
+        if (contentSize != expectedSize) {
+            Serial.printf("[OTA] Size mismatch. Manifest: %u, Download: %u\n",
+                static_cast<unsigned>(expectedSize), static_cast<unsigned>(contentSize));
+            http.end();
+            return false;
+        }
         if (contentSize > (ESP.getFreeSketchSpace() - 0x1000)) {
             Serial.printf("[OTA] Not enough space. Available: %d, Required: %d\n",
                 ESP.getFreeSketchSpace() - 0x1000, contentLength);
@@ -189,20 +189,41 @@ namespace OTAHandler {
         WiFiClient* stream = http.getStreamPtr();
         size_t written = 0;
         size_t totalSize = contentSize;
+        br_sha256_context sha256;
+        br_sha256_init(&sha256);
         
         uint8_t buff[128] = { 0 };
-        while (http.connected() && (written < totalSize)) {
+        // Do not stop merely because the HTTP peer has closed: BearSSL can
+        // still have response bytes buffered locally. Wait for the full
+        // Content-Length or declare a stalled transfer and abort cleanly.
+        unsigned long lastDataAt = millis();
+        while (written < totalSize) {
             size_t available = stream->available();
             if (available) {
-                int c = stream->readBytes(buff, ((available > sizeof(buff)) ? sizeof(buff) : available));
-                Update.write(buff, c);
+                size_t c = stream->readBytes(buff, ((available > sizeof(buff)) ? sizeof(buff) : available));
+                if (c == 0 || Update.write(buff, c) != c) {
+                    Serial.println(F("[OTA] Flash write failed"));
+                    http.end();
+                    Update.end(false);
+                    return false;
+                }
+                br_sha256_update(&sha256, buff, c);
                 written += c;
+                lastDataAt = millis();
                 
                 // Progress indicator
                 if (written % 10240 == 0 || written == totalSize) {
-                    Serial.printf("[OTA] Progress: %d%% (%d/%d bytes)\r", 
-                        (written * 100) / totalSize, written, totalSize);
+                    Serial.printf("[OTA] Progress: %u%% (%u/%u bytes)\r",
+                        static_cast<unsigned>((written * 100) / totalSize),
+                        static_cast<unsigned>(written), static_cast<unsigned>(totalSize));
                 }
+                yield();
+            } else if (millis() - lastDataAt > 10000) {
+                Serial.printf("[OTA] Download stalled at %u/%u bytes\n",
+                    static_cast<unsigned>(written), static_cast<unsigned>(totalSize));
+                http.end();
+                Update.end(false);
+                return false;
             }
             delay(1);
         }
@@ -213,9 +234,20 @@ namespace OTAHandler {
         
         if (written != totalSize) {
             Serial.printf("[OTA] OTA Error: Written %d/%d bytes\n", written, totalSize);
-            // Update will be cleaned up automatically
+            Update.end(false);
             return false;
         }
+
+        uint8_t digest[SHA256_BYTES];
+        br_sha256_out(&sha256, digest);
+        String actualSha256 = sha256Hex(digest);
+        if (!actualSha256.equalsIgnoreCase(expectedSha256)) {
+            Serial.printf("[OTA] SHA-256 mismatch. Expected: %s, Actual: %s\n",
+                expectedSha256, actualSha256.c_str());
+            Update.end(false);
+            return false;
+        }
+        Serial.println(F("[OTA] SHA-256 verified"));
         
         if (!Update.end()) {
             Serial.printf("[OTA] Update end failed: %s\n", Update.getErrorString().c_str());

@@ -30,11 +30,11 @@ namespace OTAHandler {
     /**
      * Download and install update from URL
      * @param url Full URL to firmware binary
+     * @param expectedSha256 Expected lowercase/uppercase SHA-256 hex digest
+     * @param expectedSize Expected firmware size from the authenticated manifest
      * @return true if update successful
      */
-    bool updateFromUrl(const char* url);
+    bool updateFromUrl(const char* url, const char* expectedSha256, size_t expectedSize);
 }
 
 #endif // OTA_HANDLER_H
-
-

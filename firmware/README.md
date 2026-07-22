@@ -116,7 +116,6 @@ restart behavior for USB-powered bench setup.
 | `make add-lib LIB="Name@ver"` | Add new library |
 | `make info` | Show build configuration |
 | `make size` | Show binary size |
-| `make ota` | Upload via OTA |
 | `make help` | Show all commands |
 
 ## Adding Libraries
@@ -167,10 +166,13 @@ BOARD_FQBN := esp8266:esp8266:esp01_1m
 
 ## OTA Updates
 
-1. First, upload via USB
-2. Device registers on network as `watertank.local`
-3. Update OTA settings in `config.mk`
-4. Use `make ota` for subsequent uploads
+1. Flash the initial or recovery image over USB.
+2. Upload the next production `.bin` through the admin firmware page/API.
+3. Assign it to a canary device before widening the rollout.
+4. The device checks the authenticated HTTPS OTA endpoint on its scheduled
+   cadence, validates the exact size and SHA-256, installs, and reboots.
+
+The production firmware does not expose a local ArduinoOTA listener.
 
 ## Troubleshooting
 

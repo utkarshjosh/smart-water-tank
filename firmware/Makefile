@@ -4,7 +4,7 @@
 # ============================================================================
 
 .PHONY: all build upload clean monitor setup install-libs update-libs \
-        list-boards list-libs info help fqbn compile flash erase ota \
+        list-boards list-libs info help fqbn compile flash erase \
         deps check lint size
 
 # Include project configuration
@@ -68,7 +68,7 @@ upload: build
 	$(CLI) upload \
 		--fqbn $(BOARD_FQBN) \
 		--port $(SERIAL_PORT) \
-		--input-dir $(BUILD_DIR) \
+		--input-file $(BINARY) \
 		$(SKETCH_DIR)
 	@echo "$(GREEN)✓ Upload complete!$(NC)"
 
@@ -187,24 +187,6 @@ search-lib:
 	$(CLI) lib search "$(LIB)"
 
 # ============================================================================
-# OTA Update (Over-The-Air)
-# ============================================================================
-
-## Upload via OTA
-ota: build
-	@if [ -z "$(OTA_HOST)" ]; then \
-		echo "$(RED)Error: Set OTA_HOST in config.mk$(NC)"; \
-		exit 1; \
-	fi
-	@echo "$(CYAN)→ OTA upload to $(OTA_HOST)...$(NC)"
-	python3 $(SCRIPTS_DIR)/espota.py \
-		-i $(OTA_HOST) \
-		-p $(OTA_PORT) \
-		$(if $(OTA_PASSWORD),-a $(OTA_PASSWORD)) \
-		-f $(BINARY)
-	@echo "$(GREEN)✓ OTA upload complete$(NC)"
-
-# ============================================================================
 # Information & Diagnostics
 # ============================================================================
 
@@ -316,7 +298,6 @@ help:
 	@echo ""
 	@echo "$(CYAN)Development:$(NC)"
 	@echo "  make monitor      - Open serial monitor"
-	@echo "  make ota          - Upload via OTA"
 	@echo "  make erase        - Erase entire flash"
 	@echo ""
 	@echo "$(CYAN)Information:$(NC)"
