@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Split Wireless Sensor Node Architecture - AquaMind Plans</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/tokyo-night-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #090d16;
+            --bg-secondary: #111827;
+            --bg-card: rgba(17, 24, 39, 0.7);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --accent-cyan: #38bdf8;
+            --accent-blue: #6366f1;
+            --accent-green: #34d399;
+            --accent-amber: #fbbf24;
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --text-muted: #6b7280;
+            --code-bg: #0d1322;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.7;
+            overflow-x: hidden;
+        }
+
+        /* Header / Navbar */
+        .navbar {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(9, 13, 22, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.85rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .nav-left {
+            display: flex;
+            align-items: center;
+            gap: 1.25rem;
+        }
+
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9rem;
+            padding: 0.4rem 0.85rem;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            transition: all 0.2s ease;
+        }
+
+        .back-btn:hover {
+            color: var(--accent-cyan);
+            background: rgba(56, 189, 248, 0.1);
+            border-color: rgba(56, 189, 248, 0.3);
+        }
+
+        .nav-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #ffffff 0%, var(--accent-cyan) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.65rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+        }
+
+        .badge-active {
+            background: rgba(56, 189, 248, 0.15);
+            color: var(--accent-cyan);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+        }
+
+        .badge-executed {
+            background: rgba(52, 211, 153, 0.15);
+            color: var(--accent-green);
+            border: 1px solid rgba(52, 211, 153, 0.3);
+        }
+
+        .badge-arch {
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--accent-blue);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+        }
+
+        /* Container Layout */
+        .layout {
+            display: flex;
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 2rem;
+            gap: 2.5rem;
+        }
+
+        /* Sidebar TOC */
+        .sidebar {
+            width: 280px;
+            flex-shrink: 0;
+            position: sticky;
+            top: 5rem;
+            height: calc(100vh - 6rem);
+            overflow-y: auto;
+            padding-right: 1rem;
+        }
+
+        .sidebar h4 {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+
+        .toc-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .toc-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.88rem;
+            font-weight: 500;
+            display: block;
+            padding: 0.35rem 0.65rem;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .toc-link:hover, .toc-link.active {
+            color: var(--accent-cyan);
+            background: rgba(56, 189, 248, 0.08);
+        }
+
+        .toc-sub {
+            padding-left: 1rem;
+            font-size: 0.82rem;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            min-width: 0;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 3rem;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+        }
+
+        .doc-header {
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .doc-header h1 {
+            font-size: 2.25rem;
+            font-weight: 800;
+            line-height: 1.25;
+            margin-bottom: 0.75rem;
+            color: #ffffff;
+        }
+
+        .doc-meta {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        /* Markdown Rendered Styling */
+        .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 {
+            color: #ffffff;
+            font-weight: 700;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            scroll-margin-top: 6rem;
+        }
+
+        .markdown-body h1 { font-size: 1.75rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; }
+        .markdown-body h2 { font-size: 1.4rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.4rem; }
+        .markdown-body h3 { font-size: 1.15rem; }
+
+        .markdown-body p {
+            margin-bottom: 1.25rem;
+            color: #d1d5db;
+        }
+
+        .markdown-body ul, .markdown-body ol {
+            margin-bottom: 1.25rem;
+            padding-left: 1.5rem;
+            color: #d1d5db;
+        }
+
+        .markdown-body li {
+            margin-bottom: 0.4rem;
+        }
+
+        .markdown-body blockquote {
+            border-left: 4px solid var(--accent-cyan);
+            background: rgba(56, 189, 248, 0.05);
+            padding: 1rem 1.25rem;
+            border-radius: 0 8px 8px 0;
+            margin-bottom: 1.5rem;
+            color: #e5e7eb;
+        }
+
+        .markdown-body table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+            font-size: 0.9rem;
+        }
+
+        .markdown-body th, .markdown-body td {
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--border-color);
+            text-align: left;
+        }
+
+        .markdown-body th {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--accent-cyan);
+            font-weight: 700;
+        }
+
+        .markdown-body tr:nth-child(even) {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .markdown-body code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--code-bg);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.85em;
+            color: var(--accent-cyan);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .markdown-body pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 1.25rem;
+            overflow-x: auto;
+            margin: 1.5rem 0;
+        }
+
+        .markdown-body pre code {
+            background: transparent;
+            padding: 0;
+            border: none;
+            color: inherit;
+            font-size: 0.88rem;
+        }
+
+        .mermaid {
+            background: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            display: flex;
+            justify-content: center;
+            margin: 1.5rem 0;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        @media (max-width: 1024px) {
+            .sidebar { display: none; }
+            .main-content { padding: 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar">
+        <div class="nav-left">
+            <a href="index.html" class="back-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                Plans Hub
+            </a>
+            <span class="nav-title">Split Wireless Sensor Node Architecture</span>
+        </div>
+        <div>
+            <span class="badge badge-active">Active</span>
+        </div>
+    </nav>
+
+    <div class="layout">
+        <aside class="sidebar">
+            <h4>Table of Contents</h4>
+            <ul class="toc-list" id="toc"></ul>
+        </aside>
+
+        <main class="main-content">
+            <div class="doc-header">
+                <h1>Split Wireless Sensor Node Architecture</h1>
+                <div class="doc-meta">
+                    <span>Category: <strong>Hardware &amp; Wireless</strong></span>
+                    <span>•</span>
+                    <span>Status: <strong>Active</strong></span>
+                </div>
+            </div>
+
+            <div id="content" class="markdown-body">
+                <!-- Markdown Content rendered here -->
+            </div>
+        </main>
+    </div>
+
+    <script id="raw-markdown" type="text/template">
+# Plan: Split-Device Wireless Architecture (ESP-NOW + ESP32)
+
+&gt; Status: **Planned / deferred.** Not being built yet. First we validate the
+&gt; sensors we already own on ESP8266 (see `firmware/prototypes/sensor_sanity/`).
+&gt; This document captures the target architecture so we don&#x27;t lose the decision.
+
+## Why split the device
+
+Indian rooftop-tank layout: pump on the ground floor, Sintex tank on the roof.
+On the breadboard prototype we hit three problems, all caused by trying to run a
+fragile ultrasonic timing signal and 5 V power over a long cable:
+
+1. **Signal integrity** — ultrasonic echo pulses are microsecond-precise and
+   degrade / pick up noise over long wires.
+2. **Power delivery** — 5 V droops badly over distance.
+3. **Reachability** — controls, display, and reset button need to be at
+   human height, but the sensor must be at the tank.
+
+**Core principle:** *digitize the reading at the tank and send digital/wireless
+data over the distance — never extend the analog signal or 5 V rail.*
+
+## Chosen approach: two nodes, wireless link (ESP-NOW)
+
+We chose **Option B (wireless)** over a wired RS-485 link because running a
+4-core cable through the slab is impractical for us, and we&#x27;re upgrading the
+core module to **ESP32** anyway (more RAM/GPIO, dual core, first-class ESP-NOW,
+better for config-heavy, test-friendly firmware).
+
+```
+   ROOFTOP (near tank)                 GROUND FLOOR (human-reachable)
+ ┌────────────────────────┐          ┌───────────────────────────────┐
+ │ TANK NODE              │          │ CONTROL NODE                  │
+ │  ESP32                 │  ESP-NOW │  ESP32                        │
+ │  JSN-SR04T / SR04M     │ ───────► │  OLED / LCD + buttons + reset │
+ │  DS18B20 (temp)        │  (peer   │  config web UI + OTA          │
+ │  buck 12V→5V, IP65 box │   to     │  WiFi uplink → our server     │
+ │  minimal: sense + send │   peer)  │  (HTTP/MQTT to AquaMind API)  │
+ └────────────────────────┘          └───────────────────────────────┘
+            ▲                                       │
+            └──── 12V DC up a 2-core wire ──────────┘
+                  (buck to 5V/3.3V at the tank node)
+```
+
+### Node responsibilities
+- **Tank node (roof):** dumb and rugged. Reads level + temperature, transmits
+  via ESP-NOW. No display, no buttons. Sealed IP65 enclosure. Powered by a buck
+  converter fed from a 12 V line run up from downstairs (send 12 V, regulate
+  locally → negligible voltage drop).
+- **Control node (downstairs):** display, buttons, reset, the config portal, OTA,
+  and the only WiFi uplink to the AquaMind server. Receives ESP-NOW packets and
+  does all the tank-height / volume / percentage math and alerting.
+
+### Why ESP-NOW (not WiFi/MQTT for the local link)
+- Peer-to-peer, no router needed — roof WiFi coverage is unreliable.
+- ~100 m line-of-sight, works through a slab in most homes; very low power.
+- No cloud, no Blynk, free.
+- Control node still owns the single WiFi/MQTT connection to our own server, so
+  the tank node never needs WiFi credentials or internet.
+
+### Power strategy
+- One 12 V 2 A AC adapter downstairs.
+- 2-core wire up to the roof carrying **12 V** (not 5 V).
+- Buck converter (MP1584 / LM2596, ~₹50) at the tank node steps 12 V → 5 V.
+- This alone fixes the &quot;power not enough&quot; problem from the breadboard build.
+
+## Target bill of materials (India — Robu.in / Robocraze)
+| Part | Role | ~Price |
+|---|---|---|
+| ESP32 DevKit ×2 | tank + control nodes | ₹350 ea |
+| JSN-SR04T / SR04M waterproof ultrasonic | tank level (already own extender) | ₹300 |
+| DS18B20 (1-Wire, waterproof probe) | water temperature | ₹120 |
+| MP1584 / LM2596 buck | 12V→5V at tank node | ₹50 |
+| 0.96&quot; I2C OLED (SSD1306) or I2C 16×2 LCD | control node display | ₹150–300 |
+| Push buttons / rotary encoder (HW-040) | menu + reset | ₹80 |
+| 12 V 2 A AC adapter | single downstairs supply | ₹200 |
+| IP65 junction box | weatherproof tank node | ₹150 |
+| 2-core cable | 12 V up to roof | per metre |
+
+## Firmware direction (when we build this)
+- Migrate core module to **ESP32** (`config.mk` already has the ESP32 FQBN block
+  commented in, ready to switch).
+- Config-driven: pin maps, tank dimensions, calibration, thresholds, and a
+  **test-mode / live-mode** flag all live in a flash-persisted config struct
+  (LittleFS / Preferences), not hardcoded.
+- Feature flags to enable/disable modules (relay, sensor type, temp).
+- **Test/simulation mode** that injects synthetic sensor values so the whole
+  pipeline (ESP-NOW → control node → server) can be developed without the tank.
+- Split firmware = two small sketches:
+  - `tank_node`: sense + ESP-NOW send. Tiny, stable, rarely reflashed.
+  - `control_node`: ESP-NOW receive + math + display + WiFi uplink + OTA.
+    Almost all iteration happens here.
+- Reuse the existing modular structure in `firmware/src/modules/` where possible
+  (sensor, config, data_reporter, ota_handler map cleanly onto the two nodes).
+
+## Debug / testing kit (built — runnable today)
+The whole-stack testing kit for this plan already exists and runs without any
+hardware:
+- **`tools/debug-hub/`** — a local Node hub (zero npm deps) + web dashboard that
+  bridges devices over **WiFi/LAN (TCP + UDP discovery)** and **USB serial** into
+  one UI (live cards, charts, command buttons, config editor, unified log). Ships
+  a **device simulator** (fake tank + control nodes) so the entire stack is
+  debuggable on the local network today. Run: `node src/index.js` → open
+  `http://localhost:7070`.
+- **`firmware/prototypes/net_node/`** — the device side of the same line-JSON
+  protocol for real hardware: WiFi + TCP server + UDP announce + telemetry +
+  commands. Compiles on the ESP8266 we own *and* on ESP32. Flashing this makes a
+  real board appear in the hub over WiFi, exactly like the simulator.
+- One protocol (`tools/debug-hub/src/protocol.js`) is spoken by the simulator,
+  the ESP firmware, and the serial `sensor_sanity` sketch — so the same UI and
+  hub serve all three. This is the &quot;configurable, test-friendly, live/test mode&quot;
+  goal, made concrete.
+
+## What we are NOT doing right now
+- Relay / pump control (de-prioritized — removes distance dependency for now).
+- Blynk (paid, cloud) — we run our own admin panel + server.
+- Buying new modules before the ESP8266 sensor-sanity prototype passes.
+
+## Decision log
+- **2026-07-02** — Chose wireless (ESP-NOW) split over wired RS-485 due to
+  cabling difficulty; agreed to move core module to ESP32; agreed to first
+  validate SR04M + DS18B20 on the existing ESP8266 before spending.
+
+    </script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            mermaid.initialize({ startOnLoad: false, theme: 'dark' });
+
+            const rawMarkdown = document.getElementById('raw-markdown').innerHTML;
+            
+            // Configure marked
+            marked.setOptions({
+                highlight: function(code, lang) {
+                    if (lang && hljs.getLanguage(lang)) {
+                        return hljs.highlight(code, { language: lang }).value;
+                    }
+                    return hljs.highlightAuto(code).value;
+                },
+                breaks: true
+            });
+
+            const contentEl = document.getElementById('content');
+            contentEl.innerHTML = marked.parse(rawMarkdown);
+
+            // Handle Mermaid blocks
+            const codeBlocks = contentEl.querySelectorAll('pre code.language-mermaid');
+            codeBlocks.forEach((codeBlock, i) => {
+                const pre = codeBlock.parentElement;
+                const mermaidDiv = document.createElement('div');
+                mermaidDiv.className = 'mermaid';
+                mermaidDiv.textContent = codeBlock.textContent;
+                pre.replaceWith(mermaidDiv);
+            });
+
+            mermaid.run();
+
+            // Build Table of Contents
+            const tocEl = document.getElementById('toc');
+            const headings = contentEl.querySelectorAll('h1, h2, h3');
+            
+            headings.forEach((heading, index) => {
+                const id = 'heading-' + index;
+                heading.id = id;
+
+                const li = document.createElement('li');
+                const a = document.createElement('a');
+                a.href = '#' + id;
+                a.className = 'toc-link' + (heading.tagName === 'H3' ? ' toc-sub' : '');
+                a.textContent = heading.textContent;
+                
+                li.appendChild(a);
+                tocEl.appendChild(li);
+            });
+
+            // Highlight Active TOC link on scroll
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        document.querySelectorAll('.toc-link').forEach(link => {
+                            link.classList.toggle('active', link.getAttribute('href') === '#' + entry.target.id);
+                        });
+                    }
+                });
+            }, { rootMargin: '-20% 0px -70% 0px' });
+
+            headings.forEach(heading => observer.observe(heading));
+        });
+    </script>
+</body>
+</html>
