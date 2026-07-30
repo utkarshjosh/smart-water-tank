@@ -112,15 +112,29 @@ namespace PowerManager {
         Sensor::powerOff();
 #if ENABLE_DEEP_SLEEP
         unsigned long delayMs;
+        float battVolts = Sensor::readBatteryVoltage();
+        float intervalMultiplier = 1.0;
+
+        // Adaptive low-battery scaling: increase sleep interval to protect battery reserves
+        if (battVolts > 0.5 && battVolts < BATTERY_LOW_THRESHOLD_V) {
+            if (battVolts < 3.1) {
+                intervalMultiplier = 4.0;
+                Serial.printf("[Power] Critical battery (%.2fV < 3.1V)! Quadrupling sleep interval.\n", battVolts);
+            } else {
+                intervalMultiplier = 2.0;
+                Serial.printf("[Power] Low battery (%.2fV < %.2fV)! Doubling sleep interval.\n", battVolts, BATTERY_LOW_THRESHOLD_V);
+            }
+        }
+
         if (state.networkFailures == 0) {
-            delayMs = clampSleep(normalIntervalMs);
+            delayMs = clampSleep(static_cast<unsigned long>(normalIntervalMs * intervalMultiplier));
         } else {
             const uint8_t exponent = state.networkFailures - 1;
             uint64_t backedOff = static_cast<uint64_t>(MIN_SLEEP_INTERVAL_MS) << exponent;
             delayMs = clampSleep(backedOff > MAX_FAILURE_SLEEP_MS ? MAX_FAILURE_SLEEP_MS : static_cast<unsigned long>(backedOff));
         }
 
-        Serial.printf("[Power] Sleeping for %lu ms (network failures=%u)\n", delayMs, state.networkFailures);
+        Serial.printf("[Power] Sleeping for %lu ms (battery=%.2fV, network failures=%u)\n", delayMs, battVolts, state.networkFailures);
         WiFi.disconnect(true);
         delay(100);
         ESP.deepSleep(static_cast<uint64_t>(delayMs) * 1000ULL, WAKE_RF_DEFAULT);
