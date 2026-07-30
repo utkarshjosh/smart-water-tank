@@ -28,9 +28,28 @@ static DallasTemperature* tempSensor = nullptr;
 #define BATTERY_DIVIDER_RATIO   2.0
 
 namespace Sensor {
+    void powerOn() {
+#if defined(PIN_SENSOR_POWER) && PIN_SENSOR_POWER >= 0
+        pinMode(PIN_SENSOR_POWER, OUTPUT);
+        digitalWrite(PIN_SENSOR_POWER, HIGH);
+        Serial.println(F("[Sensor] Power gate enabled (Sensors ON)"));
+        delay(SENSOR_WARMUP_MS);
+#endif
+    }
+
+    void powerOff() {
+#if defined(PIN_SENSOR_POWER) && PIN_SENSOR_POWER >= 0
+        pinMode(PIN_SENSOR_POWER, OUTPUT);
+        digitalWrite(PIN_SENSOR_POWER, LOW);
+        Serial.println(F("[Sensor] Power gate disabled (Sensors OFF)"));
+#endif
+    }
+
     void init() {
         Serial.println(F("[Sensor] Initializing..."));
         
+        powerOn();
+
         // Initialize ultrasonic sensor
         sonar = new NewPing(PIN_ULTRASONIC_TRIG, PIN_ULTRASONIC_ECHO, MAX_DISTANCE_CM);
         
@@ -38,9 +57,6 @@ namespace Sensor {
         oneWire = new OneWire(PIN_TEMPERATURE);
         tempSensor = new DallasTemperature(oneWire);
         tempSensor->begin();
-        
-        // Warmup delay
-        delay(SENSOR_WARMUP_MS);
         
         Serial.println(F("[Sensor] Initialized"));
     }

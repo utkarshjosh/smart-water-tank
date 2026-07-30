@@ -126,6 +126,12 @@
 // Status LED
 #define PIN_STATUS_LED          LED_BUILTIN
 
+// Sensor power gate (MOSFET/transistor switch to isolate sensors in sleep)
+// Set to -1 if sensors are powered continuously without gating
+#ifndef PIN_SENSOR_POWER
+#define PIN_SENSOR_POWER        12      // GPIO12 (D6 on NodeMCU)
+#endif
+
 // ============================================================================
 // Tank Configuration
 // ============================================================================
@@ -189,14 +195,11 @@
 // How often to check for OTA updates (milliseconds)
 #define OTA_CHECK_INTERVAL_MS       21600000 // 6 hours
 
-// Power-safe normal mode. Deep sleep on ESP8266 requires GPIO16 (D0) wired to
-// RST; leave it disabled until that exact hardware wiring is verified. The
-// duty-cycle code is compiled either way, but only an explicit build flag such
-// as `EXTRA_BUILD_FLAGS=-DENABLE_DEEP_SLEEP=1` can put the board to sleep.
+// Power-safe normal mode. Deep sleep on ESP8266 requires GPIO16 (D0) wired to RST.
 #ifndef ENABLE_DEEP_SLEEP
-#define ENABLE_DEEP_SLEEP           0
+#define ENABLE_DEEP_SLEEP           1
 #endif
-#define MAX_AWAKE_TIME_MS           90000
+#define MAX_AWAKE_TIME_MS           30000
 #define POST_PUBLISH_RECEIVE_MS     1500
 #define MIN_SLEEP_INTERVAL_MS       60000
 #define MAX_FAILURE_SLEEP_MS        3600000
