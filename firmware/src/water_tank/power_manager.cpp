@@ -1,5 +1,6 @@
 #include "power_manager.h"
 #include "config.h"
+#include "sensor.h"
 #include <ESP8266WiFi.h>
 #include <time.h>
 
@@ -11,7 +12,9 @@ namespace {
     struct RtcState {
         uint32_t magic;
         uint8_t networkFailures;
-        uint8_t reserved[3];
+        uint8_t wifiChannel;
+        uint8_t wifiBssid[6];
+        uint8_t reserved;
         uint32_t nextOtaEpoch;
         uint32_t checksum;
     };
@@ -20,7 +23,8 @@ namespace {
     unsigned long bootStartedAt = 0;
 
     uint32_t checksum(const RtcState& value) {
-        return value.magic ^ value.networkFailures ^ value.nextOtaEpoch ^ 0x9E3779B9U;
+        uint32_t bssidChunk = (value.wifiBssid[0] << 24) | (value.wifiBssid[1] << 16) | (value.wifiBssid[2] << 8) | value.wifiBssid[3];
+        return value.magic ^ value.networkFailures ^ value.wifiChannel ^ bssidChunk ^ value.nextOtaEpoch ^ 0x9E3779B9U;
     }
 
     void save() {
@@ -48,6 +52,8 @@ namespace PowerManager {
         } else {
             state.magic = RTC_MAGIC;
             state.networkFailures = 0;
+            state.wifiChannel = 0;
+            memset(state.wifiBssid, 0, sizeof(state.wifiBssid));
             state.nextOtaEpoch = 0;
             save();
         }
@@ -74,6 +80,25 @@ namespace PowerManager {
         return state.networkFailures >= 2;
     }
 
+    bool getWifiBssidAndChannel(uint8_t &channel, uint8_t* bssid) {
+        if (state.wifiChannel > 0 && state.wifiChannel <= 13 && bssid != nullptr) {
+            channel = state.wifiChannel;
+            memcpy(bssid, state.wifiBssid, 6);
+            return true;
+        }
+        return false;
+    }
+
+    void saveWifiBssidAndChannel(uint8_t channel, const uint8_t* bssid) {
+        if (channel > 0 && channel <= 13 && bssid != nullptr) {
+            if (state.wifiChannel != channel || memcmp(state.wifiBssid, bssid, 6) != 0) {
+                state.wifiChannel = channel;
+                memcpy(state.wifiBssid, bssid, 6);
+                save();
+            }
+        }
+    }
+
     void finishCycle(bool deliverySucceeded) {
         if (deliverySucceeded) {
             state.networkFailures = 0;
@@ -84,6 +109,7 @@ namespace PowerManager {
     }
 
     void sleepUntilNextCycle(unsigned long normalIntervalMs) {
+        Sensor::powerOff();
 #if ENABLE_DEEP_SLEEP
         unsigned long delayMs;
         if (state.networkFailures == 0) {
