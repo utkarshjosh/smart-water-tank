@@ -204,6 +204,14 @@
 #define MIN_SLEEP_INTERVAL_MS       60000
 #define MAX_FAILURE_SLEEP_MS        3600000
 
+// Software Keep-Alive Pulsing (prevents TP4221B power bank auto-shutdown after 16s)
+#ifndef TP4221B_KEEP_ALIVE_ENABLE
+#define TP4221B_KEEP_ALIVE_ENABLE   true
+#endif
+#ifndef KEEP_ALIVE_PULSE_MS
+#define KEEP_ALIVE_PULSE_MS         8000    // 8 seconds (must be < 10s cutoff)
+#endif
+
 // Sensor stabilization delay
 #define SENSOR_WARMUP_MS            100
 

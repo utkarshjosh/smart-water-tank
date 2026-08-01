@@ -14,7 +14,7 @@ namespace {
         uint8_t networkFailures;
         uint8_t wifiChannel;
         uint8_t wifiBssid[6];
-        uint8_t reserved;
+        uint16_t pulseCount;
         uint32_t nextOtaEpoch;
         uint32_t checksum;
     };
@@ -24,7 +24,7 @@ namespace {
 
     uint32_t checksum(const RtcState& value) {
         uint32_t bssidChunk = (value.wifiBssid[0] << 24) | (value.wifiBssid[1] << 16) | (value.wifiBssid[2] << 8) | value.wifiBssid[3];
-        return value.magic ^ value.networkFailures ^ value.wifiChannel ^ bssidChunk ^ value.nextOtaEpoch ^ 0x9E3779B9U;
+        return value.magic ^ value.networkFailures ^ value.wifiChannel ^ bssidChunk ^ value.pulseCount ^ value.nextOtaEpoch ^ 0x9E3779B9U;
     }
 
     void save() {
@@ -54,6 +54,7 @@ namespace PowerManager {
             state.networkFailures = 0;
             state.wifiChannel = 0;
             memset(state.wifiBssid, 0, sizeof(state.wifiBssid));
+            state.pulseCount = 0;
             state.nextOtaEpoch = 0;
             save();
         }
@@ -99,9 +100,34 @@ namespace PowerManager {
         }
     }
 
+    bool shouldPerformKeepAlivePulseOnly(unsigned long normalIntervalMs) {
+#if ENABLE_DEEP_SLEEP && TP4221B_KEEP_ALIVE_ENABLE
+        if (KEEP_ALIVE_PULSE_MS == 0) return false;
+        uint16_t requiredPulses = static_cast<uint16_t>(normalIntervalMs / KEEP_ALIVE_PULSE_MS);
+        if (requiredPulses <= 1) return false;
+        return state.pulseCount < requiredPulses;
+#else
+        (void)normalIntervalMs;
+        return false;
+#endif
+    }
+
+    void executeKeepAlivePulseOnly() {
+#if ENABLE_DEEP_SLEEP && TP4221B_KEEP_ALIVE_ENABLE
+        state.pulseCount++;
+        save();
+        Serial.printf("[Power] TP4221B Keep-Alive pulse #%u. Sleeping 8s...\n", state.pulseCount);
+        Sensor::powerOff();
+        WiFi.disconnect(true);
+        delay(10);
+        ESP.deepSleep(static_cast<uint64_t>(KEEP_ALIVE_PULSE_MS) * 1000ULL, WAKE_RF_DISABLED);
+#endif
+    }
+
     void finishCycle(bool deliverySucceeded) {
         if (deliverySucceeded) {
             state.networkFailures = 0;
+            state.pulseCount = 0;
         } else if (state.networkFailures < 8) {
             state.networkFailures++;
         }
@@ -112,6 +138,10 @@ namespace PowerManager {
         Sensor::powerOff();
 #if ENABLE_DEEP_SLEEP
         unsigned long delayMs;
+
+#if TP4221B_KEEP_ALIVE_ENABLE
+        delayMs = KEEP_ALIVE_PULSE_MS;
+#else
         float battVolts = Sensor::readBatteryVoltage();
         float intervalMultiplier = 1.0;
 
@@ -133,8 +163,9 @@ namespace PowerManager {
             uint64_t backedOff = static_cast<uint64_t>(MIN_SLEEP_INTERVAL_MS) << exponent;
             delayMs = clampSleep(backedOff > MAX_FAILURE_SLEEP_MS ? MAX_FAILURE_SLEEP_MS : static_cast<unsigned long>(backedOff));
         }
+#endif
 
-        Serial.printf("[Power] Sleeping for %lu ms (battery=%.2fV, network failures=%u)\n", delayMs, battVolts, state.networkFailures);
+        Serial.printf("[Power] Sleeping for %lu ms (failures=%u)\n", delayMs, state.networkFailures);
         WiFi.disconnect(true);
         delay(100);
         ESP.deepSleep(static_cast<uint64_t>(delayMs) * 1000ULL, WAKE_RF_DEFAULT);

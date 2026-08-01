@@ -103,6 +103,12 @@ void setup() {
     Config::load();
     PowerManager::init();
     
+    // Intermediate 8-second keep-alive pulse to reset TP4221B power bank 16s auto-shutdown
+    if (PowerManager::shouldPerformKeepAlivePulseOnly(Config::reportIntervalMs)) {
+        PowerManager::executeKeepAlivePulseOnly();
+        return; // ESP.deepSleep() does not return
+    }
+
     Sensor::init();
     Alerts::init();
 
