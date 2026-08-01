@@ -140,6 +140,7 @@ namespace PowerManager {
         unsigned long delayMs;
 
 #if TP4221B_KEEP_ALIVE_ENABLE
+        (void)normalIntervalMs;
         delayMs = KEEP_ALIVE_PULSE_MS;
 #else
         float battVolts = Sensor::readBatteryVoltage();
