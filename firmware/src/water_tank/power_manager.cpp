@@ -22,6 +22,12 @@ namespace {
     RtcState state{};
     unsigned long bootStartedAt = 0;
 
+    // True only when this boot is a deep-sleep wake, i.e. a scheduled step of
+    // the duty cycle. Power-on, reset button, OTA restart, watchdog and crash
+    // reboots are all "the device just started" from the user's point of view
+    // and must reach the server immediately, not after a keep-alive pulse train.
+    bool deepSleepWake = false;
+
     uint32_t checksum(const RtcState& value) {
         uint32_t bssidChunk = (value.wifiBssid[0] << 24) | (value.wifiBssid[1] << 16) | (value.wifiBssid[2] << 8) | value.wifiBssid[3];
         return value.magic ^ value.networkFailures ^ value.wifiChannel ^ bssidChunk ^ value.pulseCount ^ value.nextOtaEpoch ^ 0x9E3779B9U;
@@ -44,6 +50,8 @@ namespace {
 namespace PowerManager {
     void init() {
         bootStartedAt = millis();
+        const rst_info* resetInfo = ESP.getResetInfoPtr();
+        deepSleepWake = resetInfo != nullptr && resetInfo->reason == REASON_DEEP_SLEEP_AWAKE;
         RtcState loaded{};
         const bool valid = ESP.rtcUserMemoryRead(RTC_SLOT, reinterpret_cast<uint32_t*>(&loaded), sizeof(loaded)) &&
             loaded.magic == RTC_MAGIC && loaded.checksum == checksum(loaded);
@@ -56,6 +64,15 @@ namespace PowerManager {
             memset(state.wifiBssid, 0, sizeof(state.wifiBssid));
             state.pulseCount = 0;
             state.nextOtaEpoch = 0;
+            save();
+        }
+
+        // RTC memory survives an ordinary reset, so a mid-train pulse count can
+        // outlive a reboot. On any non-deep-sleep boot, restart the train from
+        // zero: this boot runs a full report cycle now, and the 8s keep-alive
+        // pulses resume from there.
+        if (!deepSleepWake && state.pulseCount != 0) {
+            state.pulseCount = 0;
             save();
         }
     }
@@ -102,6 +119,11 @@ namespace PowerManager {
 
     bool shouldPerformKeepAlivePulseOnly(unsigned long normalIntervalMs) {
 #if ENABLE_DEEP_SLEEP && TP4221B_KEEP_ALIVE_ENABLE
+        // A freshly started device reports (and so shows up as online) on this
+        // boot. Without this, a cold boot at the default 5-minute interval
+        // burned ~37 pulse-only wakes - five to ten minutes of the device
+        // looking offline in the app - before its first connect.
+        if (!deepSleepWake) return false;
         if (KEEP_ALIVE_PULSE_MS == 0) return false;
         uint16_t requiredPulses = static_cast<uint16_t>(normalIntervalMs / KEEP_ALIVE_PULSE_MS);
         if (requiredPulses <= 1) return false;
