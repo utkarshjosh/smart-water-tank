@@ -162,7 +162,7 @@ Cathode (-)  -->  GND
 
 3. **OneWire Pull-up**: The DS18B20 requires a 4.7kΩ pull-up resistor on the data line. This is critical for proper communication.
 
-4. **5V Tolerance**: Most NodeMCU boards have 5V-tolerant GPIO pins, but the ultrasonic echo pin may benefit from a voltage divider for safety.
+4. **5V Tolerance**: **ESP8266 GPIO pins are NOT 5V tolerant.** This is a persistent and widespread myth; Espressif's datasheet puts the absolute maximum input at 3.6V, and the NodeMCU carrier board adds no tolerance of its own. The ultrasonic module is powered from 5V and drives ECHO to nearly 5V, so **the divider on ECHO is mandatory, not optional** (see WIRING_DIAGRAM.md). Without it the pin's ESD protection diodes degrade slowly — the board keeps working for months, then one day the pin does not come back.
 
 5. **Power Consumption**: For battery-powered operation, consider:
    - Using deep sleep between measurements
@@ -172,7 +172,7 @@ Cathode (-)  -->  GND
 ## Troubleshooting
 
 - **Temperature sensor not reading**: Check the 4.7kΩ pull-up resistor is connected
-- **Ultrasonic sensor not working**: Verify 5V power supply and check echo pin voltage levels
+- **Ultrasonic sensor not working**: Verify 5V power supply and check echo pin voltage levels. If the ECHO divider is built backwards (2k in series, 1k to GND) the pin sees 1.67V, which is under the ESP8266's ~2.5V HIGH threshold — the sensor then reads as completely dead rather than merely inaccurate.
 - **Battery reading incorrect**: Verify voltage divider resistor values match your battery voltage
 - **Buzzer not working**: Check if using active vs passive buzzer (wiring differs)
 

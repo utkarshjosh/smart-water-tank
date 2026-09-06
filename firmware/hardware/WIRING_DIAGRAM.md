@@ -91,12 +91,31 @@ Ultrasonic Sensor (Waterproof)
     └─────────┘                           └─────────┘
 ```
 
-**Optional Voltage Divider for Echo (if needed):**
+**Required Voltage Divider for Echo:**
+
+The module runs on 5V and drives ECHO to nearly 5V. ESP8266 GPIOs are **not**
+5V tolerant (3.6V absolute maximum), so this divider is mandatory — it is the
+only thing standing between the sensor and GPIO4.
+
 ```
-Echo Pin ──[10kΩ]──┬──[20kΩ]── GND
-                   │
-                   └── D2 (GPIO4)
+Echo Pin ──[1kΩ]──┬──[2kΩ]── GND
+                  │
+                  └── D2 (GPIO4)
 ```
+
+5V × 2/(1+2) = **3.33V** at the pin. 10k/20k gives the same ratio and works,
+but 1k/2k is the better pick here: a third of the impedance means faster edges
+and better noise rejection, and ECHO is a timing signal on a long cable running
+into a tank.
+
+> **Order matters.** Series resistor on the ECHO side, larger resistor to GND,
+> GPIO on the tap. Built the other way round (2k series, 1k to GND) the pin
+> sees 1.67V — below the ~2.5V HIGH threshold — and the sensor reads as dead.
+
+**TRIG needs no divider and must not have one.** TRIG is an *input* on the
+module: the ESP drives 3.3V into it and nothing is ever pushed back at the
+GPIO, so there is no overvoltage to divide. Adding one would drop the trigger
+pulse below the module's threshold and stop it firing.
 
 ### 3. Buzzer / Speaker
 
@@ -261,7 +280,7 @@ Battery ──> Voltage Divider ──> A0 (Monitoring)
 ## Safety Notes
 
 - ⚠️ **Waterproofing**: Ensure all connections are properly sealed if exposed to moisture
-- ⚠️ **Voltage Levels**: ESP8266 GPIO pins are 3.3V. Most NodeMCU boards are 5V tolerant, but verify your specific board
+- ⚠️ **Voltage Levels**: ESP8266 GPIO pins are 3.3V and are **NOT 5V tolerant** — the datasheet absolute maximum is 3.6V, and NodeMCU adds no tolerance. Any 5V-powered part driving a signal *into* a GPIO needs level shifting: a two-resistor divider for a one-way line like ultrasonic ECHO, or a BSS138 MOSFET shifter for a bidirectional open-drain bus like I2C, where a passive divider would break the pull-down
 - ⚠️ **Current Limits**: GPIO pins can source ~12mA max. Use transistors/MOSFETs for higher current devices
 - ⚠️ **Power Supply**: Ensure adequate power supply capacity (NodeMCU + sensors + buzzer)
 - ⚠️ **Grounding**: Use common ground for all components

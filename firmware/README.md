@@ -155,14 +155,14 @@ BOARD_FQBN := esp8266:esp8266:esp01_1m
 
 ## Hardware Connections
 
-| Function | Pin | GPIO |
-|----------|-----|------|
-| Ultrasonic TRIG | D1 | GPIO5 |
-| Ultrasonic ECHO | D2 | GPIO4 |
-| Temperature (DS18B20) | D3 | GPIO0 |
-| Speaker | D5 | GPIO14 |
-| Battery ADC | A0 | ADC |
-| Status LED | Built-in | GPIO2 |
+| Function | Pin | GPIO | Notes |
+|----------|-----|------|-------|
+| Ultrasonic TRIG | D1 | GPIO5 | direct; TRIG is a module input, no divider |
+| Ultrasonic ECHO | D2 | GPIO4 | **via a 1k/2k divider** — GPIOs are not 5V tolerant |
+| Temperature (DS18B20) | D3 | GPIO0 | |
+| Speaker | D5 | GPIO14 | |
+| Battery ADC | A0 | ADC | |
+| Status LED | Built-in | GPIO2 | |
 
 ## OTA Updates
 
