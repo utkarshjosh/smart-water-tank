@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import Layout from '@/components/Layout';
+import { AppShell } from '@/components/shell';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,7 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { AlertCircle, Building2, Plus, Search, UserPlus, Users } from 'lucide-react';
+import { Buildings, MagnifyingGlass, Plus, UserPlus, Users, WarningCircle } from '@phosphor-icons/react';
 
 type UserRole = 'user' | 'tenant_owner' | 'admin' | 'super_admin';
 
@@ -247,12 +247,12 @@ export default function TenantsPage() {
   const linkedFirebaseUsers = firebaseUsers.filter((user) => user.is_linked).length;
 
   return (
-    <Layout>
+    <AppShell variant="admin">
       <div className="space-y-5 px-4 py-4 sm:px-0">
         <div className="flex flex-col gap-3 border-b border-border pb-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              <Building2 className="h-3.5 w-3.5" />
+              <Buildings className="h-3.5 w-3.5" />
               Admin directory
             </div>
             <h1 className="mt-1 text-2xl font-semibold tracking-tight">Tenants & users</h1>
@@ -276,7 +276,7 @@ export default function TenantsPage() {
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'tenants' | 'users')} className="space-y-4">
           <TabsList className="h-9 rounded-md">
             <TabsTrigger value="tenants" className="h-7 gap-2 px-3 text-xs">
-              <Building2 className="h-3.5 w-3.5" />
+              <Buildings className="h-3.5 w-3.5" />
               Tenants
             </TabsTrigger>
             <TabsTrigger value="users" className="h-7 gap-2 px-3 text-xs">
@@ -294,7 +294,7 @@ export default function TenantsPage() {
                   {tenants.length} tenant{tenants.length === 1 ? '' : 's'} across {totalDevices} device{totalDevices === 1 ? '' : 's'}
                 </p>
               </div>
-              <Button onClick={() => setShowCreateForm(!showCreateForm)} size="sm" variant={showCreateForm ? 'outline' : 'default'}>
+              <Button onClick={() => setShowCreateForm(!showCreateForm)} size="sm" variant={showCreateForm ? 'secondary' : 'primary'}>
                 {showCreateForm ? (
                   'Cancel'
                 ) : (
@@ -307,8 +307,8 @@ export default function TenantsPage() {
             </div>
 
             {(error || usersError) && (
-              <Alert variant="destructive" className="mb-4">
-                <AlertCircle className="h-4 w-4" />
+              <Alert variant="critical" className="mb-4">
+                <WarningCircle className="h-4 w-4" />
                 <AlertTitle>Error</AlertTitle>
                 <AlertDescription>{error || usersError}</AlertDescription>
               </Alert>
@@ -342,7 +342,7 @@ export default function TenantsPage() {
                       </Button>
                       <Button
                         type="button"
-                        variant="outline"
+                        variant="secondary"
                         onClick={() => {
                           setShowCreateForm(false);
                           setNewTenantName('');
@@ -413,7 +413,7 @@ export default function TenantsPage() {
                 </p>
               </div>
               <Button
-                variant="default"
+                variant="primary"
                 size="sm"
                 onClick={() => {
                   setShowFirebaseSearch(!showFirebaseSearch);
@@ -426,14 +426,14 @@ export default function TenantsPage() {
                   'Hide search'
                 ) : (
                   <>
-                    <Search className="mr-2 h-4 w-4" />
-                    Search Firebase
+                    <MagnifyingGlass className="mr-2 h-4 w-4" />
+                    MagnifyingGlass Firebase
                   </>
                 )}
               </Button>
             </div>
 
-            {/* Firebase Users Search */}
+            {/* Firebase Users MagnifyingGlass */}
             {showFirebaseSearch && (
               <Card className="rounded-md">
                 <CardHeader className="pb-3">
@@ -450,7 +450,7 @@ export default function TenantsPage() {
                           searchFirebaseUsers();
                         }
                       }}
-                      placeholder="Search by email, name, or UID..."
+                      placeholder="MagnifyingGlass by email, name, or UID..."
                       className="flex-1"
                     />
                     <Button
@@ -458,7 +458,7 @@ export default function TenantsPage() {
                       disabled={usersLoading}
                       size="sm"
                     >
-                      {usersLoading ? 'Searching...' : 'Search'}
+                      {usersLoading ? 'Searching...' : 'MagnifyingGlass'}
                     </Button>
                   </div>
 
@@ -477,12 +477,12 @@ export default function TenantsPage() {
                                   )}
                                   <div className="mt-1 truncate text-xs text-muted-foreground">UID: {user.uid}</div>
                                   {user.is_linked && user.tenant_name && (
-                                    <Badge variant="default" className="mt-2">
+                                    <Badge variant="brand" className="mt-2">
                                       Linked to {user.tenant_name}
                                     </Badge>
                                   )}
                                   {user.role === 'super_admin' && (
-                                    <Badge variant="default" className="mt-2">
+                                    <Badge variant="brand" className="mt-2">
                                       Platform super admin
                                     </Badge>
                                   )}
@@ -570,7 +570,7 @@ export default function TenantsPage() {
                   </div>
                 ) : databaseUsers.length === 0 ? (
                   <p className="py-8 text-center text-sm text-muted-foreground">
-                    No users found in database. Search Firebase users above to link them to tenants.
+                    No users found in database. MagnifyingGlass Firebase users above to link them to tenants.
                   </p>
                 ) : (
                   <div className="overflow-x-auto">
@@ -645,7 +645,7 @@ export default function TenantsPage() {
           </TabsContent>
         </Tabs>
       </div>
-    </Layout>
+    </AppShell>
   );
 }
 

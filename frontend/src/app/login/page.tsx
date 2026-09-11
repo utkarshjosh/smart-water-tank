@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { AlertCircle, Droplets, Gauge, LogIn, ShieldCheck } from 'lucide-react';
+import { Drop, Gauge, ShieldCheck, SignIn, WarningCircle } from '@phosphor-icons/react';
 import { homeRouteForRole, useAuth } from '@/lib/auth-context';
 import { auth } from '@/lib/firebase';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -80,7 +80,7 @@ export default function LoginPage() {
 
             <div className="mt-8 grid max-w-lg grid-cols-2 gap-3">
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <Droplets className="mb-4 h-5 w-5 text-cyan-600" />
+                <Drop className="mb-4 h-5 w-5 text-cyan-600" />
                 <div className="text-2xl font-semibold">24/7</div>
                 <div className="mt-1 text-xs text-slate-500">level visibility</div>
               </div>
@@ -145,8 +145,8 @@ export default function LoginPage() {
                 />
               </div>
               {error && (
-                <Alert variant="destructive" className="bg-white">
-                  <AlertCircle className="h-4 w-4" />
+                <Alert variant="critical" className="bg-white">
+                  <WarningCircle className="h-4 w-4" />
                   <AlertTitle className="text-sm">Error</AlertTitle>
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
@@ -163,7 +163,7 @@ export default function LoginPage() {
                   </>
                 ) : (
                   <>
-                    <LogIn className="h-4 w-4" />
+                    <SignIn className="h-4 w-4" />
                     Login
                   </>
                 )}

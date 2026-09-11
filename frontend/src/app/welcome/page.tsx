@@ -1,13 +1,15 @@
 import { lazy, Suspense, useState } from 'react';
+import TankLevel from '@/components/TankLevel';
 import { Link } from 'react-router-dom';
-import { Activity, ShieldCheck, Zap, BarChart3, Waves, Smartphone, ArrowRight } from 'lucide-react';
+import { ArrowRight, ChartBar, DeviceMobile, Lightning, Pulse, ShieldCheck, Waves } from '@phosphor-icons/react';
 
-const GlassTank = lazy(() => import('@/components/GlassTank'));
+
 
 export default function LandingPage() {
   // Simulation State
   const [tankLevel, setTankLevel] = useState(84);
-  const [alert, setAlert] = useState<string | null>(null);
+  type DemoAlert = 'leak' | 'low' | 'filling' | null;
+  const [alert, setAlert] = useState<DemoAlert>(null);
 
   const simulateLeak = () => {
     setAlert('leak');
@@ -68,7 +70,7 @@ export default function LandingPage() {
               Log in
             </Link>
             <Link to="/signup" className="px-5 py-2 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl text-sm font-medium transition-all hover:shadow-[0_0_20px_rgba(6,182,212,0.3)] flex items-center gap-2">
-              <Smartphone className="w-4 h-4" />
+              <DeviceMobile className="w-4 h-4" />
               <span>Get Started</span>
             </Link>
           </div>
@@ -123,7 +125,7 @@ export default function LandingPage() {
               {/* Animated Glass Tank */}
               <div className="mb-8 py-4">
                 <Suspense fallback={tankFallback}>
-                  <GlassTank level={tankLevel} alert={alert} />
+                  <TankLevel level={tankLevel} alert={alert === 'leak' || alert === 'low' ? alert : null} />
                 </Suspense>
               </div>
 
@@ -196,7 +198,7 @@ export default function LandingPage() {
           <div className="grid md:grid-cols-3 gap-8">
             {[
               {
-                icon: <Activity className="w-8 h-8 text-blue-400" />,
+                icon: <Pulse className="w-8 h-8 text-blue-400" />,
                 title: "Pattern Recognition",
                 desc: "AI learns your daily habits to optimize water storage and reduce wastage."
               },
@@ -206,7 +208,7 @@ export default function LandingPage() {
                 desc: "Instant alerts for seepage or abnormal flow rates, protecting your home."
               },
               {
-                icon: <BarChart3 className="w-8 h-8 text-cyan-400" />,
+                icon: <ChartBar className="w-8 h-8 text-cyan-400" />,
                 title: "Smart Forecasting",
                 desc: "Predictive analytics tell you exactly how much water you'll need tomorrow."
               }
@@ -309,10 +311,10 @@ export default function LandingPage() {
               <div
                 className="absolute -bottom-10 -right-10 bg-[#1e293b] p-6 rounded-2xl border border-white/10 shadow-xl max-w-xs z-20 animate-in fade-in slide-in-from-right-6 duration-700 delay-300"
               >
-                <h4 className="text-sm font-semibold text-slate-300 mb-4">Recent Activity</h4>
+                <h4 className="text-sm font-semibold text-slate-300 mb-4">Recent Pulse</h4>
                 <div className="space-y-4">
                   {[
-                    { event: "Pump Started", time: "2 mins ago", icon: Zap, color: "text-yellow-400" },
+                    { event: "Pump Started", time: "2 mins ago", icon: Lightning, color: "text-yellow-400" },
                     { event: "Leak Check Passed", time: "1 hour ago", icon: ShieldCheck, color: "text-green-400" }
                   ].map((log, i) => (
                     <div key={i} className="flex items-center gap-3">

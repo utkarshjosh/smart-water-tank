@@ -1,6 +1,6 @@
 # Frontend Redesign — Modern, Mobile-First AquaMind
 
-**Status:** Phase 3 backend done; frontend phases pending
+**Status:** Phases 0–4 done (foundation, shell, primitives, charts, tenant app). Phases 5–7 pending (public/auth, admin restyle, polish).
 **Scope:** `frontend/` only (Vite + React 18 + React Router app served from `/var/www/aquamind`).
 The Expo app in `mobile-app/` is explicitly **out of scope** — it has one commit ever and
 adding it would mean maintaining a second, parallel design system.
@@ -366,6 +366,11 @@ Same shell, same primitives. The four list pages get a shared `DataTable`
 (sticky header, sortable, responsive → cards on mobile). `admin/firmware/page.tsx` is 856
 lines and `admin/tenants/page.tsx` is 652 — both get split into components while restyling.
 
+**Dev harness.** `preview.html` + `src/preview.tsx` render the design system and the chart
+against generated data with no backend or auth, so the result can be looked at (and
+screenshotted at 390px/1280px) while the remaining phases land. Dev-only — Vite builds
+`index.html` alone, so it never ships.
+
 **Phase 7 — Polish & verify**
 Motion pass, focus-visible audit, Lighthouse mobile (target ≥ 95 a11y, ≥ 90 perf),
 real-device check at 360px / 390px / 768px / 1280px, bundle-size check on the ECharts
@@ -375,9 +380,26 @@ chunk, `prefers-reduced-motion` verification.
 
 ## 8. Risks
 
-- **ECharts bundle.** Mitigated by the custom build + lazy-loading it only on the history
-  route. Gate: if the chunk exceeds 90KB gzip, drop `MarkLine` and draw thresholds as a
-  custom overlay.
+- **ECharts bundle — MEASURED, and the estimate was wrong.** The plan assumed ~65KB gzip
+  tree-shaken. The real chunk is **188KB gzip** (554KB raw). The planned mitigation does
+  not help: measuring each piece with esbuild shows `core + LineChart + Grid + Tooltip +
+  CanvasRenderer` alone is **171KB gzip**, `+DataZoomInside` 178KB, `+DataZoom` (slider)
+  183KB. The cost is ECharts' core and zrender, not the features chosen — dropping
+  `MarkLine` or the brush would save single-digit KB.
+
+  What was done instead:
+  - The chunk is lazy and loads **only on `/app/devices/:id/history`**.
+  - The overview's 24-hour trace was moved off ECharts onto a dependency-free inline SVG
+    (`components/charts/Sparkline.tsx`, ~90 lines), so opening a device no longer pays
+    188KB for a glanceable shape it cannot interact with.
+  - The chart components were decoupled from `lib/history` (which imports axios →
+    Firebase) by splitting the pure vocabulary into `lib/metrics.ts`, keeping that chain
+    out of the chart chunk entirely.
+
+  **Still open for a call:** 188KB gzip on the flagship mobile screen is a real cost.
+  The alternative is uPlot (~15KB) with hand-written pinch/pan/tooltip/brush — roughly
+  300–400 lines of interaction code, 12× smaller, and faster on large series. Worth doing
+  if mobile first-paint on the history route matters more than the implementation time.
 - **The bucketed endpoint is on the critical path for Phase 3.** Build it first; the
   frontend can develop against `bucket=raw` in the meantime.
 - **Stripping 336 `dark:` variants touches 19 files at once.** Do it mechanically in its own

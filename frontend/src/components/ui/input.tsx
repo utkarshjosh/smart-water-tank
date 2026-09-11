@@ -1,22 +1,27 @@
-import * as React from "react"
+import * as React from 'react';
+import { cn } from '@/lib/utils';
 
-import { cn } from "@/lib/utils"
+/**
+ * 16px minimum on mobile: anything smaller makes iOS Safari zoom the viewport
+ * on focus, which is most of why forms feel broken on a phone.
+ */
+const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
+  ({ className, type, ...props }, ref) => (
+    <input
+      ref={ref}
+      type={type}
+      className={cn(
+        'h-11 w-full rounded-md border border-hairline bg-surface px-3 text-[16px] text-ink-1 transition-colors duration-instant ease-out md:h-10 md:text-body',
+        'placeholder:text-ink-3 hover:border-line-strong',
+        'disabled:cursor-not-allowed disabled:bg-surface-sunk disabled:opacity-60',
+        'aria-[invalid=true]:border-critical',
+        'file:border-0 file:bg-transparent file:text-label file:text-ink-1',
+        className
+      )}
+      {...props}
+    />
+  )
+);
+Input.displayName = 'Input';
 
-const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
-  ({ className, type, ...props }, ref) => {
-    return (
-      <input
-        type={type}
-        className={cn(
-          "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
-          className
-        )}
-        ref={ref}
-        {...props}
-      />
-    )
-  }
-)
-Input.displayName = "Input"
-
-export { Input }
+export { Input };

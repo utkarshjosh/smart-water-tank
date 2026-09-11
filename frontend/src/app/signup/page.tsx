@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { AlertCircle, BellRing, Droplets, UserPlus } from 'lucide-react';
+import { BellRinging, Drop, UserPlus, WarningCircle } from '@phosphor-icons/react';
 import api from '@/lib/api';
 import { auth } from '@/lib/firebase';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -47,7 +47,7 @@ export default function SignupPage() {
 
           <div className="mt-auto max-w-xl pb-10">
             <div className="mb-5 inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-              <BellRing className="h-3.5 w-3.5" />
+              <BellRinging className="h-3.5 w-3.5" />
               Tenant monitoring
             </div>
             <h1 className="max-w-lg text-4xl font-semibold leading-tight tracking-tight">
@@ -69,7 +69,7 @@ export default function SignupPage() {
               </div>
               <div className="mt-5 flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-md bg-cyan-100 text-cyan-700">
-                  <Droplets className="h-4 w-4" />
+                  <Drop className="h-4 w-4" />
                 </div>
                 <div>
                   <div className="text-sm font-medium">Pair device, calibrate tank, monitor.</div>
@@ -143,8 +143,8 @@ export default function SignupPage() {
                 />
               </div>
               {error && (
-                <Alert variant="destructive" className="bg-white">
-                  <AlertCircle className="h-4 w-4" />
+                <Alert variant="critical" className="bg-white">
+                  <WarningCircle className="h-4 w-4" />
                   <AlertTitle className="text-sm">Error</AlertTitle>
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>

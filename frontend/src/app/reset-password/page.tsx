@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, KeyRound, MailCheck } from 'lucide-react';
+import { ArrowLeft, EnvelopeSimple, Key, WarningCircle } from '@phosphor-icons/react';
 import { FirebaseError } from 'firebase/app';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
@@ -46,7 +46,7 @@ export default function ResetPasswordPage() {
         </Link>
 
         <div className="mb-6 flex h-11 w-11 items-center justify-center rounded-lg bg-cyan-50 text-cyan-700">
-          {sent ? <MailCheck className="h-5 w-5" /> : <KeyRound className="h-5 w-5" />}
+          {sent ? <EnvelopeSimple className="h-5 w-5" /> : <Key className="h-5 w-5" />}
         </div>
 
         {sent ? (
@@ -91,8 +91,8 @@ export default function ResetPasswordPage() {
                 />
               </div>
               {error && (
-                <Alert variant="destructive" className="bg-white">
-                  <AlertCircle className="h-4 w-4" />
+                <Alert variant="critical" className="bg-white">
+                  <WarningCircle className="h-4 w-4" />
                   <AlertTitle className="text-sm">Unable to send email</AlertTitle>
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
