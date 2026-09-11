@@ -451,15 +451,29 @@ repo today by a wide margin.
 
 ---
 
-## 12. Open questions
+## 12. Decisions and open questions
 
-1. **Multiple tanks per household — common or rare?** It decides whether Tanks
-   is a list-first or single-tank-first screen, and how hard the widget config
-   activity has to work.
-2. **Is a motor/pump on the roadmap for this app?** If yes, the UI needs a
+**Decided (2026-09-11):**
+
+- **One tank per household is the norm.** Tanks is therefore single-tank-first:
+  one tank gets the whole screen, with the percentage as the hero figure. A
+  second tank adds a selector row above it rather than demoting everything into
+  a list. The same assumption simplifies the widget: an unconfigured instance
+  showing the only tank is right far more often than it is wrong, so the
+  configuration activity is a phase-5 refinement rather than a blocker. It also
+  argued the shell down from a tab bar to a stack — a three-tab bar would spend
+  a third of the bottom edge on a list with one row.
+- **Insights are later, and nothing is scaffolded for them now.** No empty
+  "Insights" tab, no placeholder cards. The usage/refill/leak figures that
+  `daily_summaries` already computes (§5.5) surface as plain rows on the detail
+  screen; anything cleverer waits until there is a reason for it.
+
+**Still open:**
+
+1. **Is a motor/pump on the roadmap for this app?** If yes, the UI needs a
    control surface with confirmation + state feedback, which is a different
    screen shape — better to reserve the slot now than retrofit.
-3. **iOS ever?** Everything above is Android-first but cross-platform except
+2. **iOS ever?** Everything above is Android-first but cross-platform except
    the widgets. If iOS matters within a year, that's an argument for RN (as
    planned) over Kotlin, and WidgetKit becomes a separate phase.
 4. **Keep `mobile-app/` around during the build, or delete at phase 0?**
