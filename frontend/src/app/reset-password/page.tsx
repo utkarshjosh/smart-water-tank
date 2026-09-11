@@ -30,7 +30,11 @@ export default function ResetPasswordPage() {
         // Do not reveal whether an address is registered.
         setSent(true);
       } else {
-        setError(err instanceof Error ? err.message : 'Unable to send the password reset email. Please try again.');
+        setError(
+          err instanceof Error
+            ? 'Could not send the reset email. Check the address and try again.'
+            : 'Could not send the reset email. Please try again.'
+        );
       }
     } finally {
       setLoading(false);
@@ -38,71 +42,68 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8 text-slate-950 sm:px-6">
-      <main className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-        <Link to="/login" className="mb-8 inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-950">
-          <ArrowLeft className="h-4 w-4" />
-          Back to login
+    <div className="flex min-h-screen items-center justify-center bg-canvas px-4 py-10 sm:px-6">
+      <main className="w-full max-w-md rounded-xl border border-hairline bg-surface p-6 sm:p-8">
+        <Link
+          to="/login"
+          className="inline-flex items-center gap-1.5 text-label text-ink-2 transition-colors duration-instant hover:text-ink-1"
+        >
+          <ArrowLeft size={16} />
+          Back to log in
         </Link>
 
-        <div className="mb-6 flex h-11 w-11 items-center justify-center rounded-lg bg-cyan-50 text-cyan-700">
-          {sent ? <EnvelopeSimple className="h-5 w-5" /> : <Key className="h-5 w-5" />}
-        </div>
+        <span className="mt-7 flex h-11 w-11 items-center justify-center rounded-lg bg-brand-wash text-brand">
+          {sent ? <EnvelopeSimple size={20} weight="fill" /> : <Key size={20} weight="fill" />}
+        </span>
 
         {sent ? (
-          <div className="space-y-5">
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight">Check your email</h1>
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                If an AquaMind account uses that email address, we&apos;ve sent instructions for choosing a new password.
-              </p>
-            </div>
-            <p className="text-sm text-slate-500">
-              Didn&apos;t receive it? Check spam or request another email after a few minutes.
+          <>
+            <h1 className="mt-5 text-[1.5rem] leading-tight tracking-tight">Check your inbox</h1>
+            <p className="mt-2 text-body text-ink-2">
+              If an account exists for <span className="text-ink-1">{email.trim()}</span>, a reset
+              link is on its way. It expires in an hour.
             </p>
-            <Button asChild className="w-full bg-slate-950 text-white hover:bg-slate-800">
-              <Link to="/login">Return to login</Link>
+            <Button asChild variant="secondary" className="mt-7 w-full">
+              <Link to="/login">Back to log in</Link>
             </Button>
-          </div>
+          </>
         ) : (
           <>
-            <div className="mb-6">
-              <h1 className="text-2xl font-semibold tracking-tight">Reset your password</h1>
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                Enter your account email and we&apos;ll send you a secure password-reset link.
-              </p>
-            </div>
+            <h1 className="mt-5 text-[1.5rem] leading-tight tracking-tight">Reset your password</h1>
+            <p className="mt-2 text-body text-ink-2">
+              Enter the email you signed up with and we&apos;ll send you a reset link.
+            </p>
 
-            <form onSubmit={handleResetPassword} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-slate-700">
-                  Email
-                </Label>
+            <form onSubmit={handleResetPassword} className="mt-7 space-y-4" noValidate>
+              <div className="space-y-1.5">
+                <Label htmlFor="reset-email">Email</Label>
                 <Input
-                  id="email"
+                  id="reset-email"
                   type="email"
                   autoComplete="email"
                   placeholder="you@example.com"
                   value={email}
-                  onChange={(event) => setEmail(event.target.value)}
+                  onChange={(e) => setEmail(e.target.value)}
                   required
                   disabled={loading}
-                  className="border-slate-200 bg-white"
+                  aria-invalid={Boolean(error) || undefined}
                 />
               </div>
+
               {error && (
-                <Alert variant="critical" className="bg-white">
-                  <WarningCircle className="h-4 w-4" />
-                  <AlertTitle className="text-sm">Unable to send email</AlertTitle>
-                  <AlertDescription>{error}</AlertDescription>
+                <Alert variant="critical" icon={false}>
+                  <div className="flex gap-2">
+                    <WarningCircle size={18} weight="fill" className="mt-0.5 shrink-0" aria-hidden />
+                    <div>
+                      <AlertTitle>Could not send the email</AlertTitle>
+                      <AlertDescription>{error}</AlertDescription>
+                    </div>
+                  </div>
                 </Alert>
               )}
-              <Button
-                type="submit"
-                className="w-full bg-slate-950 text-white hover:bg-slate-800"
-                disabled={loading}
-              >
-                {loading ? 'Sending reset link...' : 'Send reset link'}
+
+              <Button type="submit" className="w-full" loading={loading} disabled={email.trim() === ''}>
+                Send reset link
               </Button>
             </form>
           </>

@@ -1,13 +1,36 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { BellRinging, Drop, UserPlus, WarningCircle } from '@phosphor-icons/react';
+import { FirebaseError } from 'firebase/app';
+import { CheckCircle, UserPlus, WarningCircle } from '@phosphor-icons/react';
 import api from '@/lib/api';
 import { auth } from '@/lib/firebase';
+import { AuthLayout } from '@/components/shell';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+
+function readableSignupError(err: unknown): string {
+  if (err instanceof FirebaseError) {
+    switch (err.code) {
+      case 'auth/email-already-in-use':
+        return 'An account already exists for that email. Try logging in instead.';
+      case 'auth/invalid-email':
+        return 'That does not look like a valid email address.';
+      case 'auth/weak-password':
+        return 'Pick a longer password — at least 6 characters.';
+      case 'auth/network-request-failed':
+        return 'Could not reach the server. Check your connection.';
+    }
+  }
+  return err instanceof Error ? err.message : 'Could not create your account. Please try again.';
+}
+
+const RULES = [
+  { label: 'At least 8 characters', test: (p: string) => p.length >= 8 },
+  { label: 'A number or symbol', test: (p: string) => /[\d\W]/.test(p) },
+];
 
 export default function SignupPage() {
   const navigate = useNavigate();
@@ -17,165 +40,131 @@ export default function SignupPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const met = RULES.map((rule) => rule.test(password));
+  const canSubmit = name.trim() !== '' && email.trim() !== '' && met.every(Boolean);
+
+  const handleSignup = async (event: React.FormEvent) => {
+    event.preventDefault();
     setError('');
     setLoading(true);
-
     try {
       await createUserWithEmailAndPassword(auth, email, password);
       await api.post('/api/v1/user/register', { name });
       navigate('/app/devices');
-    } catch (err: any) {
-      setError(err.message || 'Failed to sign up');
-    } finally {
+    } catch (err) {
+      setError(readableSignupError(err));
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-950">
-      <div className="mx-auto grid min-h-screen w-full max-w-6xl grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px]">
-        <section className="hidden border-r border-slate-200 bg-white px-8 py-7 lg:flex lg:flex-col">
-          <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="AquaMind Logo" className="h-9 w-9 object-contain" />
-            <div>
-              <div className="text-sm font-semibold tracking-tight">AquaMind</div>
-              <div className="text-xs text-slate-500">Water operations console</div>
-            </div>
-          </div>
+    <AuthLayout
+      title="Create your account"
+      subtitle="Then pair your first sensor — it takes a couple of minutes."
+      aside={
+        <>
+          <h2 className="text-[2rem] leading-tight tracking-tight">
+            Start with the readings that matter.
+          </h2>
+          <p className="mt-4 text-body text-ink-2">
+            Pair a device, enter your tank&apos;s height and shape, and AquaMind works out
+            the litres for you.
+          </p>
+          <ol className="mt-7 space-y-3">
+            {['Create an account', 'Pair your sensor with its claim code', 'Enter your tank dimensions'].map(
+              (step, i) => (
+                <li key={step} className="flex items-center gap-3 text-body text-ink-2">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-wash text-caption font-medium text-brand">
+                    {i + 1}
+                  </span>
+                  {step}
+                </li>
+              )
+            )}
+          </ol>
+        </>
+      }
+      footer={
+        <>
+          Already have an account?{' '}
+          <Link to="/login" className="font-medium text-brand hover:underline">
+            Log in
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={handleSignup} className="space-y-4" noValidate>
+        <div className="space-y-1.5">
+          <Label htmlFor="name">Your name</Label>
+          <Input
+            id="name"
+            autoComplete="name"
+            placeholder="Utkarsh Joshi"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            disabled={loading}
+          />
+        </div>
 
-          <div className="mt-auto max-w-xl pb-10">
-            <div className="mb-5 inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-              <BellRinging className="h-3.5 w-3.5" />
-              Tenant monitoring
-            </div>
-            <h1 className="max-w-lg text-4xl font-semibold leading-tight tracking-tight">
-              Start with the essential signals, not a crowded dashboard.
-            </h1>
-            <p className="mt-4 max-w-md text-sm leading-6 text-slate-500">
-              Create an account to pair devices, set tank dimensions, and track live water levels from a focused workspace.
-            </p>
+        <div className="space-y-1.5">
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            type="email"
+            autoComplete="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            disabled={loading}
+          />
+        </div>
 
-            <div className="mt-8 rounded-lg border border-slate-200 bg-slate-50 p-4">
-              <div className="mb-4 flex items-center justify-between text-xs text-slate-500">
-                <span>Setup progress</span>
-                <span>2 min</span>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="h-1.5 rounded-full bg-slate-950" />
-                <div className="h-1.5 rounded-full bg-cyan-500" />
-                <div className="h-1.5 rounded-full bg-slate-200" />
-              </div>
-              <div className="mt-5 flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-md bg-cyan-100 text-cyan-700">
-                  <Drop className="h-4 w-4" />
-                </div>
-                <div>
-                  <div className="text-sm font-medium">Pair device, calibrate tank, monitor.</div>
-                  <div className="mt-0.5 text-xs text-slate-500">No manual tenant setup required.</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <main className="flex min-h-screen items-center px-4 py-8 sm:px-6 lg:px-8">
-          <div className="mx-auto w-full max-w-sm">
-            <div className="mb-8 flex items-center gap-3 lg:hidden">
-              <img src="/logo.png" alt="AquaMind Logo" className="h-9 w-9 object-contain" />
-              <div>
-                <div className="text-sm font-semibold tracking-tight">AquaMind</div>
-                <div className="text-xs text-slate-500">Water operations console</div>
-              </div>
-            </div>
-
-            <div className="mb-6">
-              <h1 className="text-2xl font-semibold tracking-tight">Create account</h1>
-              <p className="mt-2 text-sm text-slate-500">Set up your water monitoring workspace.</p>
-            </div>
-
-            <form onSubmit={handleSignup} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name" className="text-slate-700">
-                  Name
-                </Label>
-                <Input
-                  id="name"
-                  type="text"
-                  placeholder="Your name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  disabled={loading}
-                  className="border-slate-200 bg-white"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-slate-700">
-                  Email
-                </Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  disabled={loading}
-                  className="border-slate-200 bg-white"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-slate-700">
-                  Password
-                </Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="At least 6 characters"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  disabled={loading}
-                  className="border-slate-200 bg-white"
-                />
-              </div>
-              {error && (
-                <Alert variant="critical" className="bg-white">
-                  <WarningCircle className="h-4 w-4" />
-                  <AlertTitle className="text-sm">Error</AlertTitle>
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-              <Button
-                type="submit"
-                className="w-full bg-slate-950 text-white hover:bg-slate-800"
-                disabled={loading}
+        <div className="space-y-1.5">
+          <Label htmlFor="password">Password</Label>
+          <Input
+            id="password"
+            type="password"
+            autoComplete="new-password"
+            placeholder="Choose a password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            disabled={loading}
+          />
+          {/* Requirements shown up front and ticked live, rather than only
+              surfacing as a server error after submitting. */}
+          <ul className="space-y-1 pt-1">
+            {RULES.map((rule, i) => (
+              <li
+                key={rule.label}
+                className={`flex items-center gap-1.5 text-caption ${met[i] ? 'text-good-text' : 'text-ink-3'}`}
               >
-                {loading ? (
-                  <>
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
-                    Creating account...
-                  </>
-                ) : (
-                  <>
-                    <UserPlus className="h-4 w-4" />
-                    Sign up
-                  </>
-                )}
-              </Button>
-              <p className="text-center text-sm text-muted-foreground">
-                Already have an account?{' '}
-                <Link to="/login" className="font-medium text-slate-950 hover:underline">
-                  Log in
-                </Link>
-              </p>
-            </form>
-          </div>
-        </main>
-      </div>
-    </div>
+                <CheckCircle size={13} weight={met[i] ? 'fill' : 'regular'} aria-hidden />
+                {rule.label}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {error && (
+          <Alert variant="critical" icon={false}>
+            <div className="flex gap-2">
+              <WarningCircle size={18} weight="fill" className="mt-0.5 shrink-0" aria-hidden />
+              <div>
+                <AlertTitle>Could not sign up</AlertTitle>
+                <AlertDescription>{error}</AlertDescription>
+              </div>
+            </div>
+          </Alert>
+        )}
+
+        <Button type="submit" className="w-full" loading={loading} disabled={!canSubmit}>
+          <UserPlus size={18} weight="bold" />
+          Create account
+        </Button>
+      </form>
+    </AuthLayout>
   );
 }

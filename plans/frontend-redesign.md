@@ -1,6 +1,6 @@
 # Frontend Redesign — Modern, Mobile-First AquaMind
 
-**Status:** Phases 0–4 done (foundation, shell, primitives, charts, tenant app). Phases 5–7 pending (public/auth, admin restyle, polish).
+**Status:** Phases 0–5 done (foundation, shell, primitives, charts, tenant app, public/auth). Phases 6–7 pending (admin restyle, polish).
 **Scope:** `frontend/` only (Vite + React 18 + React Router app served from `/var/www/aquamind`).
 The Expo app in `mobile-app/` is explicitly **out of scope** — it has one commit ever and
 adding it would mean maintaining a second, parallel design system.
@@ -357,9 +357,36 @@ Device detail split into the four routes. `GlassTank` redrawn as a flat SVG tank
 surface — same fill semantics, no `backdrop-blur`, no `perspective`, no `#0f172a` panel,
 spring-animated level. Onboarding + tank setup as a full-screen step flow.
 
-**Phase 5 — Public & auth**
-Landing page rebuilt light: drop the `#0f172a` ground, the three pulsing orbs, and the
-noise overlay. Login / signup / reset unified on one auth layout.
+**Phase 5 — Public & auth** — ✅ DONE
+Landing page rebuilt light: the `#0f172a` ground, three pulsing blur-120px orbs and the
+noise overlay are gone. Login / signup / reset unified on one `AuthLayout`.
+
+*Responsiveness, measured before and after.* Four elements overflowed the 390px viewport —
+the two gradient orbs and two "floating" cards positioned at `-top-10 -right-10` /
+`-bottom-10 -right-10`, which on a phone sat off-screen entirely. `scrollWidth` matched the
+viewport only because the root carried `overflow-hidden`, masking the overflow rather than
+fixing it. All four public routes now measure clean at 360 / 390 / 768 / 1280px.
+
+*The loaders, and the overcompensation for them.* Three separate ones, all removed:
+1. `/` rendered a full-screen `<h1>Loading...</h1>` and redirected from an effect — every
+   visit to the root flashed a loader for a redirect. It is now a `<Navigate>`, and the
+   route is imported eagerly so there is no chunk to wait for either.
+2. `/login` showed a full-screen "Checking your session…" spinner whenever auth status was
+   not yet `unauthenticated` — which is every single visit, since the status starts as
+   `initializing`. Firebase restores a persisted session in well under 100ms, so the
+   spinner was pure flash.
+3. The landing page wrapped `TankLevel` in a `Suspense` whose fallback was a 320×256 glass
+   box with a spinning cyan ring — dead weight, since `TankLevel` had stopped being lazy.
+
+   The fix is a general one: `lib/useDelayed.ts` holds a loading state back until it has
+   genuinely persisted (350–400ms), so a fast resolve shows nothing at all. `AppLoader`
+   now uses it, and route chunks fall back to `RouteFallback` — a hairline top progress bar
+   that appears only after 250ms — instead of a branded full-screen loader for a 50ms
+   code-split.
+
+Copy was rewritten off the "AI-Powered Water Intelligence" / "edge AI" framing onto what
+the product actually does: reads the tank, converts to litres from real dimensions, flags a
+drain rate that looks wrong.
 
 **Phase 6 — Admin**
 Same shell, same primitives. The four list pages get a shared `DataTable`

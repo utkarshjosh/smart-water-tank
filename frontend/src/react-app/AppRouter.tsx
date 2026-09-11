@@ -1,9 +1,9 @@
 import { lazy, Suspense } from 'react';
 import { Link, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
-import { AppLoader } from '@/components/shell';
+import { AppLoader, RouteFallback } from '@/components/shell';
+import HomePage from '@/app/page';
 
-const HomePage = lazy(() => import('@/app/page'));
 const WelcomePage = lazy(() => import('@/app/welcome/page'));
 const LoginPage = lazy(() => import('@/app/login/page'));
 const ResetPasswordPage = lazy(() => import('@/app/reset-password/page'));
@@ -25,7 +25,7 @@ const AdminAnalyticsPage = lazy(() => import('@/app/admin/analytics/page'));
 
 export default function AppRouter() {
   return (
-    <Suspense fallback={<AppLoader />}>
+    <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/welcome" element={<WelcomePage />} />
