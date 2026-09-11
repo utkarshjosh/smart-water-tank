@@ -21,11 +21,11 @@ import '@/app/globals.css';
 
 const TimeSeriesChart = lazy(() => import('@/components/charts/TimeSeriesChart'));
 
-// 7 days at 5-minute buckets, draining through each day with a nightly refill,
-// a 14-hour outage, and a min/max spread per bucket.
+// 40 days at 5-minute buckets (~11.5k points), draining through each day with
+// a nightly refill, a 14-hour outage, and a min/max spread per bucket.
 function makeSeries(): SeriesPoint[] {
   const now = Date.now();
-  const start = now - 7 * 86_400_000;
+  const start = now - 40 * 86_400_000;
   const out: SeriesPoint[] = [];
   for (let t = start; t < now; t += 300_000) {
     const outage = t > now - 3 * 86_400_000 && t < now - 3 * 86_400_000 + 14 * 3_600_000;
@@ -42,6 +42,16 @@ function makeSeries(): SeriesPoint[] {
 }
 
 const SERIES = makeSeries();
+
+// Range chips slice the series, mirroring how the real app refetches a
+// different window - so the harness exercises a genuine bounds change.
+const RANGE_HOURS: Record<string, number> = { '24h': 24, '7d': 24 * 7, '30d': 24 * 30, '90d': 24 * 90 };
+const sliceFor = (range: string) => {
+  const hours = RANGE_HOURS[range] ?? 24 * 7;
+  const cutoff = SERIES[SERIES.length - 1][0] - hours * 3_600_000;
+  const sliced = SERIES.filter((p) => p[0] >= cutoff);
+  return sliced.length > 1 ? sliced : SERIES;
+};
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -89,7 +99,7 @@ function Preview() {
           <CardContent className="px-1 pb-2 pt-2">
             <Suspense fallback={<Skeleton className="h-[360px] w-full" />}>
               <TimeSeriesChart
-                points={SERIES}
+                points={sliceFor(range)}
                 metric={metric}
                 unit={METRICS.find((m) => m.value === metric)!.unit}
                 height={360}

@@ -64,7 +64,7 @@ No skeletons, no toasts, no optimistic writes, no page transitions, no pull-to-r
 | Area | Decision | Why |
 |---|---|---|
 | Components | **Keep Radix, rewrite every `ui/*` primitive** against a new token layer; add Vaul, Sonner, Tooltip, ScrollArea, Skeleton | Radix is the accessible, modern standard and is already installed. The ugliness is tokens + layout, not the primitives. Page logic survives untouched. |
-| Charts | **Apache ECharts**, tree-shaken custom build, lazy-loaded | `dataZoom` gives real pan + pinch-zoom + brush with touch inertia for free, plus crosshair axis-pointer, threshold marklines, and LTTB downsampling. |
+| Charts | **uPlot** (23KB), lazy-loaded, with hand-written gestures | ECharts was chosen first and shipped, then measured at 188KB gzip against an assumed 65KB - its floor is 125KB before any chart is registered. See the chart-engine entry under Risks. |
 | Icons | **Phosphor** (`@phosphor-icons/react`) | As requested. Replaces ~44 distinct Lucide icons across 27 files. |
 | Motion | **`motion`** (Framer Motion successor) | Shared-element device-card → detail transitions, list stagger, layout animation. |
 | Theme | **Light only.** Delete dark mode entirely | Requested. Also removes 336 `dark:` variants and the broken mixed-mode panels. |
@@ -380,26 +380,44 @@ chunk, `prefers-reduced-motion` verification.
 
 ## 8. Risks
 
-- **ECharts bundle — MEASURED, and the estimate was wrong.** The plan assumed ~65KB gzip
-  tree-shaken. The real chunk is **188KB gzip** (554KB raw). The planned mitigation does
-  not help: measuring each piece with esbuild shows `core + LineChart + Grid + Tooltip +
-  CanvasRenderer` alone is **171KB gzip**, `+DataZoomInside` 178KB, `+DataZoom` (slider)
-  183KB. The cost is ECharts' core and zrender, not the features chosen — dropping
-  `MarkLine` or the brush would save single-digit KB.
+- **Chart engine: measured ECharts, then replaced it with uPlot. RESOLVED.**
+  The plan assumed ECharts would tree-shake to ~65KB gzip. Built and measured, the real
+  chunk was **188KB**. Measuring each layer with esbuild showed the mitigation this plan
+  proposed (drop `MarkLine`) would have saved nothing:
 
-  What was done instead:
-  - The chunk is lazy and loads **only on `/app/devices/:id/history`**.
-  - The overview's 24-hour trace was moved off ECharts onto a dependency-free inline SVG
-    (`components/charts/Sparkline.tsx`, ~90 lines), so opening a device no longer pays
-    188KB for a glanceable shape it cannot interact with.
-  - The chart components were decoupled from `lib/history` (which imports axios →
-    Firebase) by splitting the pure vocabulary into `lib/metrics.ts`, keeping that chain
-    out of the chart chunk entirely.
+  | build | gzip |
+  |---|---|
+  | `echarts/core` alone, zero charts registered | 125KB |
+  | `+ LineChart + Grid + Tooltip + Canvas` | 172KB |
+  | `+ DataZoom` (as shipped) | 188KB |
+  | full `echarts` | 375KB |
+  | echarts **5.x**, same custom build | 175KB |
+  | **uPlot** | **23KB** |
 
-  **Still open for a call:** 188KB gzip on the flagship mobile screen is a real cost.
-  The alternative is uPlot (~15KB) with hand-written pinch/pan/tooltip/brush — roughly
-  300–400 lines of interaction code, 12× smaller, and faster on large series. Worth doing
-  if mobile first-paint on the history route matters more than the implementation time.
+  Tree-shaking was working - the floor is ECharts' own core and zrender, and v5 is no
+  better. So the engine was swapped: **188KB -> 27.5KB gzip**, a 6.9x reduction on the
+  flagship mobile screen.
+
+  uPlot supplies rendering and the min/max band; the interactions are hand-written in
+  `components/charts/gestures.ts` (drag-pan, wheel zoom, two-finger pinch, double-tap
+  reset, bounds clamping - the maths kept pure and unit-testable) and
+  `components/charts/BrushOverview.tsx` (SVG range selector with widened handle hit
+  areas). `touch-action: pan-y` is deliberate: a vertical swipe still scrolls the page, so
+  the chart is not a scroll trap on a phone.
+
+  `TimeSeriesChart`'s props did not change, so `HistoryTab` and `AdminHistoryChart` were
+  untouched by the swap.
+
+  Two bugs were found by driving the real thing rather than reading it: the plot was
+  initialised from a `view` state a sibling effect had not yet reset, leaving the plot and
+  the brush on different windows after a refetch (fixed by adjusting state during render
+  rather than in an effect); and the x-axis was formatted by total span instead of tick
+  spacing, so a 7-day window read "Sep 5, Sep 5, Sep 5".
+
+  Verified with Playwright driving real pointer, wheel and touch events: nine gesture
+  checks and five window-semantics checks, including that a metric switch preserves the
+  window while a range change resets it.
+
 - **The bucketed endpoint is on the critical path for Phase 3.** Build it first; the
   frontend can develop against `bucket=raw` in the meantime.
 - **Stripping 336 `dark:` variants touches 19 files at once.** Do it mechanically in its own
