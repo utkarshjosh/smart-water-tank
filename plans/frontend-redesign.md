@@ -1,6 +1,6 @@
 # Frontend Redesign — Modern, Mobile-First AquaMind
 
-**Status:** proposed, not started
+**Status:** Phase 3 backend done; frontend phases pending
 **Scope:** `frontend/` only (Vite + React 18 + React Router app served from `/var/www/aquamind`).
 The Expo app in `mobile-app/` is explicitly **out of scope** — it has one commit ever and
 adding it would mean maintaining a second, parallel design system.
@@ -178,33 +178,71 @@ four sidebar/header/drawer files.
 
 ## 5. Charts — "extremely flexible and browsable"
 
-### Backend prerequisite (blocking)
+### Backend prerequisite (blocking) — ✅ DONE
 
 Today: `GET /api/v1/user/devices/:id/history?days&limit` returns raw rows, newest-first,
 capped at 10 000. Browsing a year of 30-second readings over that is not viable.
 
-Add bucketing — `backend-v2/src/routes/user.routes.ts` + `user.service.ts`:
+Shipped as a **new sibling endpoint**, `backend-v2/src/services/history.service.ts` +
+a route in `user.routes.ts`:
 
 ```
-GET /api/v1/user/devices/:id/history
-  ?from=<iso>&to=<iso>
-  &bucket=raw|5m|1h|1d
-  &metrics=level_percent,volume_l,temperature_c,battery_v
+GET /api/v1/user/devices/:id/history/series
+  ?from=<iso>&to=<iso>          (or ?days=N)
+  &bucket=auto|raw|1m|5m|15m|1h|6h|1d
+  &metrics=level_percent,volume_l,temperature_c,battery_v,level_cm
 
--> { bucket, from, to, series: { <metric>: [[ts, min, avg, max]] } }
+-> { bucket, bucket_seconds, from, to, point_count, truncated, has_tank_profile,
+     columns: ['t','min','avg','max'],
+     series: { <metric>: { unit, points: [[epochMs, min, avg, max], ...] } },
+     samples: [[epochMs, readingCount], ...] }
 ```
 
-- `bucket=auto` (default) picks from the requested span: ≤ 24h → raw, ≤ 7d → 5m,
-  ≤ 90d → 1h, beyond → 1d.
-- Bucketed rows aggregate `MIN/AVG/MAX` in SQL, so a month of data is ~720 points
-  regardless of the sampling rate.
-- `min`/`max` render as a soft band behind the average line — on a water tank this is what
-  actually shows you overnight draw and refill spikes, which the current mean-only line hides.
-- The `daily_summary` table that `aggregation.service.ts` already computes nightly is
-  currently written and never read by anything. `bucket=1d` reads it instead of scanning
-  raw measurements.
+- `bucket=auto` (default) ladder: ≤ 24h → raw, ≤ 7d → 5m, ≤ 30d → 1h, ≤ 180d → 6h,
+  beyond → 1d. Every rung stays under 2 500 points; the densest (7d at 5m) is 2 016.
+- Aggregation is `MIN/AVG/MAX` in SQL, so a month costs ~720 points regardless of the
+  reporting interval.
+- `min`/`max` render as a soft band behind the average line — on a water tank that is
+  what shows overnight draw and refill spikes, which a mean-only line hides.
+- An explicit bucket that would exceed 5 000 points is a 400 naming a coarser bucket.
+  Raw mode caps at 5 000 readings, sets `truncated: true`, and narrows `from` to the
+  oldest reading actually returned rather than silently dropping the middle.
+- Empty buckets emit one explicit null point so a line chart **breaks across an outage**
+  instead of drawing a straight line through it. In raw mode the gap threshold comes from
+  the device's own `report_interval_ms`.
 
-Keep `days`/`limit` accepted as aliases so nothing breaks mid-deploy.
+**Three deviations from the original plan, decided during implementation:**
+
+1. **A separate `/history/series` endpoint, not an overload of `/history`.** The two
+   response shapes are genuinely different (row-oriented DTOs vs column-oriented tuples),
+   and returning one or the other based on which query params happen to be present is the
+   kind of thing that bites later. The old route is untouched, so the current tenant and
+   admin charts keep working; it gets deleted in Phase 4 once nothing calls it.
+
+2. **`bucket=1d` does NOT read `daily_summaries`.** That table only stores volume, and its
+   volumes were frozen at aggregation time. Everything else in this codebase derives volume
+   and percent at read time from the *current* tank profile — so serving daily points from
+   that table would make the chart disagree with every other number on the page the moment
+   a tank profile is edited. `1d` aggregates measurements like any other bucket.
+
+3. **Auto ladder rungs shifted** (≤ 30d → 1h, ≤ 180d → 6h, rather than ≤ 90d → 1h) to keep
+   every rung under the point target.
+
+**The subtle correctness point, pinned by tests:** `level_cm` is the ultrasonic *distance*
+from the sensor down to the water, so it runs **opposite** to fill — the smallest distance
+in a bucket is its fullest moment. Every derived metric therefore swaps min and max
+(`level_percent.max = pct(level_cm.min)`). The dead-zone clamp is pushed into the SQL
+(`LEAST(GREATEST(level_cm, fullEff), empty)`) so `AVG` matches per-reading
+`computeLevelPercent`; averaging unclamped distances first would let readings inside the
+sensor's blind zone drag the mean past the 100% ceiling. Bucket boundaries use
+`TIMESTAMPDIFF` against a fixed epoch rather than `UNIX_TIMESTAMP`, which is
+session-timezone dependent.
+
+**Verification:** 20 unit tests in `src/__tests__/history.service.test.ts` (76 pass total),
+plus `npm run verify:history` — a DB-backed harness that seeds 40 days of 5-minute readings
+with a 3-day outage and unreadable-sensor rows, then cross-checks every bucket's min/avg/max
+against recomputation from the raw rows, confirms UTC bucket alignment, and exercises the
+truncation path.
 
 ### The chart component
 

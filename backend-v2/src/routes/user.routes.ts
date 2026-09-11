@@ -10,6 +10,7 @@ import * as tankProfileService from '../services/tank-profile.service';
 import * as firmwareService from '../services/firmware.service';
 import { updateUserFCMToken } from '../services/fcm.service';
 import { exportUserMeasurements } from '../services/measurement-export.service';
+import { BUCKETS, getDeviceHistorySeries } from '../services/history.service';
 
 const router = express.Router();
 
@@ -142,6 +143,27 @@ router.get(
   asyncHandler(async (req: DeviceAccessRequest, res) => {
     const { days, limit } = historyQuerySchema.parse(req.query);
     res.json(await userService.getDeviceHistory(req.device!, days, limit));
+  })
+);
+
+const historySeriesQuerySchema = z.object({
+  from: z.string().optional(),
+  to: z.string().optional(),
+  days: z.coerce.number().positive().optional(),
+  bucket: z.enum(['auto', ...BUCKETS]).default('auto'),
+  metrics: z.string().optional(),
+});
+
+// GET /api/v1/user/devices/:deviceId/history/series - Bucketed history for
+// browsable charts. Unlike /history (raw rows, newest-first) this aggregates
+// MIN/AVG/MAX per time bucket in SQL, so any span costs a bounded number of
+// points and the min/max band shows the draw and refill swings a mean hides.
+router.get(
+  '/devices/:deviceId/history/series',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    const options = historySeriesQuerySchema.parse(req.query);
+    res.json(await getDeviceHistorySeries(req.device!, options));
   })
 );
 
