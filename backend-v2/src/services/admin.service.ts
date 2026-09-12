@@ -65,6 +65,11 @@ export async function listDevices(filters: {
               : null,
         last_measurement: latest ? latest.timestamp : null,
         created_at: device.createdAt,
+        // The admin list is the only place a decommissioned device can be seen
+        // or restored, so it has to say which rows are decommissioned. Without
+        // this the client cannot tell them apart and offers to decommission a
+        // device that already is.
+        archived_at: device.archivedAt,
       };
     })
   );
@@ -219,6 +224,7 @@ export async function listTenants(opts: { includeArchived?: boolean } = {}) {
     updated_at: t.updatedAt,
     device_count: t._count.devices,
     user_count: t._count.users,
+    archived_at: t.archivedAt,
   }));
 }
 
@@ -581,6 +587,7 @@ export async function listUsers(filters: {
     fcm_token: u.fcmToken ? '***' : null, // Don't expose full token
     created_at: u.createdAt,
     updated_at: u.updatedAt,
+    archived_at: u.archivedAt,
   }));
 }
 
