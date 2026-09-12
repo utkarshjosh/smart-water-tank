@@ -1,7 +1,8 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { CaretDown, CaretUp, CaretUpDown } from '@phosphor-icons/react';
+import { ArrowDown, ArrowUp, CaretDown, CaretUp, CaretUpDown } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
 import { Skeleton } from './skeleton';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select';
 
 export interface Column<T> {
   key: string;
@@ -89,6 +90,7 @@ export function DataTable<T>({
 
   const primary = columns.find((c) => c.primary) ?? columns[0];
   const secondary = columns.filter((c) => c !== primary && !c.desktopOnly);
+  const sortable = columns.filter((c) => c.sortValue);
 
   return (
     <div className={className}>
@@ -168,7 +170,40 @@ export function DataTable<T>({
         </div>
       </div>
 
-      {/* Mobile: the same rows as cards. */}
+      {/* Mobile: the card layout has no column headers to click, so sorting
+          gets its own control - otherwise the phone view is not sortable at
+          all, which is half a feature. */}
+      {sortable.length > 0 && (
+        <div className="mb-2 flex items-center gap-2 md:hidden">
+          <Select
+            value={sort?.key ?? ''}
+            onValueChange={(key) =>
+              setSort({ key, direction: sort?.key === key ? sort.direction : 'asc' })
+            }
+          >
+            <SelectTrigger className="h-9 flex-1" aria-label="Sort by">
+              <SelectValue placeholder="Sort by…" />
+            </SelectTrigger>
+            <SelectContent>
+              {sortable.map((column) => (
+                <SelectItem key={column.key} value={column.key}>
+                  {column.header}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <button
+            type="button"
+            disabled={!sort}
+            onClick={() => sort && toggle(sort.key)}
+            aria-label={sort?.direction === 'asc' ? 'Sort descending' : 'Sort ascending'}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-hairline bg-surface text-ink-2 transition-colors duration-instant hover:bg-surface-hover disabled:opacity-50"
+          >
+            {sort?.direction === 'desc' ? <ArrowDown size={16} /> : <ArrowUp size={16} />}
+          </button>
+        </div>
+      )}
+
       <ul className="space-y-2 md:hidden">
         {sorted.map((row) => {
           const content = (

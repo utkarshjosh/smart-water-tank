@@ -383,28 +383,28 @@ export default function FirmwarePage() {
       value: firmware.length,
       detail: activeFirmware ? `Active v${activeFirmware.version}` : 'No active build',
       icon: Package,
-      color: 'text-slate-700 ',
+      color: 'text-ink-2',
     },
     {
       label: 'Managed devices',
       value: devices.length,
       detail: `${tenants.length} tenants`,
       icon: Cpu,
-      color: 'text-sky-600 ',
+      color: 'text-brand',
     },
     {
       label: 'Storage',
       value: `${(totalFirmwareBytes / 1024).toFixed(1)} KB`,
       detail: latestFirmware ? `Latest v${latestFirmware.version}` : 'No uploads',
       icon: HardDrive,
-      color: 'text-emerald-600 ',
+      color: 'text-good-text',
     },
     {
       label: 'Avg rollout',
       value: `${averageRollout}%`,
       detail: 'Across versions',
       icon: Broadcast,
-      color: 'text-amber-600 ',
+      color: 'text-warning-text',
     },
   ];
 
@@ -413,16 +413,14 @@ export default function FirmwarePage() {
       <div className="space-y-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-950">
-              Firmware management
-            </h1>
-            <p className="text-sm text-slate-600">
+            <h1 className="text-display tracking-tight text-ink-1">Firmware management</h1>
+            <p className="text-body text-ink-2">
               UploadSimple binaries, track deployed builds, and stage rollouts.
             </p>
           </div>
           {activeFirmware && (
-            <div className="inline-flex h-9 w-fit items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm">
-              <CheckCircle className="h-4 w-4 text-emerald-600" />v{activeFirmware.version} active
+            <div className="inline-flex h-9 w-fit items-center gap-2 rounded-md border border-hairline bg-surface px-3 text-label text-ink-2">
+              <CheckCircle className="h-4 w-4 text-good-text" />v{activeFirmware.version} active
             </div>
           )}
         </div>
@@ -447,18 +445,16 @@ export default function FirmwarePage() {
           {firmwareStats.map((stat) => {
             const Icon = stat.icon;
             return (
-              <Card key={stat.label} className="border-slate-200 shadow-sm">
+              <Card key={stat.label} className="border-hairline">
                 <CardContent className="flex items-center justify-between gap-3 p-4">
                   <div className="min-w-0">
-                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    <p className="text-caption font-medium uppercase tracking-wide text-ink-3">
                       {stat.label}
                     </p>
-                    <p className={`mt-1 truncate text-xl font-semibold ${stat.color}`}>
-                      {stat.value}
-                    </p>
-                    <p className="truncate text-xs text-slate-500">{stat.detail}</p>
+                    <p className={`mt-1 truncate text-title ${stat.color}`}>{stat.value}</p>
+                    <p className="truncate text-caption text-ink-3">{stat.detail}</p>
                   </div>
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface-sunk">
                     <Icon className={`h-4 w-4 ${stat.color}`} />
                   </div>
                 </CardContent>
@@ -468,11 +464,9 @@ export default function FirmwarePage() {
         </div>
 
         <div className="grid gap-3 xl:grid-cols-[0.82fr_1.18fr]">
-          <Card className="border-slate-200 shadow-sm">
-            <CardHeader className="border-b border-slate-100 p-4">
-              <CardTitle className="text-base font-semibold tracking-normal">
-                UploadSimple firmware
-              </CardTitle>
+          <Card className="border-hairline">
+            <CardHeader className="border-b border-hairline p-4">
+              <CardTitle className="text-title tracking-normal">UploadSimple firmware</CardTitle>
               <CardDescription>Binary package and release metadata.</CardDescription>
             </CardHeader>
             <CardContent className="p-4">
@@ -486,10 +480,10 @@ export default function FirmwarePage() {
                     onDrop={handleDrop}
                     className={`relative rounded-lg border border-dashed p-5 text-center transition-all ${
                       isDragging
-                        ? 'border-sky-500 bg-sky-50'
-                        : 'border-slate-300 hover:border-sky-400'
+                        ? 'border-brand bg-brand-wash'
+                        : 'border-line-strong hover:border-brand'
                     }
-                    ${selectedFile ? 'border-sky-500 bg-sky-50 ' : ''}
+                    ${selectedFile ? 'border-brand bg-brand-wash ' : ''}
  `}
                   >
                     <input
@@ -503,22 +497,22 @@ export default function FirmwarePage() {
                     />
                     <div className="flex flex-col items-center justify-center space-y-2">
                       <FileArrowUp
-                        className={`h-8 w-8 ${isDragging || selectedFile ? 'text-sky-600 ' : 'text-slate-400'}`}
+                        className={`h-8 w-8 ${isDragging || selectedFile ? 'text-brand ' : 'text-ink-3'}`}
                       />
                       <div className="space-y-1">
-                        <p className="text-sm font-medium">
+                        <p className="text-label">
                           {selectedFile ? (
-                            <span className="text-sky-700">{selectedFile.name}</span>
+                            <span className="text-brand">{selectedFile.name}</span>
                           ) : isDragging ? (
-                            <span className="text-sky-700">Drop the file here</span>
+                            <span className="text-brand">Drop the file here</span>
                           ) : (
                             <>
-                              <span className="text-sky-700 hover:underline">Click to upload</span>
+                              <span className="text-brand hover:underline">Click to upload</span>
                               {' or drag and drop'}
                             </>
                           )}
                         </p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-caption text-ink-3">
                           {selectedFile
                             ? `${(selectedFile.size / 1024).toFixed(2)} KB`
                             : 'Firmware file (.bin)'}
@@ -554,13 +548,11 @@ export default function FirmwarePage() {
             </CardContent>
           </Card>
 
-          <Card className="border-slate-200 shadow-sm">
-            <CardHeader className="border-b border-slate-100 p-4">
+          <Card className="border-hairline">
+            <CardHeader className="border-b border-hairline p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <CardTitle className="text-base font-semibold tracking-normal">
-                    Firmware versions
-                  </CardTitle>
+                  <CardTitle className="text-title tracking-normal">Firmware versions</CardTitle>
                   <CardDescription>Build inventory and rollout controls.</CardDescription>
                 </div>
                 <Badge variant="outline" className="shrink-0">
@@ -571,14 +563,14 @@ export default function FirmwarePage() {
             <CardContent className="p-0">
               {firmware.length === 0 ? (
                 <div className="p-8 text-center">
-                  <Package className="mx-auto h-8 w-8 text-slate-400" />
-                  <p className="mt-3 text-sm font-medium text-slate-700">No firmware uploaded</p>
-                  <p className="text-xs text-slate-500">
+                  <Package className="mx-auto h-8 w-8 text-ink-3" />
+                  <p className="mt-3 text-label text-ink-2">No firmware uploaded</p>
+                  <p className="text-caption text-ink-3">
                     UploadSimple a .bin package to begin rollout management.
                   </p>
                 </div>
               ) : (
-                <div className="divide-y divide-slate-100">
+                <div className="divide-y divide-hairline">
                   {firmware.map((fw) => (
                     <div
                       key={fw.id}
@@ -586,31 +578,25 @@ export default function FirmwarePage() {
                     >
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-semibold text-slate-950">
-                            Version {fw.version}
-                          </p>
+                          <p className="text-body font-semibold text-ink-1">Version {fw.version}</p>
                           {fw.is_active && <Badge variant="brand">Active</Badge>}
                         </div>
                         {fw.description && (
-                          <p className="mt-1 line-clamp-2 text-sm text-slate-600">
-                            {fw.description}
-                          </p>
+                          <p className="mt-1 line-clamp-2 text-body text-ink-2">{fw.description}</p>
                         )}
-                        <p className="mt-1 text-xs text-slate-500">
+                        <p className="mt-1 text-caption text-ink-3">
                           {(fw.file_size / 1024).toFixed(2)} KB • Uploaded{' '}
                           {new Date(fw.created_at).toLocaleString()}
                         </p>
                       </div>
                       <div>
-                        <div className="flex items-center justify-between text-xs text-slate-500">
+                        <div className="flex items-center justify-between text-caption text-ink-3">
                           <span>Rollout</span>
-                          <span className="font-medium text-slate-700">
-                            {fw.rollout_percentage}%
-                          </span>
+                          <span className="font-medium text-ink-2">{fw.rollout_percentage}%</span>
                         </div>
-                        <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+                        <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-sunk">
                           <div
-                            className="h-full rounded-full bg-sky-500"
+                            className="h-full rounded-full bg-brand"
                             style={{ width: `${fw.rollout_percentage}%` }}
                           />
                         </div>
@@ -736,10 +722,10 @@ export default function FirmwarePage() {
                                   htmlFor={`device-${device.device_id}`}
                                   className="flex-1 cursor-pointer"
                                 >
-                                  <div className="text-sm font-medium">
+                                  <div className="text-label">
                                     {device.name || device.device_id}
                                   </div>
-                                  <div className="text-xs text-muted-foreground">
+                                  <div className="text-caption text-muted-foreground">
                                     {device.device_id} • {device.tenant_name} • v
                                     {device.firmware_version || 'N/A'}
                                   </div>
@@ -782,7 +768,7 @@ export default function FirmwarePage() {
                                 />
                                 <label
                                   htmlFor={`tenant-${tenant.id}`}
-                                  className="text-sm font-medium cursor-pointer flex-1"
+                                  className="text-label cursor-pointer flex-1"
                                 >
                                   {tenant.name}
                                 </label>
@@ -815,9 +801,9 @@ export default function FirmwarePage() {
                         onChange={(e) => setRolloutPercentage(parseInt(e.target.value) || 1)}
                         className="w-20"
                       />
-                      <span className="text-sm text-muted-foreground">%</span>
+                      <span className="text-body text-muted-foreground">%</span>
                     </div>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-caption text-muted-foreground">
                       This will randomly select {rolloutPercentage}% of all devices
                     </p>
                   </div>

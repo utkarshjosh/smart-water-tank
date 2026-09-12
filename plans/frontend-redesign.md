@@ -1,6 +1,6 @@
 # Frontend Redesign — Modern, Mobile-First AquaMind
 
-**Status:** Phases 0–5 done (foundation, shell, primitives, charts, tenant app, public/auth). Phases 6–7 pending (admin restyle, polish).
+**Status:** Phases 0–6 done. Phase 7 (polish, Lighthouse, reduced-motion and focus audit) pending.
 **Scope:** `frontend/` only (Vite + React 18 + React Router app served from `/var/www/aquamind`).
 The Expo app in `mobile-app/` is explicitly **out of scope** — it has one commit ever and
 adding it would mean maintaining a second, parallel design system.
@@ -388,10 +388,34 @@ Copy was rewritten off the "AI-Powered Water Intelligence" / "edge AI" framing o
 the product actually does: reads the tank, converts to litres from real dimensions, flags a
 drain rate that looks wrong.
 
-**Phase 6 — Admin**
-Same shell, same primitives. The four list pages get a shared `DataTable`
-(sticky header, sortable, responsive → cards on mobile). `admin/firmware/page.tsx` is 856
-lines and `admin/tenants/page.tsx` is 652 — both get split into components while restyling.
+**Phase 6 — Admin** — ✅ DONE
+Same shell, same primitives, no stale palette class left anywhere under `src/app/admin`.
+
+`components/ui/data-table.tsx` is the shared list: a real `<table>` with a sticky sortable
+header from `md` up, and the same rows as cards below it. Two details that mattered —
+missing values sort last in *both* directions rather than being coerced to `0`/`""`, and the
+card layout has no column headers to click, so it gets its own sort control; without that,
+"sortable" was a desktop-only feature.
+
+Splits:
+- `admin/tenants/page.tsx` (652 lines, fourteen pieces of local state covering tenant CRUD,
+  the database-user list and the Firebase linking flow) → `page.tsx` + `TenantsTab` +
+  `UsersTab` + `useUsers.ts` + `types.ts`.
+- `admin/devices/page.tsx` (458 lines) → list + `CreateDeviceDialog`.
+- Dashboard and analytics were calling the same summary endpoint with the same shape and
+  duplicating every derivation; both now read one `useAdminSummary`. They stay two routes —
+  merging them is a product decision, not a restyle.
+
+`admin/firmware/page.tsx` (844 lines) drives real OTA rollouts, so it got a **markup-only**
+pass: a mechanical Tailwind-token mapping, verified by diffing the file with every
+`className` blanked out. The only four differences outside `className` were colour tokens
+held in a data array and applied as classes — i.e. still presentational. No handler, state
+or API call was touched.
+
+Also fixed here: `alert('Token copied to clipboard!')` became a toast that reports failure
+when the clipboard is refused instead of claiming success; a `generateStaticParams` export
+left over from Next.js was deleted; and `relativeTime` / `timeSortValue`, which had been
+copy-pasted into three pages, moved to `lib/time.ts`. Lint warnings went from 43 to 24.
 
 **Dev harness.** `preview.html` + `src/preview.tsx` render the design system and the chart
 against generated data with no backend or auth, so the result can be looked at (and

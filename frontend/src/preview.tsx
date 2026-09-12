@@ -16,7 +16,10 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Sparkline } from '@/components/charts/Sparkline';
 import TankLevel from '@/components/TankLevel';
 import { METRICS, type Metric, type SeriesPoint } from '@/lib/metrics';
-import { Drop, CaretRight, Warning } from '@phosphor-icons/react';
+import { Drop, CaretRight, Warning, Cpu } from '@phosphor-icons/react';
+import { DataTable, type Column } from '@/components/ui/data-table';
+import { PageHeader } from '@/components/ui/page-header';
+import { relativeTime, timeSortValue } from '@/lib/time';
 import '@/app/globals.css';
 
 const TimeSeriesChart = lazy(() => import('@/components/charts/TimeSeriesChart'));
@@ -43,9 +46,142 @@ function makeSeries(): SeriesPoint[] {
 
 const SERIES = makeSeries();
 
+interface DemoRow {
+  id: string;
+  name: string;
+  device_id: string;
+  tenant: string;
+  status: string;
+  firmware: string;
+  volume: number | null;
+  last_seen: string | null;
+}
+
+const DEMO_ROWS: DemoRow[] = [
+  {
+    id: '1',
+    name: 'Roof tank',
+    device_id: 'tank-001',
+    tenant: 'Joshi Home',
+    status: 'online',
+    firmware: '1.1.3',
+    volume: 756,
+    last_seen: new Date(Date.now() - 4 * 60_000).toISOString(),
+  },
+  {
+    id: '2',
+    name: 'Ground sump',
+    device_id: 'tank-002',
+    tenant: 'Joshi Home',
+    status: 'online',
+    firmware: '1.1.3',
+    volume: 1240,
+    last_seen: new Date(Date.now() - 12 * 60_000).toISOString(),
+  },
+  {
+    id: '3',
+    name: 'Terrace overhead',
+    device_id: 'tank-014',
+    tenant: 'Mehta Residency',
+    status: 'offline',
+    firmware: '1.0.9',
+    volume: null,
+    last_seen: new Date(Date.now() - 52 * 3_600_000).toISOString(),
+  },
+  {
+    id: '4',
+    name: 'Block B riser',
+    device_id: 'tank-031',
+    tenant: 'Mehta Residency',
+    status: 'online',
+    firmware: '1.1.3',
+    volume: 430,
+    last_seen: new Date(Date.now() - 90_000).toISOString(),
+  },
+  {
+    id: '5',
+    name: 'Unnamed',
+    device_id: 'tank-077',
+    tenant: 'Pilot fleet',
+    status: 'offline',
+    firmware: '',
+    volume: null,
+    last_seen: null,
+  },
+];
+
+const DEMO_COLUMNS: Column<DemoRow>[] = [
+  {
+    key: 'name',
+    header: 'Device',
+    primary: true,
+    sortValue: (r) => r.name,
+    cell: (r) => (
+      <div className="min-w-0">
+        <div className="truncate text-label text-ink-1">{r.name}</div>
+        <div className="truncate font-mono text-caption text-ink-3">{r.device_id}</div>
+      </div>
+    ),
+  },
+  {
+    key: 'tenant',
+    header: 'Tenant',
+    sortValue: (r) => r.tenant,
+    cell: (r) => <span className="text-ink-2">{r.tenant}</span>,
+  },
+  {
+    key: 'status',
+    header: 'Status',
+    sortValue: (r) => r.status,
+    cell: (r) => (
+      <StatusDot
+        status={r.status === 'online' ? 'online' : 'offline'}
+        label={r.status === 'online' ? 'Online' : 'Offline'}
+      />
+    ),
+  },
+  {
+    key: 'firmware',
+    header: 'Firmware',
+    sortValue: (r) => r.firmware,
+    cell: (r) =>
+      r.firmware ? (
+        <Badge variant="neutral" className="font-mono">
+          {r.firmware}
+        </Badge>
+      ) : (
+        <span className="text-ink-3">Unknown</span>
+      ),
+  },
+  {
+    key: 'volume',
+    header: 'Volume',
+    align: 'right',
+    sortValue: (r) => r.volume,
+    cell: (r) =>
+      r.volume == null ? (
+        <span className="text-ink-3">—</span>
+      ) : (
+        <span className="tnum">{r.volume} L</span>
+      ),
+  },
+  {
+    key: 'last_seen',
+    header: 'Last seen',
+    align: 'right',
+    sortValue: (r) => timeSortValue(r.last_seen),
+    cell: (r) => <span className="whitespace-nowrap text-ink-2">{relativeTime(r.last_seen)}</span>,
+  },
+];
+
 // Range chips slice the series, mirroring how the real app refetches a
 // different window - so the harness exercises a genuine bounds change.
-const RANGE_HOURS: Record<string, number> = { '24h': 24, '7d': 24 * 7, '30d': 24 * 30, '90d': 24 * 90 };
+const RANGE_HOURS: Record<string, number> = {
+  '24h': 24,
+  '7d': 24 * 7,
+  '30d': 24 * 30,
+  '90d': 24 * 90,
+};
 const sliceFor = (range: string) => {
   const hours = RANGE_HOURS[range] ?? 24 * 7;
   const cutoff = SERIES[SERIES.length - 1][0] - hours * 3_600_000;
@@ -172,6 +308,19 @@ function Preview() {
             <Sparkline points={SERIES.slice(-288)} min={0} max={100} height={120} />
           </CardContent>
         </Card>
+      </Section>
+
+      <Section title="Admin table (table on desktop, cards on mobile)">
+        <PageHeader title="Devices" description="Provisioned sensors and reporting state." />
+        <DataTable
+          rows={DEMO_ROWS}
+          columns={DEMO_COLUMNS}
+          getRowKey={(r) => r.id}
+          onRowClick={() => {}}
+          initialSort={{ key: 'last_seen', direction: 'desc' }}
+          caption="Devices"
+          empty={<EmptyState icon={Cpu} title="No devices" />}
+        />
       </Section>
 
       <Section title="Controls">
