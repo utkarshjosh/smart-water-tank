@@ -31,10 +31,14 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const apiUrl = resolveApiUrl(profile);
   const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim();
 
-  // react-native-firebase needs this file at PREBUILD time. Keep prebuild
-  // working without it so a fresh clone can still generate the project; auth
-  // then fails loudly at runtime instead of cryptically at build time.
-  const googleServicesFile = existsSync(resolve(__dirname, GOOGLE_SERVICES)) ? GOOGLE_SERVICES : undefined;
+  // react-native-firebase needs this file at PREBUILD time. It is gitignored,
+  // so an EAS build machine gets it from a file secret instead (GOOGLE_SERVICES_JSON
+  // holds a path there). Prebuild still works without either, so a fresh clone
+  // can generate the project; auth then fails loudly at runtime rather than
+  // cryptically at build time.
+  const googleServicesFile =
+    process.env.GOOGLE_SERVICES_JSON ??
+    (existsSync(resolve(__dirname, GOOGLE_SERVICES)) ? GOOGLE_SERVICES : undefined);
   if (!googleServicesFile) {
     console.warn(
       '[app.config] google-services.json not found — Firebase auth will not work in this build. ' +
