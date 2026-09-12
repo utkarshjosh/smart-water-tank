@@ -118,6 +118,27 @@ const measurementExportBodySchema = z.object({
   to: z.coerce.date(),
 });
 
+const userAlertsQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(200).default(50),
+  include_dismissed: z.coerce.boolean().default(false),
+  unacknowledged: z.coerce.boolean().default(false),
+});
+
+// GET /api/v1/user/alerts - One inbox across every device the caller can see.
+// Alerts could previously only be read one device at a time.
+router.get(
+  '/alerts',
+  asyncHandler(async (req: AuthRequest, res) => {
+    const { limit, include_dismissed, unacknowledged } = userAlertsQuerySchema.parse(req.query);
+    res.json(
+      await userService.getUserAlerts(
+        { id: req.user!.id, tenantId: req.user!.tenantId },
+        { limit, includeDismissed: include_dismissed, onlyUnacknowledged: unacknowledged }
+      )
+    );
+  })
+);
+
 // POST /api/v1/user/measurements/export - Tenant-scoped multi-device CSV export.
 router.post(
   '/measurements/export',
@@ -289,17 +310,40 @@ router.get(
   })
 );
 
-const alertsQuerySchema = z.object({
-  limit: z.coerce.number().int().positive().max(500).default(50),
+const deviceAlertsQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(200).default(50),
+  include_dismissed: z.coerce.boolean().default(false),
 });
 
-// GET /api/v1/user/devices/:deviceId/alerts - Alert history
+// GET /api/v1/user/devices/:deviceId/alerts - Alert history for one device
 router.get(
   '/devices/:deviceId/alerts',
   requireDeviceAccess,
   asyncHandler(async (req: DeviceAccessRequest, res) => {
-    const { limit } = alertsQuerySchema.parse(req.query);
-    res.json(await userService.getDeviceAlerts(req.device!, limit));
+    const { limit, include_dismissed } = deviceAlertsQuerySchema.parse(req.query);
+    res.json(await userService.getDeviceAlerts(req.device!, limit, include_dismissed));
+  })
+);
+
+// DELETE /api/v1/user/devices/:deviceId/alerts/:alertId - Dismiss an alert.
+// The row is kept and merely hidden from the feed, so the operational record
+// of a leak survives the user clearing it off their screen.
+router.delete(
+  '/devices/:deviceId/alerts/:alertId',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    await userService.dismissAlert(req.device!, req.params.alertId);
+    res.status(204).send();
+  })
+);
+
+// POST /api/v1/user/devices/:deviceId/alerts/:alertId/restore - Undo a dismiss
+router.post(
+  '/devices/:deviceId/alerts/:alertId/restore',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    await userService.restoreAlert(req.device!, req.params.alertId);
+    res.status(204).send();
   })
 );
 

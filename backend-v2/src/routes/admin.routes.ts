@@ -228,6 +228,39 @@ router.delete(
   })
 );
 
+const adminAlertsQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(500).default(100),
+  tenant_id: z.string().uuid().optional(),
+  device_id: z.string().optional(),
+  severity: z.enum(['low', 'medium', 'high', 'critical']).optional(),
+  acknowledged: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
+  include_dismissed: z.coerce.boolean().default(false),
+  hours: z.coerce.number().int().positive().max(24 * 365).optional(),
+});
+
+// GET /api/v1/admin/alerts - Fleet-wide alert feed. The dashboard's 24-hour
+// alert count previously had nothing to drill into.
+router.get(
+  '/alerts',
+  asyncHandler(async (req, res) => {
+    const q = adminAlertsQuerySchema.parse(req.query);
+    res.json(
+      await adminService.listAlerts({
+        limit: q.limit,
+        tenantId: q.tenant_id,
+        deviceId: q.device_id,
+        severity: q.severity,
+        acknowledged: q.acknowledged,
+        includeDismissed: q.include_dismissed,
+        since: q.hours ? new Date(Date.now() - q.hours * 3_600_000) : undefined,
+      })
+    );
+  })
+);
+
 // GET /api/v1/admin/analytics/summary - System-wide analytics
 router.get(
   '/analytics/summary',

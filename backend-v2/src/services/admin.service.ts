@@ -1,4 +1,4 @@
-import { DeviceStatus, Role, User } from '@prisma/client';
+import { AlertSeverity, DeviceStatus, Role, User } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http-error';
 import { isUniqueConstraintError } from '../lib/prisma-errors';
@@ -232,6 +232,60 @@ export async function updateTenant(tenantId: string, name: string) {
  * Reassigning a tenant is deliberately explicit rather than a side effect of
  * some other call - it changes who can see the device's whole history.
  */
+/**
+ * Fleet-wide alert feed. The admin dashboard showed a 24-hour alert count with
+ * nothing to drill into, because no endpoint listed alerts across devices.
+ */
+export async function listAlerts(opts: {
+  limit: number;
+  tenantId?: string;
+  deviceId?: string;
+  severity?: AlertSeverity;
+  acknowledged?: boolean;
+  includeDismissed: boolean;
+  since?: Date;
+}) {
+  const where = {
+    ...(opts.tenantId ? { tenantId: opts.tenantId } : {}),
+    ...(opts.deviceId ? { device: { deviceId: opts.deviceId } } : {}),
+    ...(opts.severity ? { severity: opts.severity } : {}),
+    ...(opts.acknowledged !== undefined ? { acknowledged: opts.acknowledged } : {}),
+    ...(opts.includeDismissed ? {} : { dismissedAt: null }),
+    ...(opts.since ? { createdAt: { gte: opts.since } } : {}),
+  };
+
+  const [alerts, total] = await Promise.all([
+    prisma.alert.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: opts.limit,
+      include: {
+        device: { select: { deviceId: true, name: true } },
+        tenant: { select: { id: true, name: true } },
+      },
+    }),
+    prisma.alert.count({ where }),
+  ]);
+
+  return {
+    total,
+    alerts: alerts.map((a) => ({
+      id: a.id,
+      type: a.type,
+      severity: a.severity,
+      message: a.message,
+      acknowledged: a.acknowledged,
+      acknowledged_at: a.acknowledgedAt,
+      dismissed: a.dismissedAt != null,
+      created_at: a.createdAt,
+      device_id: a.device.deviceId,
+      device_name: a.device.name || a.device.deviceId,
+      tenant_id: a.tenant.id,
+      tenant_name: a.tenant.name,
+    })),
+  };
+}
+
 export async function updateDevice(
   deviceIdString: string,
   data: { name?: string | null; tenantId?: string }

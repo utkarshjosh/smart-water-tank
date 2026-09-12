@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { BellRinging, CheckCircle } from '@phosphor-icons/react';
+import { BellRinging, CheckCircle, X } from '@phosphor-icons/react';
 import api from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,10 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { deviceKeys, useAlerts, type AlertItem } from './useDevice';
 
-const SEVERITY: Record<AlertItem['severity'], { variant: 'critical' | 'serious' | 'warning' | 'brand'; label: string }> = {
+const SEVERITY: Record<
+  AlertItem['severity'],
+  { variant: 'critical' | 'serious' | 'warning' | 'brand'; label: string }
+> = {
   critical: { variant: 'critical', label: 'Critical' },
   high: { variant: 'serious', label: 'High' },
   medium: { variant: 'warning', label: 'Medium' },
@@ -41,7 +44,42 @@ export default function AlertsTab() {
     },
     onError: (_err, _alertId, context) => {
       queryClient.setQueryData(deviceKeys.alerts(deviceId), context?.previous);
-      toast.error("Couldn't acknowledge that alert", { description: 'Check your connection and try again.' });
+      toast.error("Couldn't acknowledge that alert", {
+        description: 'Check your connection and try again.',
+      });
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: deviceKeys.alerts(deviceId) }),
+  });
+
+  /**
+   * Dismiss hides the alert from the feed; the row is kept server-side, so an
+   * operational record of a leak survives the user clearing it off screen.
+   */
+  const dismiss = useMutation({
+    mutationFn: (alertId: string) =>
+      api.delete(`/api/v1/user/devices/${deviceId}/alerts/${alertId}`),
+    onMutate: async (alertId) => {
+      const key = deviceKeys.alerts(deviceId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<AlertItem[]>(key);
+      queryClient.setQueryData<AlertItem[]>(key, (old) => old?.filter((a) => a.id !== alertId));
+      return { previous };
+    },
+    onError: (_err, _id, context) => {
+      queryClient.setQueryData(deviceKeys.alerts(deviceId), context?.previous);
+      toast.error("Couldn't dismiss that alert");
+    },
+    onSuccess: (_data, alertId) => {
+      toast.success('Alert dismissed', {
+        action: {
+          label: 'Undo',
+          onClick: () =>
+            api
+              .post(`/api/v1/user/devices/${deviceId}/alerts/${alertId}/restore`)
+              .then(() => queryClient.invalidateQueries({ queryKey: deviceKeys.alerts(deviceId) }))
+              .catch(() => toast.error("Couldn't restore that alert")),
+        },
+      });
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: deviceKeys.alerts(deviceId) }),
   });
@@ -81,21 +119,27 @@ export default function AlertsTab() {
               </div>
               <p className="mt-1.5 text-body text-ink-1">{alert.message ?? alert.type}</p>
             </div>
-            {alert.acknowledged ? (
-              <span className="flex shrink-0 items-center gap-1 text-caption text-good-text">
-                <CheckCircle size={16} weight="fill" aria-hidden />
-                Acknowledged
-              </span>
-            ) : (
+            <div className="flex shrink-0 items-center gap-1.5">
+              {alert.acknowledged ? (
+                <span className="flex items-center gap-1 text-caption text-good-text">
+                  <CheckCircle size={16} weight="fill" aria-hidden />
+                  Acknowledged
+                </span>
+              ) : (
+                <Button size="sm" variant="secondary" onClick={() => acknowledge.mutate(alert.id)}>
+                  Acknowledge
+                </Button>
+              )}
               <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => acknowledge.mutate(alert.id)}
-                className="shrink-0"
+                size="icon"
+                variant="ghost"
+                aria-label="Dismiss alert"
+                onClick={() => dismiss.mutate(alert.id)}
+                className="h-9 w-9"
               >
-                Acknowledge
+                <X size={16} />
               </Button>
-            )}
+            </div>
           </div>
         );
       })}

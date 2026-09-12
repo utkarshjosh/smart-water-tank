@@ -180,6 +180,10 @@ model Alert {
   acknowledged        Boolean       @default(false)
   acknowledgedBy      String?       @map("acknowledged_by") @db.Char(36)
   acknowledgedAt      DateTime?     @map("acknowledged_at")
+  // Dismissing hides an alert from the default feed without destroying the
+  // record - a leak alert is an operational event worth keeping even once
+  // the user has cleared it off their screen.
+  dismissedAt         DateTime?     @map("dismissed_at")
   deliveredToFirebase Boolean       @default(false) @map("delivered_to_firebase")
   createdAt           DateTime      @default(now()) @map("created_at")
 

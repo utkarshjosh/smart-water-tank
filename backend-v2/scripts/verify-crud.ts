@@ -139,6 +139,129 @@ async function main() {
     userService.revokeClaimCode(other.id, foreign.claim_code), 404
   );
 
+  // --- alert feeds ----------------------------------------------------------
+  console.log('');
+  const deviceB = await prisma.device.create({
+    data: { deviceId: `crud-tank-b-${suffix}`, tenantId: tenant.id, name: 'Sump', status: 'online' },
+  });
+  const foreignDevice = await prisma.device.create({
+    data: { deviceId: `crud-foreign-${suffix}`, tenantId: other.id, name: 'Not yours', status: 'online' },
+  });
+
+  const mkAlert = (dev: { id: string }, tenantId: string, over: Record<string, unknown> = {}) =>
+    prisma.alert.create({
+      data: {
+        deviceId: dev.id,
+        tenantId,
+        type: 'tank_low',
+        severity: 'medium',
+        message: 'Level low',
+        ...over,
+      },
+    });
+
+  const a1 = await mkAlert(device, tenant.id);
+  await mkAlert(deviceB, tenant.id, { severity: 'critical', type: 'leak_detected' });
+  await mkAlert(deviceB, tenant.id, { acknowledged: true });
+  const foreignAlert = await mkAlert(foreignDevice, other.id);
+
+  const feed = await userService.getUserAlerts(
+    { id: user.id, tenantId: tenant.id },
+    { limit: 50, includeDismissed: false, onlyUnacknowledged: false }
+  );
+  check('the tenant inbox spans multiple devices', feed.alerts.length === 3, `${feed.alerts.length} alerts`);
+  check(
+    'the inbox excludes another tenant\'s alerts',
+    !feed.alerts.some((a) => a.id === foreignAlert.id)
+  );
+  check('each alert carries its device name', feed.alerts.every((a) => 'device_name' in a));
+  check('the unacknowledged count ignores acknowledged rows', feed.unacknowledged === 2, `count=${feed.unacknowledged}`);
+
+  const unackOnly = await userService.getUserAlerts(
+    { id: user.id, tenantId: tenant.id },
+    { limit: 50, includeDismissed: false, onlyUnacknowledged: true }
+  );
+  check('unacknowledged filter works', unackOnly.alerts.length === 2, `${unackOnly.alerts.length} alerts`);
+
+  // A mapping grant must widen the inbox - this is the path that had no writer.
+  await prisma.userDeviceMapping.create({ data: { userId: user.id, deviceId: foreignDevice.id } });
+  const widened = await userService.getUserAlerts(
+    { id: user.id, tenantId: tenant.id },
+    { limit: 50, includeDismissed: false, onlyUnacknowledged: false }
+  );
+  check(
+    'an explicit device grant widens the inbox',
+    widened.alerts.some((a) => a.id === foreignAlert.id),
+    `${widened.alerts.length} alerts`
+  );
+  await prisma.userDeviceMapping.deleteMany({ where: { userId: user.id } });
+
+  // --- dismiss / restore ----------------------------------------------------
+  await userService.dismissAlert(device, a1.id);
+  const afterDismiss = await userService.getUserAlerts(
+    { id: user.id, tenantId: tenant.id },
+    { limit: 50, includeDismissed: false, onlyUnacknowledged: false }
+  );
+  check('a dismissed alert leaves the feed', !afterDismiss.alerts.some((a) => a.id === a1.id));
+
+  const stillThere = await prisma.alert.findUnique({ where: { id: a1.id } });
+  check('dismissing keeps the row', stillThere != null && stillThere.dismissedAt != null);
+
+  const withDismissed = await userService.getUserAlerts(
+    { id: user.id, tenantId: tenant.id },
+    { limit: 50, includeDismissed: true, onlyUnacknowledged: false }
+  );
+  check(
+    'include_dismissed brings it back into view',
+    withDismissed.alerts.some((a) => a.id === a1.id && a.dismissed === true)
+  );
+
+  await userService.dismissAlert(device, a1.id); // second call must not throw
+  check('dismissing twice is idempotent', true);
+
+  await userService.restoreAlert(device, a1.id);
+  const restored = await userService.getUserAlerts(
+    { id: user.id, tenantId: tenant.id },
+    { limit: 50, includeDismissed: false, onlyUnacknowledged: false }
+  );
+  check('restore puts it back in the feed', restored.alerts.some((a) => a.id === a1.id));
+
+  await expectThrow('dismissing an alert on another device is a 404', () =>
+    userService.dismissAlert(device, foreignAlert.id), 404
+  );
+
+  const perDevice = await userService.getDeviceAlerts(deviceB, 50);
+  check('the per-device feed still works', perDevice.alerts.length === 2, `${perDevice.alerts.length} alerts`);
+
+  // --- admin fleet feed -----------------------------------------------------
+  const fleet = await adminService.listAlerts({ limit: 200, includeDismissed: false });
+  check('the fleet feed sees every tenant', fleet.alerts.some((a) => a.id === foreignAlert.id));
+  check('fleet rows carry tenant names', fleet.alerts.every((a) => typeof a.tenant_name === 'string'));
+
+  const byTenant = await adminService.listAlerts({ limit: 200, includeDismissed: false, tenantId: other.id });
+  check(
+    'the fleet feed filters by tenant',
+    byTenant.alerts.length >= 1 && byTenant.alerts.every((a) => a.tenant_id === other.id),
+    `${byTenant.alerts.length} alerts`
+  );
+
+  const critical = await adminService.listAlerts({ limit: 200, includeDismissed: false, severity: 'critical' });
+  check(
+    'the fleet feed filters by severity',
+    critical.alerts.length === 1 && critical.alerts[0].severity === 'critical',
+    `${critical.alerts.length} alerts`
+  );
+
+  const unackFleet = await adminService.listAlerts({ limit: 200, includeDismissed: false, acknowledged: false });
+  check('the fleet feed filters by acknowledged', unackFleet.alerts.every((a) => !a.acknowledged));
+
+  const future = await adminService.listAlerts({
+    limit: 200,
+    includeDismissed: false,
+    since: new Date(Date.now() + 60_000),
+  });
+  check('the since filter excludes older alerts', future.alerts.length === 0, `${future.alerts.length} alerts`);
+
   await prisma.tenant.deleteMany({ where: { id: { in: [tenant.id, other.id] } } });
   await prisma.$disconnect();
 

@@ -281,24 +281,105 @@ export async function getDeviceHistory(device: Device, days: number, limit: numb
   };
 }
 
-export async function getDeviceAlerts(device: Device, limit: number) {
+export async function getDeviceAlerts(device: Device, limit: number, includeDismissed = false) {
   const alerts = await prisma.alert.findMany({
-    where: { deviceId: device.id },
+    where: { deviceId: device.id, ...(includeDismissed ? {} : { dismissedAt: null }) },
     orderBy: { createdAt: 'desc' },
     take: limit,
   });
+  return { device_id: device.deviceId, alerts: alerts.map(toAlertDto) };
+}
+
+/** Shape shared by the per-device feed and the tenant-wide feed. */
+function toAlertDto(a: {
+  id: string;
+  type: string;
+  severity: string;
+  message: string | null;
+  payload: unknown;
+  acknowledged: boolean;
+  dismissedAt: Date | null;
+  createdAt: Date;
+  device?: { deviceId: string; name: string | null } | null;
+}) {
   return {
-    device_id: device.deviceId,
-    alerts: alerts.map((a) => ({
-      id: a.id,
-      type: a.type,
-      severity: a.severity,
-      message: a.message,
-      payload: a.payload,
-      acknowledged: a.acknowledged,
-      created_at: a.createdAt,
-    })),
+    id: a.id,
+    type: a.type,
+    severity: a.severity,
+    message: a.message,
+    payload: a.payload,
+    acknowledged: a.acknowledged,
+    dismissed: a.dismissedAt != null,
+    created_at: a.createdAt,
+    ...(a.device
+      ? { device_id: a.device.deviceId, device_name: a.device.name || a.device.deviceId }
+      : {}),
   };
+}
+
+/**
+ * Every device the user can reach: their tenant's, plus any explicit
+ * user_device_mappings grant. Mirrors getAccessibleDeviceOrThrow, which is the
+ * single authority for per-device access.
+ */
+async function accessibleDeviceIds(user: { id: string; tenantId: string | null }) {
+  const [tenantDevices, mapped] = await Promise.all([
+    user.tenantId
+      ? prisma.device.findMany({ where: { tenantId: user.tenantId }, select: { id: true } })
+      : Promise.resolve([]),
+    prisma.userDeviceMapping.findMany({ where: { userId: user.id }, select: { deviceId: true } }),
+  ]);
+  return [...new Set([...tenantDevices.map((d) => d.id), ...mapped.map((m) => m.deviceId)])];
+}
+
+/**
+ * One inbox across every device the user can see. Previously alerts could
+ * only be read one device at a time, so a combined feed had no endpoint.
+ */
+export async function getUserAlerts(
+  user: { id: string; tenantId: string | null },
+  opts: { limit: number; includeDismissed: boolean; onlyUnacknowledged: boolean }
+) {
+  const deviceIds = await accessibleDeviceIds(user);
+  if (deviceIds.length === 0) return { alerts: [], unacknowledged: 0 };
+
+  const where = {
+    deviceId: { in: deviceIds },
+    ...(opts.includeDismissed ? {} : { dismissedAt: null }),
+    ...(opts.onlyUnacknowledged ? { acknowledged: false } : {}),
+  };
+
+  const [alerts, unacknowledged] = await Promise.all([
+    prisma.alert.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: opts.limit,
+      include: { device: { select: { deviceId: true, name: true } } },
+    }),
+    prisma.alert.count({
+      where: { deviceId: { in: deviceIds }, acknowledged: false, dismissedAt: null },
+    }),
+  ]);
+
+  return { alerts: alerts.map(toAlertDto), unacknowledged };
+}
+
+/**
+ * Hide an alert from the feed. The row is kept - a leak alert is an
+ * operational event worth retaining after the user clears it off screen.
+ */
+export async function dismissAlert(device: Device, alertId: string): Promise<void> {
+  const alert = await prisma.alert.findFirst({ where: { id: alertId, deviceId: device.id } });
+  if (!alert) throw new HttpError(404, 'Alert not found');
+  if (alert.dismissedAt) return; // Idempotent: dismissing twice is not an error.
+  await prisma.alert.update({ where: { id: alertId }, data: { dismissedAt: new Date() } });
+}
+
+/** Bring a dismissed alert back into the feed. */
+export async function restoreAlert(device: Device, alertId: string): Promise<void> {
+  const alert = await prisma.alert.findFirst({ where: { id: alertId, deviceId: device.id } });
+  if (!alert) throw new HttpError(404, 'Alert not found');
+  await prisma.alert.update({ where: { id: alertId }, data: { dismissedAt: null } });
 }
 
 export async function acknowledgeAlert(device: Device, alertId: string, userId: string): Promise<void> {
