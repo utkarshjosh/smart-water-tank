@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, SlidersHorizontal } from '@phosphor-icons/react';
-import { AppShell } from '@/components/shell';
+import { ShellAction, usePageHeading } from '@/components/shell';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { StatusDot } from '@/components/ui/status-dot';
@@ -34,12 +34,11 @@ export default function DeviceLayout() {
     ? new Date(device.data.last_seen).toLocaleString()
     : 'Never';
 
+  usePageHeading(device.data?.name, device.data ? `Last seen ${lastSeen}` : undefined);
+
   return (
-    <AppShell
-      variant="tenant"
-      title={device.data?.name ?? <Skeleton className="h-4 w-28" />}
-      subtitle={device.data ? `Last seen ${lastSeen}` : undefined}
-      action={
+    <div className="space-y-4">
+      <ShellAction>
         <Button
           variant="ghost"
           size="icon"
@@ -48,53 +47,53 @@ export default function DeviceLayout() {
         >
           <SlidersHorizontal size={20} />
         </Button>
-      }
-    >
-      <div className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="-ml-2"
-            onClick={() => navigate('/app/devices')}
-          >
-            <ArrowLeft size={16} />
-            All tanks
-          </Button>
-          {device.data && (
-            <StatusDot
-              status={device.data.status === 'online' ? 'online' : 'offline'}
-              label={device.data.status === 'online' ? 'Online' : 'Offline'}
-            />
-          )}
-        </div>
+      </ShellAction>
 
-        <nav
-          className="-mx-4 flex gap-0.5 overflow-x-auto border-b border-hairline px-4 [scrollbar-width:none] sm:-mx-6 sm:px-6 [&::-webkit-scrollbar]:hidden"
-          aria-label="Device sections"
+      <div className="flex items-center justify-between gap-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="-ml-2"
+          onClick={() => navigate('/app/devices')}
         >
-          {TABS.map((tab) => (
-            <NavLink
-              key={tab.to}
-              to={tab.to}
-              end={tab.end}
-              className={({ isActive }) =>
-                cn(
-                  'relative shrink-0 px-3 py-2.5 text-label transition-colors duration-instant ease-out',
-                  isActive
-                    ? 'text-ink-1 after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:rounded-full after:bg-brand'
-                    : 'text-ink-3 hover:text-ink-1'
-                )
-              }
-            >
-              {tab.label}
-            </NavLink>
-          ))}
-        </nav>
+          <ArrowLeft size={16} />
+          All tanks
+        </Button>
+        {device.data && (
+          <StatusDot
+            status={device.data.status === 'online' ? 'online' : 'offline'}
+            label={device.data.status === 'online' ? 'Online' : 'Offline'}
+          />
+        )}
+      </div>
 
-        <div className="animate-fade-rise">
+      <nav
+        className="-mx-4 flex gap-0.5 overflow-x-auto border-b border-hairline px-4 [scrollbar-width:none] sm:-mx-6 sm:px-6 [&::-webkit-scrollbar]:hidden"
+        aria-label="Device sections"
+      >
+        {TABS.map((tab) => (
+          <NavLink
+            key={tab.to}
+            to={tab.to}
+            end={tab.end}
+            className={({ isActive }) =>
+              cn(
+                'relative shrink-0 px-3 py-2.5 text-label transition-colors duration-instant ease-out',
+                isActive
+                  ? 'text-ink-1 after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:rounded-full after:bg-brand'
+                  : 'text-ink-3 hover:text-ink-1'
+              )
+            }
+          >
+            {tab.label}
+          </NavLink>
+        ))}
+      </nav>
+
+      <div className="animate-fade-rise">
+        <Suspense fallback={<TabSkeleton />}>
           <Outlet />
-        </div>
+        </Suspense>
       </div>
 
       <Sheet open={editingTank} onOpenChange={setEditingTank}>
@@ -114,6 +113,21 @@ export default function DeviceLayout() {
           )}
         </SheetContent>
       </Sheet>
-    </AppShell>
+    </div>
+  );
+}
+
+/**
+ * Placeholder for a tab whose chunk is still loading. The header, the back link
+ * and the tab strip above it stay put - switching tabs should move the content,
+ * not redraw the screen.
+ */
+function TabSkeleton() {
+  return (
+    <div className="space-y-3" aria-busy="true">
+      <span className="sr-only">Loading</span>
+      <Skeleton className="h-40 w-full" />
+      <Skeleton className="h-24 w-full" />
+    </div>
   );
 }

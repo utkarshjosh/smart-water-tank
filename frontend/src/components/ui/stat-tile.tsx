@@ -37,7 +37,15 @@ export function StatTile({
         <Skeleton className="mt-1.5 h-6 w-16" />
       ) : (
         <p className={cn('mt-1 flex items-baseline gap-0.5 text-metric-sm tnum', toneClass)}>
-          {value ?? <span className="text-ink-3">—</span>}
+          {/* Grouped, because a bare 3412 reads as a version string at a
+              glance and the tiles are meant to be scanned, not parsed. */}
+          {value == null ? (
+            <span className="text-ink-3">—</span>
+          ) : typeof value === 'number' ? (
+            value.toLocaleString()
+          ) : (
+            value
+          )}
           {value != null && unit && <span className="text-label text-ink-3">{unit}</span>}
         </p>
       )}

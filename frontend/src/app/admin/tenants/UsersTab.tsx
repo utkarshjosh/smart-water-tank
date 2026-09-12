@@ -1,9 +1,18 @@
 import { useState } from 'react';
-import { CheckCircle, MagnifyingGlass, Users } from '@phosphor-icons/react';
+import {
+  ArrowCounterClockwise,
+  CheckCircle,
+  Eye,
+  EyeSlash,
+  MagnifyingGlass,
+  Prohibit,
+  Users,
+} from '@phosphor-icons/react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
@@ -27,15 +36,18 @@ import {
 } from './types';
 import {
   useDatabaseUsers,
+  useDeactivateUser,
   useFirebaseUsers,
   useLinkFirebaseUser,
+  useRestoreUser,
   useUpdateUserRole,
   useUpdateUserTenant,
 } from './useUsers';
 
 export function UsersTab() {
   const tenants = useAdminTenants();
-  const users = useDatabaseUsers(true);
+  const [showArchived, setShowArchived] = useState(false);
+  const users = useDatabaseUsers(true, showArchived);
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const firebase = useFirebaseUsers(search, searchOpen);
@@ -43,6 +55,9 @@ export function UsersTab() {
   const updateRole = useUpdateUserRole();
   const updateTenant = useUpdateUserTenant();
   const link = useLinkFirebaseUser();
+  const deactivate = useDeactivateUser();
+  const restore = useRestoreUser();
+  const [deactivating, setDeactivating] = useState<DatabaseUser | null>(null);
 
   // Pending per-row selections for the link form, keyed by Firebase uid.
   const [draftRole, setDraftRole] = useState<Record<string, UserRole>>({});
@@ -58,7 +73,15 @@ export function UsersTab() {
       sortValue: (u) => u.name || u.email,
       cell: (u) => (
         <div className="min-w-0">
-          <div className="truncate text-label text-ink-1">{u.name || u.email}</div>
+          <div className="flex items-center gap-2">
+            <span className="truncate text-label text-ink-1">{u.name || u.email}</span>
+            {u.archived_at && (
+              <Badge variant="neutral">
+                <Prohibit size={11} weight="bold" aria-hidden />
+                Deactivated
+              </Badge>
+            )}
+          </div>
           {u.name && <div className="truncate text-caption text-ink-3">{u.email}</div>}
         </div>
       ),
@@ -71,7 +94,7 @@ export function UsersTab() {
         <Select
           value={u.role}
           onValueChange={(value: UserRole) => updateRole.mutate({ userId: u.id, role: value })}
-          disabled={updateRole.isPending}
+          disabled={updateRole.isPending || Boolean(u.archived_at)}
         >
           <SelectTrigger className="h-11 w-[168px] md:h-9" aria-label={`Role for ${u.email}`}>
             <SelectValue />
@@ -97,7 +120,7 @@ export function UsersTab() {
           <Select
             value={u.tenant_id ?? ''}
             onValueChange={(value) => updateTenant.mutate({ userId: u.id, tenantId: value })}
-            disabled={updateTenant.isPending}
+            disabled={updateTenant.isPending || Boolean(u.archived_at)}
           >
             <SelectTrigger className="h-11 w-[180px] md:h-9" aria-label={`Tenant for ${u.email}`}>
               <SelectValue placeholder="Unassigned" />
@@ -122,10 +145,41 @@ export function UsersTab() {
         <span className="whitespace-nowrap text-ink-2">{relativeTime(u.created_at)}</span>
       ),
     },
+    {
+      key: 'actions',
+      header: '',
+      align: 'right',
+      actions: true,
+      hug: true,
+      cell: (u) =>
+        u.archived_at ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => restore.mutate(u.id)}
+            loading={restore.isPending && restore.variables === u.id}
+          >
+            <ArrowCounterClockwise size={14} />
+            Reactivate
+          </Button>
+        ) : (
+          <Button size="sm" variant="ghost" onClick={() => setDeactivating(u)}>
+            <Prohibit size={14} />
+            Deactivate
+          </Button>
+        ),
+    },
   ];
 
   return (
     <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button size="sm" variant="ghost" onClick={() => setShowArchived(!showArchived)}>
+          {showArchived ? <EyeSlash size={15} /> : <Eye size={15} />}
+          {showArchived ? 'Hide deactivated' : 'Show deactivated'}
+        </Button>
+      </div>
+
       {users.isError && (
         <Alert variant="critical">
           <AlertTitle>Couldn&apos;t load users</AlertTitle>
@@ -139,6 +193,7 @@ export function UsersTab() {
         getRowKey={(u) => u.id}
         loading={users.isLoading}
         initialSort={{ key: 'user' }}
+        rowClassName={(u) => (u.archived_at ? 'opacity-60' : undefined)}
         caption="Linked users"
         empty={
           <EmptyState
@@ -146,6 +201,20 @@ export function UsersTab() {
             title="No linked users"
             description="Search Firebase below to link an existing account to a tenant."
           />
+        }
+      />
+
+      <ConfirmDialog
+        open={deactivating != null}
+        onOpenChange={(next) => !next && setDeactivating(null)}
+        title={`Deactivate ${deactivating?.name || deactivating?.email}?`}
+        description="They lose access immediately. The account and its history stay, and it can be reactivated here."
+        confirmLabel="Deactivate"
+        confirmIcon={<Prohibit size={16} weight="bold" />}
+        loading={deactivate.isPending}
+        onConfirm={() =>
+          deactivating &&
+          deactivate.mutate(deactivating.id, { onSuccess: () => setDeactivating(null) })
         }
       />
 
