@@ -115,18 +115,38 @@ namespace WifiManager {
         
         // Try autoConnect - will start portal if connection fails
         if (Config::wifiSsid.length() > 0 && Config::wifiPassword.length() > 0) {
-            // Pre-fill WiFi credentials
-            WiFi.begin(Config::wifiSsid.c_str(), Config::wifiPassword.c_str());
-            
-            unsigned long startTime = millis();
-            while (WiFi.status() != WL_CONNECTED && (millis() - startTime < WIFI_CONNECT_TIMEOUT_MS)) {
-                delay(500);
-                Serial.print(".");
+            uint8_t rtcChannel = 0;
+            uint8_t rtcBssid[6] = {0};
+            bool hasRtcInfo = PowerManager::getWifiBssidAndChannel(rtcChannel, rtcBssid);
+
+            // Attempt fast direct connect if BSSID and Channel are cached in RTC memory
+            if (hasRtcInfo) {
+                Serial.printf("[WiFi] Fast RTC reconnecting to %s (Channel %d)...\n", Config::wifiSsid.c_str(), rtcChannel);
+                WiFi.begin(Config::wifiSsid.c_str(), Config::wifiPassword.c_str(), rtcChannel, rtcBssid);
+
+                unsigned long startTime = millis();
+                while (WiFi.status() != WL_CONNECTED && (millis() - startTime < 3000)) {
+                    delay(100);
+                }
             }
-            Serial.println();
-            
+
+            // Fallback to full channel scan if fast connect did not succeed
+            if (WiFi.status() != WL_CONNECTED) {
+                Serial.printf("[WiFi] Full scan connecting to %s...\n", Config::wifiSsid.c_str());
+                WiFi.begin(Config::wifiSsid.c_str(), Config::wifiPassword.c_str());
+                
+                unsigned long startTime = millis();
+                while (WiFi.status() != WL_CONNECTED && (millis() - startTime < WIFI_CONNECT_TIMEOUT_MS)) {
+                    delay(500);
+                    Serial.print(".");
+                }
+                Serial.println();
+            }
+
             if (WiFi.status() == WL_CONNECTED) {
                 connected = true;
+                // Save channel and BSSID for ultra-fast deep sleep reconnects
+                PowerManager::saveWifiBssidAndChannel(WiFi.channel(), WiFi.BSSID());
             }
         }
         

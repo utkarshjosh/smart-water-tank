@@ -1,3 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MQTT Wire Contract &amp; Reliability Architecture - AquaMind Plans</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/tokyo-night-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #090d16;
+            --bg-secondary: #111827;
+            --bg-card: rgba(17, 24, 39, 0.7);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --accent-cyan: #38bdf8;
+            --accent-blue: #6366f1;
+            --accent-green: #34d399;
+            --accent-amber: #fbbf24;
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --text-muted: #6b7280;
+            --code-bg: #0d1322;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.7;
+            overflow-x: hidden;
+        }
+
+        /* Header / Navbar */
+        .navbar {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(9, 13, 22, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.85rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .nav-left {
+            display: flex;
+            align-items: center;
+            gap: 1.25rem;
+        }
+
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9rem;
+            padding: 0.4rem 0.85rem;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            transition: all 0.2s ease;
+        }
+
+        .back-btn:hover {
+            color: var(--accent-cyan);
+            background: rgba(56, 189, 248, 0.1);
+            border-color: rgba(56, 189, 248, 0.3);
+        }
+
+        .nav-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #ffffff 0%, var(--accent-cyan) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.65rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+        }
+
+        .badge-active {
+            background: rgba(56, 189, 248, 0.15);
+            color: var(--accent-cyan);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+        }
+
+        .badge-executed {
+            background: rgba(52, 211, 153, 0.15);
+            color: var(--accent-green);
+            border: 1px solid rgba(52, 211, 153, 0.3);
+        }
+
+        .badge-arch {
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--accent-blue);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+        }
+
+        /* Container Layout */
+        .layout {
+            display: flex;
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 2rem;
+            gap: 2.5rem;
+        }
+
+        /* Sidebar TOC */
+        .sidebar {
+            width: 280px;
+            flex-shrink: 0;
+            position: sticky;
+            top: 5rem;
+            height: calc(100vh - 6rem);
+            overflow-y: auto;
+            padding-right: 1rem;
+        }
+
+        .sidebar h4 {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+
+        .toc-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .toc-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.88rem;
+            font-weight: 500;
+            display: block;
+            padding: 0.35rem 0.65rem;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .toc-link:hover, .toc-link.active {
+            color: var(--accent-cyan);
+            background: rgba(56, 189, 248, 0.08);
+        }
+
+        .toc-sub {
+            padding-left: 1rem;
+            font-size: 0.82rem;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            min-width: 0;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 3rem;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+        }
+
+        .doc-header {
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .doc-header h1 {
+            font-size: 2.25rem;
+            font-weight: 800;
+            line-height: 1.25;
+            margin-bottom: 0.75rem;
+            color: #ffffff;
+        }
+
+        .doc-meta {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        /* Markdown Rendered Styling */
+        .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 {
+            color: #ffffff;
+            font-weight: 700;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            scroll-margin-top: 6rem;
+        }
+
+        .markdown-body h1 { font-size: 1.75rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; }
+        .markdown-body h2 { font-size: 1.4rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.4rem; }
+        .markdown-body h3 { font-size: 1.15rem; }
+
+        .markdown-body p {
+            margin-bottom: 1.25rem;
+            color: #d1d5db;
+        }
+
+        .markdown-body ul, .markdown-body ol {
+            margin-bottom: 1.25rem;
+            padding-left: 1.5rem;
+            color: #d1d5db;
+        }
+
+        .markdown-body li {
+            margin-bottom: 0.4rem;
+        }
+
+        .markdown-body blockquote {
+            border-left: 4px solid var(--accent-cyan);
+            background: rgba(56, 189, 248, 0.05);
+            padding: 1rem 1.25rem;
+            border-radius: 0 8px 8px 0;
+            margin-bottom: 1.5rem;
+            color: #e5e7eb;
+        }
+
+        .markdown-body table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+            font-size: 0.9rem;
+        }
+
+        .markdown-body th, .markdown-body td {
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--border-color);
+            text-align: left;
+        }
+
+        .markdown-body th {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--accent-cyan);
+            font-weight: 700;
+        }
+
+        .markdown-body tr:nth-child(even) {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .markdown-body code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--code-bg);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.85em;
+            color: var(--accent-cyan);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .markdown-body pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 1.25rem;
+            overflow-x: auto;
+            margin: 1.5rem 0;
+        }
+
+        .markdown-body pre code {
+            background: transparent;
+            padding: 0;
+            border: none;
+            color: inherit;
+            font-size: 0.88rem;
+        }
+
+        .mermaid {
+            background: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            display: flex;
+            justify-content: center;
+            margin: 1.5rem 0;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        @media (max-width: 1024px) {
+            .sidebar { display: none; }
+            .main-content { padding: 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar">
+        <div class="nav-left">
+            <a href="index.html" class="back-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                Plans Hub
+            </a>
+            <span class="nav-title">MQTT Wire Contract &amp; Reliability Architecture</span>
+        </div>
+        <div>
+            <span class="badge badge-active">Active</span>
+        </div>
+    </nav>
+
+    <div class="layout">
+        <aside class="sidebar">
+            <h4>Table of Contents</h4>
+            <ul class="toc-list" id="toc"></ul>
+        </aside>
+
+        <main class="main-content">
+            <div class="doc-header">
+                <h1>MQTT Wire Contract &amp; Reliability Architecture</h1>
+                <div class="doc-meta">
+                    <span>Category: <strong>Protocol &amp; Reliability</strong></span>
+                    <span>•</span>
+                    <span>Status: <strong>Active</strong></span>
+                </div>
+            </div>
+
+            <div id="content" class="markdown-body">
+                <!-- Markdown Content rendered here -->
+            </div>
+        </main>
+    </div>
+
+    <script id="raw-markdown" type="text/template">
 # Firmware-First MQTT Deployment and Full Product Plan
 
 **Status:** Part I prioritized for physical deployment; Part II planned
@@ -200,7 +571,7 @@ behavior while avoiding repeated Wi-Fi/TLS handshakes.
    extension changes, and reports `active_lease_id` in state/telemetry.
 7. Closing a viewer sends a best-effort detach. The backend stops the lease when
    the last viewer detaches, subject to admin/session policy. The backend TTL and
-   the device's monotonic timer are authoritative, so live mode ends even if an
+   the device&#x27;s monotonic timer are authoritative, so live mode ends even if an
    app crashes without detaching.
 8. On stop/expiry the backend clears the lease from desired state and the device
    returns to normal mode and sleep behavior.
@@ -211,7 +582,7 @@ lease to diagnostic mode; every create, extend, upgrade, and stop is audited.
 
 ### 3.4 Live-state lifecycle
 
-`requested -> pending_device -> active -> stopping -> completed`
+`requested -&gt; pending_device -&gt; active -&gt; stopping -&gt; completed`
 
 Terminal error states are `expired_before_connect`, `rejected`, and `failed`.
 The API and UI expose these states rather than optimistically showing a device
@@ -227,15 +598,15 @@ ESP8266 devices
 Mosquitto
   | shared subscription (one ingest worker receives each device message)
   v
-Backend MQTT ingest -> validate -> deduplicate -> MySQL transaction
+Backend MQTT ingest -&gt; validate -&gt; deduplicate -&gt; MySQL transaction
                                       | after commit
-                                      +-> MQTT retained receipt
-                                      +-> internal realtime fan-out
-                                      +-> alert/aggregation jobs
-                                      +-> admin device-event timeline
+                                      +-&gt; MQTT retained receipt
+                                      +-&gt; internal realtime fan-out
+                                      +-&gt; alert/aggregation jobs
+                                      +-&gt; admin device-event timeline
 
-Web/mobile -> authenticated REST -> query/control services -> MySQL/outbox
-Web/mobile <- authenticated SSE  <- realtime gateway <- internal fan-out
+Web/mobile -&gt; authenticated REST -&gt; query/control services -&gt; MySQL/outbox
+Web/mobile &lt;- authenticated SSE  &lt;- realtime gateway &lt;- internal fan-out
 ```
 
 For the first deployment, ingest and realtime services may run in the existing
@@ -257,15 +628,15 @@ tenant ownership is mutable and enforced by the application.
 
 | Topic | Direction | QoS | Retain | Purpose |
 |---|---|---:|---:|---|
-| `v2/devices/{id}/up/telemetry` | device -> server | 1 | no | sample batch |
-| `v2/devices/{id}/up/state` | device -> server | 1 | yes | reported shadow/capabilities |
-| `v2/devices/{id}/up/ack` | device -> server | 1 | no | correlated command/lease ack |
-| `v2/devices/{id}/up/log` | device -> server | 1 | no | bounded structured operational event |
-| `v2/devices/{id}/status` | device -> server | 1 | yes | birth or Last Will presence |
-| `v2/devices/{id}/down/config` | server -> device | 1 | yes | versioned desired config |
-| `v2/devices/{id}/down/policy` | server -> device | 1 | yes | normal policy + live lease |
-| `v2/devices/{id}/down/command` | server -> device | 1 | no | expiring one-shot command |
-| `v2/devices/{id}/down/receipt` | server -> device | 1 | yes | backend commit receipt |
+| `v2/devices/{id}/up/telemetry` | device -&gt; server | 1 | no | sample batch |
+| `v2/devices/{id}/up/state` | device -&gt; server | 1 | yes | reported shadow/capabilities |
+| `v2/devices/{id}/up/ack` | device -&gt; server | 1 | no | correlated command/lease ack |
+| `v2/devices/{id}/up/log` | device -&gt; server | 1 | no | bounded structured operational event |
+| `v2/devices/{id}/status` | device -&gt; server | 1 | yes | birth or Last Will presence |
+| `v2/devices/{id}/down/config` | server -&gt; device | 1 | yes | versioned desired config |
+| `v2/devices/{id}/down/policy` | server -&gt; device | 1 | yes | normal policy + live lease |
+| `v2/devices/{id}/down/command` | server -&gt; device | 1 | no | expiring one-shot command |
+| `v2/devices/{id}/down/receipt` | server -&gt; device | 1 | yes | backend commit receipt |
 
 One-shot commands such as reboot are never retained. Desired config and policy
 are safe to retain because they carry a monotonic revision and declarative end
@@ -281,17 +652,17 @@ Every v2 payload contains:
 
 ```json
 {
-  "schema": 2,
-  "type": "telemetry",
-  "device_id": "tank-001",
-  "message_id": "tank-001:8f31:1042",
-  "boot_id": "8f31",
-  "seq": 1042,
-  "sent_at": "2026-07-13T12:00:00Z",
-  "uptime_ms": 240102,
-  "firmware_version": "2.1.0",
-  "config_version": 17,
-  "policy_revision": 8
+  &quot;schema&quot;: 2,
+  &quot;type&quot;: &quot;telemetry&quot;,
+  &quot;device_id&quot;: &quot;tank-001&quot;,
+  &quot;message_id&quot;: &quot;tank-001:8f31:1042&quot;,
+  &quot;boot_id&quot;: &quot;8f31&quot;,
+  &quot;seq&quot;: 1042,
+  &quot;sent_at&quot;: &quot;2026-07-13T12:00:00Z&quot;,
+  &quot;uptime_ms&quot;: 240102,
+  &quot;firmware_version&quot;: &quot;2.1.0&quot;,
+  &quot;config_version&quot;: 17,
+  &quot;policy_revision&quot;: 8
 }
 ```
 
@@ -309,22 +680,22 @@ Every v2 payload contains:
 
 ```json
 {
-  "schema": 2,
-  "type": "telemetry",
-  "device_id": "tank-001",
-  "message_id": "tank-001:8f31:1042",
-  "boot_id": "8f31",
-  "seq": 1042,
-  "mode": "normal",
-  "samples": [
+  &quot;schema&quot;: 2,
+  &quot;type&quot;: &quot;telemetry&quot;,
+  &quot;device_id&quot;: &quot;tank-001&quot;,
+  &quot;message_id&quot;: &quot;tank-001:8f31:1042&quot;,
+  &quot;boot_id&quot;: &quot;8f31&quot;,
+  &quot;seq&quot;: 1042,
+  &quot;mode&quot;: &quot;normal&quot;,
+  &quot;samples&quot;: [
     {
-      "sample_seq": 1038,
-      "sampled_at": "2026-07-13T11:56:00Z",
-      "level_cm": 41.2,
-      "temperature_c": 28.4,
-      "battery_v": 3.91,
-      "rssi": -67,
-      "quality": { "level": "valid", "clock": "synced" }
+      &quot;sample_seq&quot;: 1038,
+      &quot;sampled_at&quot;: &quot;2026-07-13T11:56:00Z&quot;,
+      &quot;level_cm&quot;: 41.2,
+      &quot;temperature_c&quot;: 28.4,
+      &quot;battery_v&quot;: 3.91,
+      &quot;rssi&quot;: -67,
+      &quot;quality&quot;: { &quot;level&quot;: &quot;valid&quot;, &quot;clock&quot;: &quot;synced&quot; }
     }
   ]
 }
@@ -348,13 +719,13 @@ backend publishes:
 
 ```json
 {
-  "schema": 2,
-  "type": "receipt",
-  "device_id": "tank-001",
-  "message_id": "tank-001:8f31:1042",
-  "committed_at": "2026-07-13T12:00:01Z",
-  "accepted": 5,
-  "duplicates": 0
+  &quot;schema&quot;: 2,
+  &quot;type&quot;: &quot;receipt&quot;,
+  &quot;device_id&quot;: &quot;tank-001&quot;,
+  &quot;message_id&quot;: &quot;tank-001:8f31:1042&quot;,
+  &quot;committed_at&quot;: &quot;2026-07-13T12:00:01Z&quot;,
+  &quot;accepted&quot;: 5,
+  &quot;duplicates&quot;: 0
 }
 ```
 
@@ -394,19 +765,19 @@ stack trace upload, packet capture, or continuous debug streaming:
 
 ```json
 {
-  "schema": 2,
-  "type": "log",
-  "device_id": "tank-001",
-  "message_id": "tank-001:8f31:1043",
-  "boot_id": "8f31",
-  "seq": 1043,
-  "sent_at": "2026-07-13T12:00:02Z",
-  "uptime_ms": 240102,
-  "firmware_version": "2.1.0",
-  "level": "warn",
-  "code": "ota.download_failed",
-  "message": "download ended before expected length",
-  "attrs": { "http_status": 200, "written_bytes": 48128, "expected_bytes": 92160 }
+  &quot;schema&quot;: 2,
+  &quot;type&quot;: &quot;log&quot;,
+  &quot;device_id&quot;: &quot;tank-001&quot;,
+  &quot;message_id&quot;: &quot;tank-001:8f31:1043&quot;,
+  &quot;boot_id&quot;: &quot;8f31&quot;,
+  &quot;seq&quot;: 1043,
+  &quot;sent_at&quot;: &quot;2026-07-13T12:00:02Z&quot;,
+  &quot;uptime_ms&quot;: 240102,
+  &quot;firmware_version&quot;: &quot;2.1.0&quot;,
+  &quot;level&quot;: &quot;warn&quot;,
+  &quot;code&quot;: &quot;ota.download_failed&quot;,
+  &quot;message&quot;: &quot;download ended before expected length&quot;,
+  &quot;attrs&quot;: { &quot;http_status&quot;: 200, &quot;written_bytes&quot;: 48128, &quot;expected_bytes&quot;: 92160 }
 }
 ```
 
@@ -560,19 +931,19 @@ caches, and an AI hints UI before history/export semantics are stable.
 - `GET /api/v1/user/devices/:id/current`
   returns latest values plus sample age, receive age, quality, mode, health,
   presence, expected wake, config sync, firmware, and active live session.
-- `GET /api/v1/user/devices/:id/history?from=&to=&resolution=auto&metrics=&cursor=&limit=`
+- `GET /api/v1/user/devices/:id/history?from=&amp;to=&amp;resolution=auto&amp;metrics=&amp;cursor=&amp;limit=`
   returns ordered points, selected actual resolution, gaps, quality counts, and
   `next_cursor`. The server caps point count and chooses aggregates for long
   ranges.
-- `GET /api/v1/user/devices/:id/events?types=&from=&to=&cursor=` returns presence,
+- `GET /api/v1/user/devices/:id/events?types=&amp;from=&amp;to=&amp;cursor=` returns presence,
   config, alert, lease, command, and firmware events on one timeline.
-- `GET /api/v1/user/devices/:id/export?from=&to=&format=csv&quality=&modes=&fields=`
+- `GET /api/v1/user/devices/:id/export?from=&amp;to=&amp;format=csv&amp;quality=&amp;modes=&amp;fields=`
   exports canonical rows plus a schema/provenance manifest. JSON/NDJSON uses the
   same DTO and filters; large asynchronous exports may replace this endpoint
   later without changing dataset semantics.
 - Admin variants expose the same canonical DTOs with additional operational
   fields; they do not implement a separate data interpretation.
-- `GET /api/v1/admin/devices/:id/logs?from=&to=&levels=&codes=&cursor=&limit=`
+- `GET /api/v1/admin/devices/:id/logs?from=&amp;to=&amp;levels=&amp;codes=&amp;cursor=&amp;limit=`
   returns redacted `DeviceLogEvent` rows in reverse chronological order.
   Defaults are deliberately small (for example 100 rows and 24 hours); CSV or
   NDJSON export reuses the same authorization, filters, retention boundaries,
@@ -581,7 +952,7 @@ caches, and an AI hints UI before history/export semantics are stable.
 ### Control APIs
 
 - `POST /api/v1/user/devices/:id/telemetry-sessions`
-  with `{ mode: "live", duration_s, interval_ms }`.
+  with `{ mode: &quot;live&quot;, duration_s, interval_ms }`.
 - `DELETE /api/v1/user/devices/:id/telemetry-sessions/:sessionId`.
 - Admin may request `live` or `diagnostic`; normal users may request `live`
   within stricter duration/rate limits.
@@ -617,9 +988,9 @@ long-lived token in the stream URL or assume native `EventSource` can set it.
 Refactor the main loop into an explicit non-blocking state machine:
 
 ```text
-BOOT -> LOAD_CONFIG -> SAMPLE -> CONNECT_WIFI -> CONNECT_MQTT
-     -> APPLY_RETAINED_STATE -> FLUSH_BUFFER -> RECEIVE_RECEIPT
-     -> LIVE_WINDOW or DISCONNECT -> SLEEP/WAIT
+BOOT -&gt; LOAD_CONFIG -&gt; SAMPLE -&gt; CONNECT_WIFI -&gt; CONNECT_MQTT
+     -&gt; APPLY_RETAINED_STATE -&gt; FLUSH_BUFFER -&gt; RECEIVE_RECEIPT
+     -&gt; LIVE_WINDOW or DISCONNECT -&gt; SLEEP/WAIT
 ```
 
 Required firmware capabilities:
@@ -700,7 +1071,7 @@ to build a general realtime frontend platform.
    authentication flow. Do not retry authorization failures forever; treat
    `403` as terminal for that page.
 6. **Model live sessions, do not toggle them.** The UI state machine is
-   `idle -> requesting -> pending_wake -> active -> stopping -> idle`, with an
+   `idle -&gt; requesting -&gt; pending_wake -&gt; active -&gt; stopping -&gt; idle`, with an
    explicit error/expired result returning to idle. Show active only after the
    device acknowledgement. Pending displays `expected_wake_at`; active displays
    a server-derived countdown. One effective lease exists per device and extra
@@ -768,7 +1139,7 @@ firmware, and change normal policy. Do not provide bulk reboot by default.
 
 ### Admin device workspace
 
-Tabs: **Overview**, **Live**, **History**, **Connectivity**, **Config & State**,
+Tabs: **Overview**, **Live**, **History**, **Connectivity**, **Config &amp; State**,
 **Commands**, **Logs**, **Events**, and **Firmware**.
 
 - Live supports normal metrics and a diagnostic view of raw distance, filtered
@@ -855,12 +1226,12 @@ Full Part II objectives, measured in production-like soak tests:
 - No acknowledged sample loss after a recoverable network/backend outage within
   the device buffer-retention window.
 - Duplicate visible measurements: 0; duplicate retries are counted internally.
-- Connected-device live lease acknowledgement p95 <= 3 s.
-- Duty-cycled live activation <= next scheduled wake + 10 s.
-- Committed telemetry to SSE p95 <= 2 s in live mode.
-- Current-status API p95 <= 300 ms; 30-day auto-resolution history p95 <= 1 s
+- Connected-device live lease acknowledgement p95 &lt;= 3 s.
+- Duty-cycled live activation &lt;= next scheduled wake + 10 s.
+- Committed telemetry to SSE p95 &lt;= 2 s in live mode.
+- Current-status API p95 &lt;= 300 ms; 30-day auto-resolution history p95 &lt;= 1 s
   at the agreed fleet/load target.
-- Config convergence for connected devices p95 <= 5 s; sleeping devices <= next
+- Config convergence for connected devices p95 &lt;= 5 s; sleeping devices &lt;= next
   wake + 10 s.
 - Command lifecycle and telemetry-session status are never left non-terminal
   after expiry reconciliation runs.
@@ -992,7 +1363,7 @@ release notes and removed in Part II.
   `/history` responses exactly as HTTP telemetry does.
 - Publish the current merged config retained after claim/config/profile changes
   and when stale telemetry/announce indicates an older `configVersion`.
-- Force the deployed device's current `syncMode` to `piggyback`; do not expose a
+- Force the deployed device&#x27;s current `syncMode` to `piggyback`; do not expose a
   live-mode toggle in Part I. Config changes update the retained topic and the
   sleeping device applies them on its next normal wake.
 - Treat same-tenant AP reclaim as a credential rotation: mint the fresh token,
@@ -1036,10 +1407,10 @@ release notes and removed in Part II.
 - Implement the bounded normal wake cycle:
 
   ```text
-  BOOT -> LOAD -> PROVISIONING GATE -> SAMPLE -> WIFI -> MQTT AUTH
-       -> SUBSCRIBE/APPLY RETAINED CONFIG
-       -> PUBLISH CURRENT TELEMETRY -> WAIT FOR DELIVERY -> SHORT RECEIVE WINDOW
-       -> SCHEDULED OTA CHECK IF DUE -> DISCONNECT -> DEEP SLEEP
+  BOOT -&gt; LOAD -&gt; PROVISIONING GATE -&gt; SAMPLE -&gt; WIFI -&gt; MQTT AUTH
+       -&gt; SUBSCRIBE/APPLY RETAINED CONFIG
+       -&gt; PUBLISH CURRENT TELEMETRY -&gt; WAIT FOR DELIVERY -&gt; SHORT RECEIVE WINDOW
+       -&gt; SCHEDULED OTA CHECK IF DUE -&gt; DISCONNECT -&gt; DEEP SLEEP
   ```
 
 - At the provisioning gate, missing/corrupt device identity, token, config
@@ -1351,7 +1722,7 @@ full offline replay, live sessions, SSE, history/admin UX, and governed exports.
 
 - Extend the existing dense fleet table with health derivation/filtering, saved
   views, cursor pagination, operational columns, and canonical export controls.
-- Build device Overview/Live/History/Connectivity/Config & State/Commands/Events/
+- Build device Overview/Live/History/Connectivity/Config &amp; State/Commands/Events/
   Logs/Firmware tabs against canonical APIs.
 - Add diagnostic leases, structured self-test, desired/reported diff, command
   audit, connection timeline, raw export, and protocol/auth error summaries.
@@ -1470,3 +1841,72 @@ occasional POST payload. It is complete when:
   operated as production infrastructure; and
 - HTTP device telemetry can be retired without losing provisioning, recovery,
   OTA download, or rollback capability.
+
+    </script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            mermaid.initialize({ startOnLoad: false, theme: 'dark' });
+
+            const rawMarkdown = document.getElementById('raw-markdown').innerHTML;
+            
+            // Configure marked
+            marked.setOptions({
+                highlight: function(code, lang) {
+                    if (lang && hljs.getLanguage(lang)) {
+                        return hljs.highlight(code, { language: lang }).value;
+                    }
+                    return hljs.highlightAuto(code).value;
+                },
+                breaks: true
+            });
+
+            const contentEl = document.getElementById('content');
+            contentEl.innerHTML = marked.parse(rawMarkdown);
+
+            // Handle Mermaid blocks
+            const codeBlocks = contentEl.querySelectorAll('pre code.language-mermaid');
+            codeBlocks.forEach((codeBlock, i) => {
+                const pre = codeBlock.parentElement;
+                const mermaidDiv = document.createElement('div');
+                mermaidDiv.className = 'mermaid';
+                mermaidDiv.textContent = codeBlock.textContent;
+                pre.replaceWith(mermaidDiv);
+            });
+
+            mermaid.run();
+
+            // Build Table of Contents
+            const tocEl = document.getElementById('toc');
+            const headings = contentEl.querySelectorAll('h1, h2, h3');
+            
+            headings.forEach((heading, index) => {
+                const id = 'heading-' + index;
+                heading.id = id;
+
+                const li = document.createElement('li');
+                const a = document.createElement('a');
+                a.href = '#' + id;
+                a.className = 'toc-link' + (heading.tagName === 'H3' ? ' toc-sub' : '');
+                a.textContent = heading.textContent;
+                
+                li.appendChild(a);
+                tocEl.appendChild(li);
+            });
+
+            // Highlight Active TOC link on scroll
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        document.querySelectorAll('.toc-link').forEach(link => {
+                            link.classList.toggle('active', link.getAttribute('href') === '#' + entry.target.id);
+                        });
+                    }
+                });
+            }, { rootMargin: '-20% 0px -70% 0px' });
+
+            headings.forEach(heading => observer.observe(heading));
+        });
+    </script>
+</body>
+</html>

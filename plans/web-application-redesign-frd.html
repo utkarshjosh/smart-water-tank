@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Application Redesign Requirements (FRD) - AquaMind Plans</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/tokyo-night-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #090d16;
+            --bg-secondary: #111827;
+            --bg-card: rgba(17, 24, 39, 0.7);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --accent-cyan: #38bdf8;
+            --accent-blue: #6366f1;
+            --accent-green: #34d399;
+            --accent-amber: #fbbf24;
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --text-muted: #6b7280;
+            --code-bg: #0d1322;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.7;
+            overflow-x: hidden;
+        }
+
+        /* Header / Navbar */
+        .navbar {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(9, 13, 22, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.85rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .nav-left {
+            display: flex;
+            align-items: center;
+            gap: 1.25rem;
+        }
+
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9rem;
+            padding: 0.4rem 0.85rem;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            transition: all 0.2s ease;
+        }
+
+        .back-btn:hover {
+            color: var(--accent-cyan);
+            background: rgba(56, 189, 248, 0.1);
+            border-color: rgba(56, 189, 248, 0.3);
+        }
+
+        .nav-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #ffffff 0%, var(--accent-cyan) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.65rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+        }
+
+        .badge-active {
+            background: rgba(56, 189, 248, 0.15);
+            color: var(--accent-cyan);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+        }
+
+        .badge-executed {
+            background: rgba(52, 211, 153, 0.15);
+            color: var(--accent-green);
+            border: 1px solid rgba(52, 211, 153, 0.3);
+        }
+
+        .badge-arch {
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--accent-blue);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+        }
+
+        /* Container Layout */
+        .layout {
+            display: flex;
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 2rem;
+            gap: 2.5rem;
+        }
+
+        /* Sidebar TOC */
+        .sidebar {
+            width: 280px;
+            flex-shrink: 0;
+            position: sticky;
+            top: 5rem;
+            height: calc(100vh - 6rem);
+            overflow-y: auto;
+            padding-right: 1rem;
+        }
+
+        .sidebar h4 {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+
+        .toc-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .toc-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.88rem;
+            font-weight: 500;
+            display: block;
+            padding: 0.35rem 0.65rem;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .toc-link:hover, .toc-link.active {
+            color: var(--accent-cyan);
+            background: rgba(56, 189, 248, 0.08);
+        }
+
+        .toc-sub {
+            padding-left: 1rem;
+            font-size: 0.82rem;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            min-width: 0;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 3rem;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+        }
+
+        .doc-header {
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .doc-header h1 {
+            font-size: 2.25rem;
+            font-weight: 800;
+            line-height: 1.25;
+            margin-bottom: 0.75rem;
+            color: #ffffff;
+        }
+
+        .doc-meta {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        /* Markdown Rendered Styling */
+        .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 {
+            color: #ffffff;
+            font-weight: 700;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            scroll-margin-top: 6rem;
+        }
+
+        .markdown-body h1 { font-size: 1.75rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; }
+        .markdown-body h2 { font-size: 1.4rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.4rem; }
+        .markdown-body h3 { font-size: 1.15rem; }
+
+        .markdown-body p {
+            margin-bottom: 1.25rem;
+            color: #d1d5db;
+        }
+
+        .markdown-body ul, .markdown-body ol {
+            margin-bottom: 1.25rem;
+            padding-left: 1.5rem;
+            color: #d1d5db;
+        }
+
+        .markdown-body li {
+            margin-bottom: 0.4rem;
+        }
+
+        .markdown-body blockquote {
+            border-left: 4px solid var(--accent-cyan);
+            background: rgba(56, 189, 248, 0.05);
+            padding: 1rem 1.25rem;
+            border-radius: 0 8px 8px 0;
+            margin-bottom: 1.5rem;
+            color: #e5e7eb;
+        }
+
+        .markdown-body table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+            font-size: 0.9rem;
+        }
+
+        .markdown-body th, .markdown-body td {
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--border-color);
+            text-align: left;
+        }
+
+        .markdown-body th {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--accent-cyan);
+            font-weight: 700;
+        }
+
+        .markdown-body tr:nth-child(even) {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .markdown-body code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--code-bg);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.85em;
+            color: var(--accent-cyan);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .markdown-body pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 1.25rem;
+            overflow-x: auto;
+            margin: 1.5rem 0;
+        }
+
+        .markdown-body pre code {
+            background: transparent;
+            padding: 0;
+            border: none;
+            color: inherit;
+            font-size: 0.88rem;
+        }
+
+        .mermaid {
+            background: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            display: flex;
+            justify-content: center;
+            margin: 1.5rem 0;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        @media (max-width: 1024px) {
+            .sidebar { display: none; }
+            .main-content { padding: 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar">
+        <div class="nav-left">
+            <a href="index.html" class="back-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                Plans Hub
+            </a>
+            <span class="nav-title">Web Application Redesign Requirements (FRD)</span>
+        </div>
+        <div>
+            <span class="badge badge-arch">P2 Spec</span>
+        </div>
+    </nav>
+
+    <div class="layout">
+        <aside class="sidebar">
+            <h4>Table of Contents</h4>
+            <ul class="toc-list" id="toc"></ul>
+        </aside>
+
+        <main class="main-content">
+            <div class="doc-header">
+                <h1>Web Application Redesign Requirements (FRD)</h1>
+                <div class="doc-meta">
+                    <span>Category: <strong>Frontend &amp; UI/UX</strong></span>
+                    <span>•</span>
+                    <span>Status: <strong>P2 Spec</strong></span>
+                </div>
+            </div>
+
+            <div id="content" class="markdown-body">
+                <!-- Markdown Content rendered here -->
+            </div>
+        </main>
+    </div>
+
+    <script id="raw-markdown" type="text/template">
+# AquaMind Web Application Redesign — Functional Requirements Document
+
+**Status:** Proposed  
+**Product:** AquaMind  
+**Audience:** Product, design, engineering, data/AI, QA, and operations teams  
+**Scope:** New public landing page and authenticated web application for Super Admin, Tenant Admin, and User roles.
+
+## 1. Product vision
+
+AquaMind is a modern, data-centric water intelligence platform. It should move beyond showing a tank&#x27;s current level and help people understand what happened, what is likely to happen next, and what action to take.
+
+The redesigned web application must make live tank health, water usage, fill events, abnormal patterns, and AI-supported recommendations clear at a glance. It must serve a single household as gracefully as a portfolio of tenants and devices.
+
+### 1.1 Product promise
+
+&gt; **Know your water before it becomes a problem.**
+
+For every monitored tank, AquaMind should answer:
+
+1. What is the level and health of the tank now?
+2. What changed recently—usage, refill, leak, offline device, or sensor issue?
+3. When will the tank need attention?
+4. Is this behaviour normal for this tank, site, and time of day?
+5. What is the recommended next action and why?
+
+### 1.2 Redesign goals
+
+- Create a premium, calm, modern product experience rather than a technical device-management panel.
+- Make the application data-first: trends, context, comparisons, and evidence are more prominent than raw device settings.
+- Introduce AI insights as explainable decision support, with confidence and supporting data visible to users.
+- Give each role an appropriately scoped workspace without exposing cross-tenant data.
+- Treat detection of fills, leaks, and consumption anomalies as first-class product events.
+- Work well on desktop, tablet, and mobile web; critical alerts and key tank status must remain understandable on small screens.
+
+### 1.3 Non-goals for the first redesign
+
+- Autonomous control of pumps, valves, or municipal water connections.
+- Billing, invoicing, or payment collection.
+- Presenting AI output as a guaranteed diagnosis or replacing on-site inspection.
+- Replacing the native mobile app; the web application must, however, support responsive browser use.
+
+## 2. Users and permissions
+
+| Role | Primary outcome | Data scope | Key permissions |
+|---|---|---|---|
+| Super Admin | Operate the AquaMind platform reliably and at scale | All tenants, users, devices, firmware, platform aggregates | Manage tenants/users/devices, firmware rollouts, platform alert policies, AI monitoring, audit access |
+| Tenant Admin | Keep a site&#x27;s or organisation&#x27;s water system healthy and efficient | One tenant and all of its authorised devices/users | Manage devices, tank configuration, member access, alert policies, tenant analytics, event review |
+| User | Understand and act on the water status of assigned tanks | Explicitly assigned devices; tenant-wide data only when policy grants it | View tanks/history/insights, receive alerts, acknowledge or resolve assigned alerts, manage personal notification preferences |
+
+### 2.1 Permission rules
+
+- A Super Admin can view and act across all tenants. Cross-tenant views must visibly identify the active tenant or portfolio scope.
+- A Tenant Admin can never access another tenant&#x27;s devices, users, measurements, events, or reports.
+- A User can view only assigned devices by default. Tenant Admins may explicitly grant broader read-only device access.
+- High-impact actions—firmware rollout, device reassignment, member-role change, alert-policy changes, and AI-alert suppression—must be recorded in an audit trail.
+- The UI must hide unavailable actions and the API must independently enforce every permission.
+
+## 3. Experience and design principles
+
+### 3.1 Visual direction
+
+The product should feel like a contemporary water-operations intelligence system: high clarity, generous spacing, strong typography, practical charts, and restrained use of water-inspired colour. It should not rely on decorative glass effects or animation to communicate status.
+
+- Use a neutral foundation with aqua/blue as the primary data colour.
+- Reserve amber and red for attention-required and critical states; never use colour as the only status indicator.
+- Use cards only to group decisions or distinct data; avoid dashboard-card clutter.
+- Prioritise useful density on desktop with a responsive one-column mobile layout.
+- Support light and dark themes with equal contrast and readable charts.
+- Present times in the user&#x27;s configured timezone and volumes in a tenant-configured unit system (litres as the initial default).
+
+### 3.2 Insight hierarchy
+
+Every dashboard should follow this order:
+
+1. **Needs attention now** — unresolved critical/high alerts and offline systems.
+2. **Current state** — level, usable volume, last update, connectivity, and tank status.
+3. **What changed** — refill/fill completion, rapid drawdown, abnormal usage, and configuration changes.
+4. **What is next** — predicted low time, expected usage, and recommended actions.
+5. **Evidence** — timeline, chart, measurements, and model rationale.
+
+### 3.3 Global shell
+
+All authenticated roles receive a shared application shell containing:
+
+- Role-aware left navigation on desktop and bottom/compact navigation on mobile.
+- Global tenant/site switcher where the role has more than one permitted scope.
+- Persistent alert indicator with unresolved count and severity state.
+- Global date range and timezone controls on analytics pages.
+- Command/search entry point for tanks, devices, users (where authorised), and recent alerts.
+- Account menu with profile, notification preferences, theme, and sign out.
+
+## 4. Information architecture
+
+### 4.1 Shared pages
+
+| Page | Purpose |
+|---|---|
+| Overview | Role-specific prioritised summary of status, events, insights, and actions |
+| Tanks | Searchable and filterable collection of accessible tanks |
+| Tank detail | Live status, history, events, predictions, alerts, configuration, and device health for one tank |
+| Alerts | Central alert queue with acknowledgement, resolution, assignment, and filters |
+| Insights | AI predictions, anomaly findings, recommendations, confidence, and outcome feedback |
+| Reports | Exportable usage, fill, alert, and operational reports |
+
+### 4.2 Super Admin navigation
+
+`Platform overview · Tenants · Fleet · Alerts · AI Operations · Analytics · Firmware · Users · Settings`
+
+### 4.3 Tenant Admin navigation
+
+`Overview · Tanks · Alerts · Insights · Analytics · Members · Reports · Settings`
+
+### 4.4 User navigation
+
+`My tanks · Alerts · Insights · History · Profile`
+
+## 5. Functional requirements
+
+### 5.1 Current tank state
+
+| ID | Requirement |
+|---|---|
+| FR-001 | The system shall show each accessible tank&#x27;s current level as percentage, estimated volume, and capacity. |
+| FR-002 | The system shall show the last successful measurement timestamp, device connectivity state, battery state where available, and data freshness. |
+| FR-003 | The system shall label data as **live**, **recent**, **stale**, or **offline** based on a configurable reporting expectation. |
+| FR-004 | A tank card shall show a concise status: normal, filling, full, low, attention required, offline, or sensor/data issue. |
+| FR-005 | Selecting a tank card shall open its tank detail page; no critical status may be hidden only in a hover state. |
+| FR-006 | Current-level views shall distinguish physical capacity from usable volume when the tank profile includes dead-zone or sensor-offset data. |
+
+### 5.2 Tank detail and history
+
+| ID | Requirement |
+|---|---|
+| FR-010 | The tank detail page shall have a summary header with tank name, site/tenant, status, level, current volume, capacity, last update, and primary action. |
+| FR-011 | The page shall provide selectable ranges: 24 hours, 7 days, 30 days, 90 days, custom range. |
+| FR-012 | The level/volume chart shall display measurements, fill-event overlays, alert markers, expected range, and predicted future trajectory when available. |
+| FR-013 | Users shall be able to inspect a chart point to see timestamp, volume, level, measurement quality, and any related event. |
+| FR-014 | The page shall provide a chronological event timeline containing alerts, fills, low/full thresholds, offline periods, configuration changes, and user actions. |
+| FR-015 | Tenant Admins and Super Admins shall be able to edit tank name, location/site label, capacity/profile, thresholds, and device reporting configuration, subject to audit logging. |
+| FR-016 | The application shall display an explicit no-data state, including next troubleshooting action, when there are insufficient measurements for a graph or prediction. |
+
+### 5.3 Fill-event detection and presentation
+
+A **fill event** is a period in which the measured tank volume rises continuously or materially after noise filtering. A fill event becomes **completed** when a sustained rise ends or the configured full threshold is reached.
+
+| ID | Requirement |
+|---|---|
+| FR-020 | The platform shall derive fill events from time-series measurements and store their start/end timestamps, starting/ending volume, volume added, duration, peak fill rate, confidence, and source/model version. |
+| FR-021 | The system shall show an in-progress fill state when the evidence threshold is met, including elapsed time and estimated volume added so far. |
+| FR-022 | On completed detection, the system shall create a visible event: **“Tank filled: 1,240 L added in 38 min”**, supplemented by start/end level and confidence. |
+| FR-023 | The fill-event detail shall disclose whether the total is estimated from level-derived volume, direct flow data, or a manually confirmed value. |
+| FR-024 | A user with device access shall be able to confirm, correct, or mark a detected fill as not a refill; corrections shall preserve the original detected value and be used as feedback for future model calibration. |
+| FR-025 | Reports shall provide fill count, total volume filled, average fill duration, average fill rate, and time-of-day distribution for the selected scope and date range. |
+| FR-026 | The system shall avoid creating duplicate fill events across adjacent measurement windows. |
+
+### 5.4 Leak, anomaly, and device-health alerts
+
+| ID | Requirement |
+|---|---|
+| FR-030 | The system shall detect potential leaks from sustained unexpected drawdown, especially during a tank&#x27;s learned low-usage periods, rather than relying only on a single daily threshold. |
+| FR-031 | A leak alert shall show the affected tank, start time, estimated loss rate/volume, baseline comparison, confidence, severity, and recommended next step. |
+| FR-032 | A leak alert must be worded as a potential issue until confirmed: for example, **“Possible leak: volume fell 180 L more than expected over 3 hours.”** |
+| FR-033 | The system shall generate and display full, low-level, battery-low, device-offline, sensor/data-quality, and unusual-consumption alerts. |
+| FR-034 | Alert severity shall support informational, low, medium, high, and critical levels, each with configurable delivery and escalation policy. |
+| FR-035 | Authorised users shall be able to acknowledge, assign, resolve, suppress for a bounded time, and add a note to an alert. Resolution shall require a reason. |
+| FR-036 | The alert detail shall show its lifecycle: detected, delivered, acknowledged, assigned, resolved/suppressed, actor, timestamp, and notes. |
+| FR-037 | Alerts shall be deduplicated and grouped into one incident when they represent the same continuing condition. |
+| FR-038 | Critical and high alerts shall be visible in-app immediately and eligible for configured push/email delivery. Delivery failure must not mark an alert resolved. |
+
+### 5.5 AI predictions and suggestions
+
+AI features are an assistive layer on top of deterministic measurement processing and alert rules. They must remain understandable, tenant-scoped, and safe when data is incomplete.
+
+| ID | Requirement |
+|---|---|
+| FR-040 | For tanks with adequate valid history, the system shall estimate time-to-low and show a forecast window, e.g. **“Likely to reach 20% between 18:00–21:00 tomorrow.”** |
+| FR-041 | The system shall estimate expected consumption for the next 24 hours, 7 days, and selected forecast horizon when enough history exists. |
+| FR-042 | The system shall identify usage that is outside the tank&#x27;s learned baseline, considering time of day, day of week, seasonality where adequate data exists, refill state, and recent occupancy/usage feedback when available. |
+| FR-043 | The system shall create actionable suggestions, such as scheduling a refill earlier, checking an unexpected overnight drawdown, reviewing a recurring low-level pattern, or inspecting a degrading sensor. |
+| FR-044 | Each AI insight shall show: conclusion, impact, confidence (high/medium/low), evidence summary, generated time, data period used, model/rule version, and a recommended action. |
+| FR-045 | The UI shall label low-confidence or insufficient-data output clearly and shall not present it as an alert requiring action without deterministic or high-confidence evidence. |
+| FR-046 | Users shall be able to mark a suggestion helpful/not helpful and optionally provide a reason. Feedback must be attributable to the insight but must not alter historical evidence. |
+| FR-047 | Tenant Admins shall be able to configure tenant-level notification preferences and sensitivity within safe, platform-defined ranges. Super Admins shall control the allowed ranges and model rollout. |
+| FR-048 | Predictions shall refresh after newly ingested valid measurements and at a scheduled cadence. The UI shall show when a forecast was last calculated. |
+
+### 5.6 Role-specific workspaces
+
+#### Super Admin
+
+| ID | Requirement |
+|---|---|
+| FR-050 | The Platform Overview shall show total tenants, devices, online rate, unresolved critical alerts, measurement freshness, platform water volume/usage aggregates, and active AI-incidents count. |
+| FR-051 | The Fleet page shall allow filtering and sorting devices/tanks by tenant, location, state, last seen, firmware version, alert severity, and prediction risk. |
+| FR-052 | The Tenants page shall show tenant health: device count, online rate, unresolved alerts, last activity, usage trend, and an entry to the tenant workspace. |
+| FR-053 | AI Operations shall show model/rule versions, data-coverage health, prediction/error metrics, feedback rate, alert precision signals, rollout state, and tenant-level opt-in/status. |
+| FR-054 | Super Admins shall manage firmware inventory and staged rollouts, including target cohort, rollout percentage, install status, errors, pause, and rollback controls. |
+| FR-055 | Super Admins shall manage platform-wide alert defaults, notification channels, retention settings, and audit-log access. |
+
+#### Tenant Admin
+
+| ID | Requirement |
+|---|---|
+| FR-060 | The Tenant Overview shall prioritise tanks requiring attention, an at-a-glance fleet map/list, today&#x27;s usage, recent fills, next predicted low-level time, and unresolved alerts. |
+| FR-061 | Tenant Admins shall search, filter, bulk-tag, and group tanks by site, status, alert risk, and device connectivity. |
+| FR-062 | Tenant Admins shall invite, change, deactivate, and assign Users within their tenant. They may not grant Super Admin access. |
+| FR-063 | Tenant Admins shall configure tank profiles, thresholds, alert recipients, business hours/quiet hours, and contextual labels such as site and usage type. |
+| FR-064 | Tenant analytics shall show consumption, fill volume, refill efficiency, low/full events, leak/anomaly events, device uptime, and comparisons across selected tanks/sites. |
+| FR-065 | Tenant Admins shall export tenant-scoped reports in CSV and PDF formats for a selected date range. |
+
+#### User
+
+| ID | Requirement |
+|---|---|
+| FR-070 | The My Tanks page shall show only permitted tanks and foreground current level, next required action, recent fill, and critical alerts. |
+| FR-071 | Users shall view tank history, fill events, alerts, and available insights for their assigned tanks. |
+| FR-072 | Users shall be able to manage their notification channels and alert preferences within tenant policy. |
+| FR-073 | Users shall be able to acknowledge and resolve alerts only when the tenant policy permits it; otherwise they may view and comment on the alert. |
+| FR-074 | Users shall not see tenant member management, fleet-wide configuration, firmware controls, platform analytics, or unassigned tank data. |
+
+### 5.7 Analytics and reporting
+
+| ID | Requirement |
+|---|---|
+| FR-080 | Analytics shall show both absolute volume and normalised metrics (per tank, per capacity, per day) where comparisons would otherwise mislead. |
+| FR-081 | Every chart shall declare its unit, selected period, timezone, scope, and whether data is measured, estimated, or forecast. |
+| FR-082 | The application shall support comparisons with the prior period and an expected baseline, clearly distinguishing them. |
+| FR-083 | Reports shall include data freshness and known data gaps so they are not interpreted as complete measurements when devices were offline. |
+| FR-084 | Exports shall respect the requesting user&#x27;s tenant and device permissions and be logged in the audit trail. |
+
+## 6. Data and AI requirements
+
+### 6.1 Required data entities
+
+The existing raw measurements, daily summaries, alerts, users, tenants, devices, device configuration, and tank profiles remain foundational. The redesign requires the following additional logical entities.
+
+| Entity | Essential fields |
+|---|---|
+| FillEvent | tank/device, start/end time, start/end volume, volume added, duration, peak rate, status, confidence, detection source/version, manual correction, created/updated time |
+| Prediction | tank/device or scope, type, prediction window/value, confidence interval, confidence score/band, generated time, valid-until time, data coverage, model/rule version, explanation payload |
+| Insight | scope, category, headline, explanation, recommendation, severity/priority, confidence, evidence references, lifecycle, feedback, generated/expired time |
+| AlertIncident | grouped alerts, condition state, severity, affected tank, first/last seen, acknowledgement/assignment/resolution, suppression rule, notes |
+| DataQualitySignal | tank/device, type, time range, severity, missing/invalid measurement counts, expected-versus-received count, explanation |
+| AuditLog | actor, role, tenant, action, object type/id, before/after summary, IP/session metadata as permitted, timestamp |
+
+### 6.2 Data quality and model eligibility
+
+- Store raw measurements immutably or retain a clear correction lineage.
+- Flag readings that are null, impossible, stale, duplicated, out of calibration range, or inconsistent with the tank profile.
+- Do not train or forecast from invalid readings unless they are explicitly imputed; retain the imputation method and confidence.
+- Define configurable minimum data coverage for each prediction type. Until reached, show an onboarding insight such as “Collecting enough data to forecast usage—estimated 9 days remaining.”
+- Recalculate volume consistently from the tank profile and preserve the profile version used for historical calculations.
+- Store derived events and predictions separately from raw telemetry so model improvements can be backfilled, versioned, and explained.
+
+### 6.3 Explainability and safety
+
+- Every AI recommendation must link to the evidence view: chart range, compared baseline, key measurements, and event timeline.
+- The system must use cautious language for inference: “possible leak,” “likely to reach low level,” and “unusual compared with recent Wednesdays.”
+- A user can always see whether an outcome came from a deterministic rule, statistical model, AI model, or manual input.
+- No AI model may use one tenant&#x27;s identifiable data to expose another tenant&#x27;s behaviour. Cross-tenant model training, if adopted, must use governed, de-identified aggregate features and must be documented in the privacy policy.
+
+## 7. Key journeys and acceptance criteria
+
+### 7.1 Detected completed fill
+
+1. A tank rises from 18% to 92% over 38 minutes across valid measurements.
+2. AquaMind identifies a fill in progress and then determines that the rise has stopped.
+3. The Tank detail timeline and overview activity stream display: “Tank filled: 1,240 L added in 38 min.”
+4. The event is visible on the history chart and contributes to report totals.
+5. The user can open the event and confirm or correct it; the correction is audit logged.
+
+**Acceptance:** The displayed total, duration, timestamps, source, and confidence agree with the stored FillEvent and measurements used to calculate it.
+
+### 7.2 Possible leak alert
+
+1. A tank exhibits sustained drawdown beyond its expected overnight baseline.
+2. The platform groups related detections into one active incident and creates a high/critical alert according to confidence and configured policy.
+3. The alert describes the evidence and recommends an inspection, without asserting that a leak is confirmed.
+4. An authorised person acknowledges, assigns, and resolves the incident with a reason.
+
+**Acceptance:** The alert lifecycle is visible; duplicate detection does not create repeated unresolved alerts for the same active condition; resolving the incident does not erase the historical evidence.
+
+### 7.3 Low-level forecast
+
+1. A tank has enough valid history for forecasting.
+2. The application forecasts it will reach its low threshold tomorrow evening.
+3. The overview shows the forecast window, confidence, and a suggested refill time.
+4. Opening the insight shows the expected-consumption chart and data coverage.
+
+**Acceptance:** Forecasts are not shown as precise point estimates when uncertainty is high; the UI shows a range and last-calculated time.
+
+### 7.4 Tenant Admin daily operations
+
+1. The admin opens Overview and immediately sees a critical suspected leak, two tanks with stale data, and three completed fills from today.
+2. They open the leak incident, assign it to a team member, and set a follow-up note.
+3. They filter Tanks to “Needs attention,” then export the past week&#x27;s fill and usage report.
+
+**Acceptance:** All results are tenant-scoped, filter state is clear, and the export contains only authorised data with data-quality notes.
+
+## 8. Non-functional requirements
+
+| Area | Requirement |
+|---|---|
+| Performance | Cached overview data should render meaningful content within 2 seconds on a typical broadband connection; chart range changes should respond within 2 seconds for normal tenant scope. |
+| Timeliness | New valid measurements and deterministic alerts should appear in the UI within the configured reporting interval plus 60 seconds under normal service conditions. |
+| Accessibility | Meet WCAG 2.2 AA for keyboard use, focus, contrast, semantic labels, status announcements, charts with tabular alternatives, and non-colour alert cues. |
+| Responsive design | Support current Chromium, Safari, Firefox, and Edge; support practical mobile widths from 360 px upward. |
+| Security | Enforce authentication, role-based and tenant/device-scoped authorisation server-side; encrypt data in transit; protect exports and audit privileged actions. |
+| Privacy | Collect only data needed for service delivery; make retention configurable; do not expose personal or tenant data in model explanations beyond the viewer&#x27;s scope. |
+| Reliability | Clearly state stale/offline conditions rather than presenting an old reading as live. Preserve alert and event history through transient notification failures. |
+| Observability | Log model/rule execution, prediction availability, event-detection failures, delivery outcomes, API errors, and key user actions without logging sensitive credentials. |
+
+## 9. Delivery priorities
+
+### Release 1 — redesigned foundation
+
+- Role-aware navigation and permission enforcement.
+- Modern responsive Overview, Tanks, Tank detail, Alerts, and basic Reports.
+- Data freshness, current state, measurement history, existing alerts, and deterministic fill-event detection.
+- Fill-event display with total volume filled and time taken.
+- Tenant Admin member/device/tank configuration foundations.
+
+### Release 2 — predictive intelligence
+
+- Prediction and Insight data model, confidence display, evidence views, and feedback controls.
+- Time-to-low forecast, expected consumption, anomaly detection, richer leak incident workflow.
+- AI Operations and governed rollout visibility for Super Admins.
+
+### Release 3 — optimisation and scale
+
+- Cross-site comparison, advanced reporting, configurable operational policies, model-quality dashboards, and refined recommendation personalisation.
+- Optional integrations and automation only after explicit product, safety, and security review.
+
+## 10. Landing page
+
+### 10.1 Purpose
+
+The landing page introduces AquaMind as a trusted water-intelligence product and moves visitors toward a demo, sign-up, or sign-in. It should be simpler than the application itself: one clear promise, evidence of value, and one primary call to action.
+
+### 10.2 Recommended copy
+
+**Hero**  
+**Water intelligence that sees problems coming.**  
+Track every tank in real time, understand how water is used, and get early warnings for leaks, low levels, and unusual behaviour.
+
+**Primary CTA:** Get started  
+**Secondary CTA:** See how it works
+
+**Three value points**
+
+1. **See every tank clearly** — Live level, usable volume, recent activity, and device health in one calm view.
+2. **Understand every fill** — Automatically see when a tank was filled, how much water was added, and how long it took.
+3. **Act before water is wasted** — Receive explainable AI alerts and forecasts for possible leaks, unusual usage, and the next likely low-water moment.
+
+**Trust statement**  
+AquaMind turns sensor readings into practical, explainable water decisions. Predictions show their confidence and evidence—so your team stays in control.
+
+### 10.3 Landing-page requirements
+
+- Show a realistic product preview with current level, completed fill event, forecast, and possible-leak alert. Mark sample data as illustrative.
+- Include concise sections for live monitoring, fill intelligence, AI alerts/forecasts, and multi-site management.
+- Provide direct access to sign in and a primary conversion route; do not require a visitor to understand tenant roles before starting.
+- Keep the page fast, accessible, responsive, and readable without motion. Respect reduced-motion preferences.
+- Do not claim leak detection or AI prediction is infallible.
+
+## 11. Open product decisions
+
+These decisions should be resolved before implementation estimates are finalised:
+
+1. Which notification channels are supported in the first release: in-app only, push, email, SMS/WhatsApp, or an operational webhook?
+2. What tenant settings and data sources are available to improve prediction context (occupancy, scheduled deliveries, site hours, weather, pump state)?
+3. Which role owns device provisioning and whether a Tenant Admin can create/reassign devices without Super Admin approval?
+4. What are the required report formats, retention periods, and regional privacy requirements?
+5. What confidence threshold and human-review policy are required before a possible leak becomes a critical escalation?
+
+
+    </script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            mermaid.initialize({ startOnLoad: false, theme: 'dark' });
+
+            const rawMarkdown = document.getElementById('raw-markdown').innerHTML;
+            
+            // Configure marked
+            marked.setOptions({
+                highlight: function(code, lang) {
+                    if (lang && hljs.getLanguage(lang)) {
+                        return hljs.highlight(code, { language: lang }).value;
+                    }
+                    return hljs.highlightAuto(code).value;
+                },
+                breaks: true
+            });
+
+            const contentEl = document.getElementById('content');
+            contentEl.innerHTML = marked.parse(rawMarkdown);
+
+            // Handle Mermaid blocks
+            const codeBlocks = contentEl.querySelectorAll('pre code.language-mermaid');
+            codeBlocks.forEach((codeBlock, i) => {
+                const pre = codeBlock.parentElement;
+                const mermaidDiv = document.createElement('div');
+                mermaidDiv.className = 'mermaid';
+                mermaidDiv.textContent = codeBlock.textContent;
+                pre.replaceWith(mermaidDiv);
+            });
+
+            mermaid.run();
+
+            // Build Table of Contents
+            const tocEl = document.getElementById('toc');
+            const headings = contentEl.querySelectorAll('h1, h2, h3');
+            
+            headings.forEach((heading, index) => {
+                const id = 'heading-' + index;
+                heading.id = id;
+
+                const li = document.createElement('li');
+                const a = document.createElement('a');
+                a.href = '#' + id;
+                a.className = 'toc-link' + (heading.tagName === 'H3' ? ' toc-sub' : '');
+                a.textContent = heading.textContent;
+                
+                li.appendChild(a);
+                tocEl.appendChild(li);
+            });
+
+            // Highlight Active TOC link on scroll
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        document.querySelectorAll('.toc-link').forEach(link => {
+                            link.classList.toggle('active', link.getAttribute('href') === '#' + entry.target.id);
+                        });
+                    }
+                });
+            }, { rootMargin: '-20% 0px -70% 0px' });
+
+            headings.forEach(heading => observer.observe(heading));
+        });
+    </script>
+</body>
+</html>

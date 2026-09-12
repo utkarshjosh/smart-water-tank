@@ -46,6 +46,10 @@ proximity). This is deliberately the *simple* placement that avoids the split.
   **debug/test mode**. Both **runtime-configurable and OTA-updatable** (already
   modeled as `measurementIntervalMs` / `reportIntervalMs` in `firmware/src/modules/config.*`).
 - Buffer to flash (LittleFS) when offline, flush on reconnect (already in `storage`).
+- Device health and remote diagnostics must follow
+  `docs/device-health-remote-diagnostics-contract.md`: backend-derived health
+  states, bounded diagnostic events, explicit diagnostic sessions, and safe
+  allow-listed commands only.
 
 ## Backend — `aquamind.utkarshjoshi.com`
 Device-facing API (HTTPS). Existing firmware points at `aquamind-api.utkarshjoshi.com`
