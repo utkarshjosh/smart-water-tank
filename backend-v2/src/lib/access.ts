@@ -19,6 +19,11 @@ export async function getAccessibleDeviceOrThrow(opts: {
   const device = await prisma.device.findUnique({ where: { deviceId: opts.deviceId } });
   if (!device) throw new HttpError(404, 'Device not found');
 
+  // A decommissioned device keeps its rows (history stays queryable by an
+  // admin) but is gone as far as the API is concerned. 410 rather than 404 so
+  // the caller can tell "retired" from "never existed".
+  if (device.archivedAt) throw new HttpError(410, 'This device has been decommissioned');
+
   if (opts.user.role === 'admin' || opts.user.role === 'super_admin') return device;
   if (device.tenantId && device.tenantId === opts.user.tenantId) return device;
 

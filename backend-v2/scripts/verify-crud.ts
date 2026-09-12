@@ -246,10 +246,16 @@ async function main() {
   );
 
   const critical = await adminService.listAlerts({ limit: 200, includeDismissed: false, severity: 'critical' });
+  // Assert the filter's contract rather than a global count: leftovers from an
+  // earlier aborted run would otherwise make this fail for the wrong reason.
   check(
     'the fleet feed filters by severity',
-    critical.alerts.length === 1 && critical.alerts[0].severity === 'critical',
-    `${critical.alerts.length} alerts`
+    critical.alerts.length >= 1 && critical.alerts.every((a) => a.severity === 'critical'),
+    `${critical.alerts.length} alerts, all critical`
+  );
+  check(
+    'the severity filter includes our own critical alert',
+    critical.alerts.some((a) => a.device_id === deviceB.deviceId)
   );
 
   const unackFleet = await adminService.listAlerts({ limit: 200, includeDismissed: false, acknowledged: false });
@@ -261,6 +267,223 @@ async function main() {
     since: new Date(Date.now() + 60_000),
   });
   check('the since filter excludes older alerts', future.alerts.length === 0, `${future.alerts.length} alerts`);
+
+  // --- device sharing: the writers user_device_mappings never had -----------
+  console.log('');
+  const outsider = await prisma.user.create({
+    data: {
+      firebaseUid: `crud-out-${suffix}`,
+      email: `outsider-${suffix}@example.com`,
+      name: 'Outsider',
+      tenantId: other.id,
+      role: 'user',
+    },
+  });
+
+  await expectThrow('an outsider cannot reach the device before sharing', () =>
+    getAccessibleDeviceOrThrow({
+      deviceId: device.deviceId,
+      user: { id: outsider.id, role: 'user', tenantId: other.id },
+    }), 403
+  );
+
+  const shared = await userService.shareDevice(device, `  outsider-${suffix}@example.com  `);
+  check('sharing resolves the target by email', shared.user_id === outsider.id);
+
+  const nowVisible = await getAccessibleDeviceOrThrow({
+    deviceId: device.deviceId,
+    user: { id: outsider.id, role: 'user', tenantId: other.id },
+  });
+  check('the share grants real access through access control', nowVisible.id === device.id);
+
+  // The share must widen only the shared device, not the whole tenant.
+  await expectThrow('a share does not leak sibling devices', () =>
+    getAccessibleDeviceOrThrow({
+      deviceId: deviceB.deviceId,
+      user: { id: outsider.id, role: 'user', tenantId: other.id },
+    }), 403
+  );
+
+  await userService.shareDevice(device, outsider.email); // again
+  const dupCount = await prisma.userDeviceMapping.count({
+    where: { deviceId: device.id, userId: outsider.id },
+  });
+  check('sharing twice does not duplicate the grant', dupCount === 1, `${dupCount} rows`);
+
+  const shares = await userService.listDeviceShares(device);
+  check('the share list reports the explicit grant', shares.shares.some((x) => x.user_id === outsider.id));
+  check(
+    'the share list reports tenant members as non-revocable',
+    shares.members.some((m) => m.user_id === user.id && m.revocable === false)
+  );
+
+  await expectThrow('sharing with an unknown email is a 404', () =>
+    userService.shareDevice(device, 'nobody-at-all@example.com'), 404
+  );
+  await expectThrow('sharing with an existing tenant member is a 409', () =>
+    userService.shareDevice(device, user.email), 409
+  );
+
+  await userService.unshareDevice(device, outsider.id);
+  await expectThrow('revoking a share removes access again', () =>
+    getAccessibleDeviceOrThrow({
+      deviceId: device.deviceId,
+      user: { id: outsider.id, role: 'user', tenantId: other.id },
+    }), 403
+  );
+  await expectThrow('revoking a share that does not exist is a 404', () =>
+    userService.unshareDevice(device, outsider.id), 404
+  );
+
+  // --- soft delete ----------------------------------------------------------
+  console.log('');
+
+  // Device decommission: history retained, API access gone.
+  const beforeCount = await prisma.measurement.count({ where: { deviceId: deviceB.id } });
+  await prisma.measurement.create({
+    data: { deviceId: deviceB.id, timestamp: new Date(), levelCm: 42, volumeL: 100 },
+  });
+  const archivedDevice = await adminService.archiveDevice(deviceB.deviceId);
+  check(
+    'decommission reports the retained reading count',
+    archivedDevice.measurements_retained === beforeCount + 1,
+    `${archivedDevice.measurements_retained} readings`
+  );
+
+  const readingsStillThere = await prisma.measurement.count({ where: { deviceId: deviceB.id } });
+  check('decommission keeps the measurement history', readingsStillThere === beforeCount + 1);
+
+  await expectThrow('a decommissioned device is gone from the API (410)', () =>
+    getAccessibleDeviceOrThrow({
+      deviceId: deviceB.deviceId,
+      user: { id: user.id, role: 'user', tenantId: tenant.id },
+    }), 410
+  );
+  await expectThrow('even an admin gets 410 on a decommissioned device', () =>
+    getAccessibleDeviceOrThrow({
+      deviceId: deviceB.deviceId,
+      user: { id: user.id, role: 'super_admin', tenantId: null },
+    }), 410
+  );
+
+  const tenantList = await userService.listDevicesForTenant(tenant.id, user.id);
+  check(
+    'a decommissioned device drops out of the tenant list',
+    !tenantList.some((d) => d.id === deviceB.deviceId),
+    `${tenantList.length} devices`
+  );
+
+  const adminDefault = await adminService.listDevices({});
+  check(
+    'the admin device list hides archived by default',
+    !adminDefault.some((d) => d.device_id === deviceB.deviceId)
+  );
+  const adminAll = await adminService.listDevices({ includeArchived: true });
+  check(
+    'include_archived brings it back for an admin',
+    adminAll.some((d) => d.device_id === deviceB.deviceId)
+  );
+
+  await expectThrow('decommissioning twice is a 409', () =>
+    adminService.archiveDevice(deviceB.deviceId), 409
+  );
+  await adminService.restoreDevice(deviceB.deviceId);
+  const back = await getAccessibleDeviceOrThrow({
+    deviceId: deviceB.deviceId,
+    user: { id: user.id, role: 'user', tenantId: tenant.id },
+  });
+  check('restore makes the device reachable again', back.id === deviceB.id);
+
+  // User deactivation.
+  await expectThrow('you cannot deactivate your own account', () =>
+    adminService.archiveUser(user.id, user.id), 409
+  );
+
+  await prisma.user.update({ where: { id: outsider.id }, data: { fcmToken: 'push-token' } });
+  await prisma.userDeviceMapping.create({ data: { userId: outsider.id, deviceId: device.id } });
+  await adminService.archiveUser(outsider.id, user.id);
+  const deactivated = await prisma.user.findUniqueOrThrow({ where: { id: outsider.id } });
+  check('deactivation sets archivedAt', deactivated.archivedAt != null);
+  check('deactivation clears the push token', deactivated.fcmToken === null);
+  const grantsLeft = await prisma.userDeviceMapping.count({ where: { userId: outsider.id } });
+  check('deactivation revokes explicit device grants', grantsLeft === 0, `${grantsLeft} grants`);
+
+  const userListDefault = await adminService.listUsers({});
+  check(
+    'the admin user list hides deactivated by default',
+    !userListDefault.some((u) => u.id === outsider.id)
+  );
+
+  await expectThrow('deactivating twice is a 409', () =>
+    adminService.archiveUser(outsider.id, user.id), 409
+  );
+  await adminService.restoreUser(outsider.id);
+  check('restore clears archivedAt', (await prisma.user.findUniqueOrThrow({ where: { id: outsider.id } })).archivedAt === null);
+
+  // The last super admin must not be able to lock everyone out.
+  const soleAdmin = await prisma.user.create({
+    data: {
+      firebaseUid: `crud-sa-${suffix}`,
+      email: `sa-${suffix}@example.com`,
+      name: 'Sole Super',
+      role: 'super_admin',
+    },
+  });
+  const otherSupers = await prisma.user.count({
+    where: { role: 'super_admin', archivedAt: null, NOT: { id: soleAdmin.id } },
+  });
+  if (otherSupers === 0) {
+    await expectThrow('the last super admin cannot be deactivated', () =>
+      adminService.archiveUser(soleAdmin.id, user.id), 409
+    );
+  } else {
+    check('the last super admin cannot be deactivated', true, `skipped - ${otherSupers} others exist`);
+  }
+  await prisma.user.delete({ where: { id: soleAdmin.id } });
+
+  // Tenant archive: preview, then cascade to devices and users.
+  const preview = await adminService.previewTenantArchive(other.id);
+  check(
+    'the archive preview counts what it would take',
+    preview.devices >= 1 && preview.users >= 1,
+    `${preview.devices} devices, ${preview.users} users, ${preview.measurements} readings`
+  );
+
+  await adminService.archiveTenant(other.id);
+  const archivedTenantDevices = await prisma.device.count({
+    where: { tenantId: other.id, archivedAt: null },
+  });
+  const archivedTenantUsers = await prisma.user.count({
+    where: { tenantId: other.id, archivedAt: null },
+  });
+  check('archiving a tenant archives its devices', archivedTenantDevices === 0);
+  check('archiving a tenant archives its users', archivedTenantUsers === 0);
+
+  const tenantsVisible = await adminService.listTenants();
+  check(
+    'an archived tenant drops out of the tenant list',
+    !tenantsVisible.some((t) => t.id === other.id)
+  );
+
+  await expectThrow('a device in an archived tenant cannot be restored alone', () =>
+    adminService.restoreDevice(foreignDevice.deviceId), 409
+  );
+  await expectThrow('archiving a tenant twice is a 409', () =>
+    adminService.archiveTenant(other.id), 409
+  );
+
+  const restoredSummary = await adminService.restoreTenant(other.id);
+  check(
+    'restoring a tenant brings its devices and users back',
+    restoredSummary.devices >= 1 && restoredSummary.users >= 1,
+    `${restoredSummary.devices} devices, ${restoredSummary.users} users`
+  );
+  const liveAgain = await prisma.device.count({ where: { tenantId: other.id, archivedAt: null } });
+  check('its devices are live again', liveAgain >= 1, `${liveAgain} devices`);
+
+  // Nothing above destroyed data.
+  const survivingReadings = await prisma.measurement.count({ where: { deviceId: deviceB.id } });
+  check('no readings were destroyed by any archive', survivingReadings === beforeCount + 1);
 
   await prisma.tenant.deleteMany({ where: { id: { in: [tenant.id, other.id] } } });
   await prisma.$disconnect();

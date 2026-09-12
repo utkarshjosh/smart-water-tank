@@ -1,6 +1,9 @@
 # Backend CRUD Audit
 
-**Status:** audit only — nothing implemented yet
+**Status:** all four batches implemented. Two migrations to apply:
+`20260912090000_add_alert_dismissed_at` and `20260912093000_add_soft_delete` (both additive
+and nullable, safe on a live database). Verified by `npm run verify:crud` — 76 checks
+against a real MySQL/MariaDB, repeatable.
 **Method:** enumerated every route in `backend-v2/src/routes/*.ts` and compared against the
 models in `prisma/schema.prisma`, then grepped the service layer to confirm each gap is
 genuinely absent rather than reachable by another name.
@@ -98,12 +101,54 @@ refill counts and leak flags have no such problem and are simply unused.)
 - Users cannot set their own measurement/report interval; only an admin can, via
   `POST /admin/devices/:deviceId/config`.
 
-## Suggested order
+## What was built
 
-1. **Device rename** (`PUT /user/devices/:deviceId` + admin equivalent) — small, unblocks
-   the most visible problem.
-2. **`PUT /user/me`** — small, obvious omission.
-3. **Alert feeds** — `GET /user/alerts`, `GET /admin/alerts`, plus dismiss.
-4. **Decide `user_device_mappings`**: build the sharing endpoints, or delete the dead read.
-5. **Deletion strategy** — needs the soft-vs-hard decision above before any code.
-6. **Expose `daily_summaries`** — usage/refill/leak history the UI could show today.
+| Endpoint | Closes |
+|---|---|
+| `PUT /user/devices/:deviceId` | finding 1 — rename; blank/null clears to the hardware ID |
+| `PUT /admin/devices/:deviceId` | rename + move between tenants |
+| `PUT /user/me` | finding 5 |
+| `DELETE /user/fcm-token` | finding 7 — stop pushes on sign-out |
+| `DELETE /user/devices/claim-code/:code` | finding 7 — revoke a live code |
+| `GET /user/alerts` | finding 4 — one inbox across accessible devices, with an unread count |
+| `GET /admin/alerts` | finding 4 — fleet feed, filterable by tenant/device/severity/ack/window |
+| `DELETE /user/devices/:id/alerts/:alertId` + `.../restore` | finding 4 — dismiss and undo |
+| `GET/POST/DELETE /user/devices/:id/shares` | finding 2 — the writers the table never had |
+| `DELETE /admin/tenants/:id` (+ `archive-preview`, `restore`) | finding 3 |
+| `DELETE /admin/devices/:id` (+ `restore`) | finding 3 — decommission |
+| `DELETE /admin/users/:id` (+ `restore`) | finding 3 — deactivate |
+
+### Decisions taken
+
+**Deletion is soft, everywhere.** Given the cascade rules, `archived_at` columns on
+`tenants`, `devices` and `users` beat a real `DELETE`. Archiving is enforced where it
+matters rather than only hiding rows from lists:
+- `firebaseAuth` rejects an archived user with 403 — their Firebase credentials still
+  exist, so without that check a "deleted" user would keep authenticating.
+- `getAccessibleDeviceOrThrow` rejects an archived device with **410 Gone**, so a caller
+  can tell "decommissioned" from "never existed".
+- Archiving a tenant archives its devices and users in one transaction, so no orphan keeps
+  access; a device in an archived tenant cannot be restored on its own.
+- Deactivating a user clears their push token and drops their explicit device grants.
+- Guards: you cannot deactivate yourself, and you cannot deactivate the last super admin.
+- `DELETE /admin/tenants/:id` requires `?confirm=true`, with `archive-preview` returning
+  the real device/user/reading counts so the UI can confirm with numbers.
+- Archived rows are filtered out of every list (`include_archived=true` to see them) and
+  out of the analytics counts, so a decommissioned device no longer inflates fleet health.
+
+**Dismiss is a column, not a delete** (`alerts.dismissed_at`). A leak alert is an
+operational event worth keeping after the user clears it off screen.
+
+**Sharing does not create accounts.** `POST .../shares` resolves an existing user by email
+and 404s otherwise. An invite flow with email delivery, tokens and expiry is a much larger
+feature than closing this gap.
+
+### Still open
+
+- **`daily_summaries` remains unread** (finding 6). Usage totals, refill counts and leak
+  flags are computed nightly and still have no endpoint.
+- No single-tenant read (`GET /admin/tenants/:id`).
+- Tank profiles still cannot be deleted, only overwritten.
+- Users still cannot set their own measurement/report interval.
+- The frontend uses rename and alert-dismiss; the sharing and archive endpoints have no UI
+  yet.

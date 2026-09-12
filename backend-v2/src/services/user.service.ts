@@ -176,7 +176,12 @@ export async function revokeClaimCode(tenantId: string, code: string): Promise<v
 
 export async function listDevicesForTenant(tenantId: string, userId: string) {
   const devices = await prisma.device.findMany({
-    where: { OR: [{ tenantId }, { userMappings: { some: { userId } } }] },
+    where: {
+      // Decommissioned devices drop out of the tenant's list; their history
+      // stays queryable by an admin.
+      archivedAt: null,
+      OR: [{ tenantId }, { userMappings: { some: { userId } } }],
+    },
     orderBy: [{ name: 'asc' }, { deviceId: 'asc' }],
   });
 
@@ -389,6 +394,94 @@ export async function acknowledgeAlert(device: Device, alertId: string, userId: 
     where: { id: alertId },
     data: { acknowledged: true, acknowledgedBy: userId, acknowledgedAt: new Date() },
   });
+}
+
+// --- Device sharing --------------------------------------------------------
+// user_device_mappings has always been read by getAccessibleDeviceOrThrow as a
+// third access path ("admin bypass, tenant match, or an explicit grant"), but
+// nothing in the codebase ever wrote a row - so the grant path could only ever
+// be empty and sharing a tank with a household member was unreachable. These
+// are the writers.
+
+/** Who can see this device, and how they got access. */
+export async function listDeviceShares(device: Device) {
+  const [tenantUsers, mappings] = await Promise.all([
+    device.tenantId
+      ? prisma.user.findMany({
+          where: { tenantId: device.tenantId },
+          select: { id: true, email: true, name: true, role: true },
+          orderBy: { email: 'asc' },
+        })
+      : Promise.resolve([]),
+    prisma.userDeviceMapping.findMany({
+      where: { deviceId: device.id },
+      include: { user: { select: { id: true, email: true, name: true, role: true } } },
+      orderBy: { createdAt: 'asc' },
+    }),
+  ]);
+
+  const tenantUserIds = new Set(tenantUsers.map((u) => u.id));
+
+  return {
+    device_id: device.deviceId,
+    // Access via tenant membership is implicit and cannot be revoked per
+    // device - the UI needs to know that so it does not offer a Remove button.
+    members: tenantUsers.map((u) => ({
+      user_id: u.id,
+      email: u.email,
+      name: u.name,
+      role: u.role,
+      via: 'tenant' as const,
+      revocable: false,
+    })),
+    // Explicit grants, which can be revoked. A grant to someone who is also a
+    // tenant member is redundant but harmless, so it is reported as such.
+    shares: mappings.map((m) => ({
+      user_id: m.user.id,
+      email: m.user.email,
+      name: m.user.name,
+      role: m.user.role,
+      via: 'share' as const,
+      revocable: true,
+      redundant: tenantUserIds.has(m.user.id),
+      shared_at: m.createdAt,
+    })),
+  };
+}
+
+/**
+ * Grant a specific user access to a device by email.
+ *
+ * Deliberately does NOT create accounts: the person must already have signed
+ * up, otherwise this becomes an invite system with email delivery, tokens and
+ * expiry, which is a much bigger feature.
+ */
+export async function shareDevice(device: Device, email: string) {
+  const target = await prisma.user.findFirst({ where: { email: email.trim() } });
+  if (!target) {
+    throw new HttpError(404, 'No AquaMind account with that email. Ask them to sign up first.');
+  }
+
+  if (device.tenantId && target.tenantId === device.tenantId) {
+    throw new HttpError(409, 'That person already has access through their tenant.');
+  }
+
+  try {
+    await prisma.userDeviceMapping.create({ data: { userId: target.id, deviceId: device.id } });
+  } catch (err) {
+    // @@unique([userId, deviceId]) - sharing twice is not an error.
+    if (!isUniqueConstraintError(err)) throw err;
+  }
+
+  return { user_id: target.id, email: target.email, name: target.name };
+}
+
+/** Revoke an explicit grant. Tenant-membership access is untouched by this. */
+export async function unshareDevice(device: Device, userId: string): Promise<void> {
+  const result = await prisma.userDeviceMapping.deleteMany({
+    where: { deviceId: device.id, userId },
+  });
+  if (result.count === 0) throw new HttpError(404, 'That user has no explicit share on this device');
 }
 
 export async function mintClaimCode(tenantId: string, userId: string) {

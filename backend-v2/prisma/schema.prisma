@@ -60,6 +60,10 @@ enum SyncMode {
 model Tenant {
   id        String   @id @default(uuid()) @db.Char(36)
   name      String   @db.VarChar(255)
+  // Soft delete. Tenant -> User and Tenant -> Device are onDelete: Cascade, so
+  // a hard delete would silently destroy every user, device, measurement and
+  // alert underneath. Archiving hides the tenant and blocks access instead.
+  archivedAt DateTime? @map("archived_at")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -79,6 +83,8 @@ model User {
   tenantId    String?   @map("tenant_id") @db.Char(36)
   role        Role      @default(user)
   fcmToken    String?   @map("fcm_token") @db.Text
+  // Soft delete, so acknowledged-by references on historic alerts survive.
+  archivedAt  DateTime? @map("archived_at")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
@@ -101,6 +107,10 @@ model Device {
   status          DeviceStatus @default(offline)
   lastOtaCheckAt  DateTime?    @map("last_ota_check_at")
   configVersion   Int          @default(0) @map("config_version")
+  // Decommissioned rather than deleted: the measurement history stays
+  // queryable and the hardware ID stays claimed, so a retired sensor cannot
+  // silently re-pair itself.
+  archivedAt      DateTime?    @map("archived_at")
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt @map("updated_at")
 

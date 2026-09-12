@@ -21,11 +21,16 @@ function toRawUserDto(user: User) {
   };
 }
 
-export async function listDevices(filters: { tenantId?: string; status?: DeviceStatus }) {
+export async function listDevices(filters: {
+  tenantId?: string;
+  status?: DeviceStatus;
+  includeArchived?: boolean;
+}) {
   const devices = await prisma.device.findMany({
     where: {
       ...(filters.tenantId ? { tenantId: filters.tenantId } : {}),
       ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.includeArchived ? {} : { archivedAt: null }),
     },
     include: { tenant: true },
     orderBy: { createdAt: 'desc' },
@@ -177,9 +182,9 @@ export async function analyticsSummary() {
   startOfToday.setHours(0, 0, 0, 0);
 
   const [totalDevices, onlineDevices, totalTenants, recentAlerts, todayMeasurements] = await Promise.all([
-    prisma.device.count(),
-    prisma.device.count({ where: { status: 'online' } }),
-    prisma.tenant.count(),
+    prisma.device.count({ where: { archivedAt: null } }),
+    prisma.device.count({ where: { status: 'online', archivedAt: null } }),
+    prisma.tenant.count({ where: { archivedAt: null } }),
     prisma.alert.count({ where: { createdAt: { gt: new Date(Date.now() - 24 * 60 * 60 * 1000) } } }),
     prisma.measurement.count({ where: { timestamp: { gte: startOfToday } } }),
   ]);
@@ -194,9 +199,16 @@ export async function analyticsSummary() {
   };
 }
 
-export async function listTenants() {
+export async function listTenants(opts: { includeArchived?: boolean } = {}) {
   const tenants = await prisma.tenant.findMany({
-    include: { _count: { select: { devices: true, users: true } } },
+    where: opts.includeArchived ? {} : { archivedAt: null },
+    // Counts exclude archived children, so an archived device does not inflate
+    // a tenant's device count in the admin list.
+    include: {
+      _count: {
+        select: { devices: { where: { archivedAt: null } }, users: { where: { archivedAt: null } } },
+      },
+    },
     orderBy: { createdAt: 'desc' },
   });
 
@@ -318,6 +330,144 @@ export async function updateDevice(
   };
 }
 
+// --- Soft delete -----------------------------------------------------------
+// Nothing here hard-deletes. Tenant -> User, Tenant -> Device and
+// Device -> everything are onDelete: Cascade, so a real DELETE on a tenant row
+// would destroy every reading ever taken under it. Archiving blocks access
+// (see firebaseAuth and getAccessibleDeviceOrThrow) while keeping history.
+
+export interface ArchiveSummary {
+  tenants: number;
+  devices: number;
+  users: number;
+  measurements: number;
+}
+
+/** What a tenant archive would take with it, for a confirmation prompt. */
+export async function previewTenantArchive(tenantId: string): Promise<ArchiveSummary> {
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+  if (!tenant) throw new HttpError(404, 'Tenant not found');
+
+  const devices = await prisma.device.findMany({ where: { tenantId }, select: { id: true } });
+  const [users, measurements] = await Promise.all([
+    prisma.user.count({ where: { tenantId, archivedAt: null } }),
+    devices.length
+      ? prisma.measurement.count({ where: { deviceId: { in: devices.map((d) => d.id) } } })
+      : Promise.resolve(0),
+  ]);
+
+  return { tenants: 1, devices: devices.length, users, measurements };
+}
+
+/**
+ * Archive a tenant together with its devices and users, so no orphan keeps
+ * access. One timestamp for the whole set makes the group obvious in the data.
+ */
+export async function archiveTenant(tenantId: string): Promise<ArchiveSummary> {
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+  if (!tenant) throw new HttpError(404, 'Tenant not found');
+  if (tenant.archivedAt) throw new HttpError(409, 'Tenant is already archived');
+
+  const summary = await previewTenantArchive(tenantId);
+  const archivedAt = new Date();
+
+  await prisma.$transaction([
+    prisma.tenant.update({ where: { id: tenantId }, data: { archivedAt } }),
+    prisma.device.updateMany({ where: { tenantId, archivedAt: null }, data: { archivedAt } }),
+    prisma.user.updateMany({ where: { tenantId, archivedAt: null }, data: { archivedAt } }),
+  ]);
+
+  return summary;
+}
+
+/** Bring a tenant back, along with everything archived under it. */
+export async function restoreTenant(tenantId: string): Promise<ArchiveSummary> {
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+  if (!tenant) throw new HttpError(404, 'Tenant not found');
+  if (!tenant.archivedAt) throw new HttpError(409, 'Tenant is not archived');
+
+  const [devices, users] = await prisma.$transaction([
+    prisma.device.updateMany({ where: { tenantId }, data: { archivedAt: null } }),
+    prisma.user.updateMany({ where: { tenantId }, data: { archivedAt: null } }),
+  ]);
+  await prisma.tenant.update({ where: { id: tenantId }, data: { archivedAt: null } });
+
+  return { tenants: 1, devices: devices.count, users: users.count, measurements: 0 };
+}
+
+/** Decommission a device. Its readings stay; the API stops serving it. */
+export async function archiveDevice(deviceIdString: string) {
+  const device = await prisma.device.findUnique({ where: { deviceId: deviceIdString } });
+  if (!device) throw new HttpError(404, 'Device not found');
+  if (device.archivedAt) throw new HttpError(409, 'Device is already decommissioned');
+
+  const measurements = await prisma.measurement.count({ where: { deviceId: device.id } });
+  await prisma.device.update({ where: { id: device.id }, data: { archivedAt: new Date() } });
+  return { device_id: device.deviceId, measurements_retained: measurements };
+}
+
+export async function restoreDevice(deviceIdString: string) {
+  const device = await prisma.device.findUnique({ where: { deviceId: deviceIdString } });
+  if (!device) throw new HttpError(404, 'Device not found');
+  if (!device.archivedAt) throw new HttpError(409, 'Device is not decommissioned');
+
+  // A device in an archived tenant would come back unreachable anyway.
+  if (device.tenantId) {
+    const tenant = await prisma.tenant.findUnique({ where: { id: device.tenantId } });
+    if (tenant?.archivedAt) throw new HttpError(409, 'Restore its tenant first');
+  }
+
+  await prisma.device.update({ where: { id: device.id }, data: { archivedAt: null } });
+  return { device_id: device.deviceId };
+}
+
+/**
+ * Deactivate a user. Their Firebase credentials still exist, so the block is
+ * enforced in firebaseAuth rather than by removing the row - historic
+ * "acknowledged by" references on alerts stay intact.
+ */
+export async function archiveUser(userId: string, actingUserId: string) {
+  if (userId === actingUserId) throw new HttpError(409, 'You cannot deactivate your own account');
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new HttpError(404, 'User not found');
+  if (user.archivedAt) throw new HttpError(409, 'User is already deactivated');
+
+  // Locking out the last super admin would leave nobody able to undo it.
+  if (user.role === 'super_admin') {
+    const remaining = await prisma.user.count({
+      where: { role: 'super_admin', archivedAt: null, NOT: { id: userId } },
+    });
+    if (remaining === 0) throw new HttpError(409, 'Cannot deactivate the last super admin');
+  }
+
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: userId },
+      // Clear the push token too, or a deactivated account keeps receiving alerts.
+      data: { archivedAt: new Date(), fcmToken: null },
+    }),
+    // Explicit device grants go with them; tenant access is handled by the flag.
+    prisma.userDeviceMapping.deleteMany({ where: { userId } }),
+  ]);
+
+  return { user_id: userId, email: user.email };
+}
+
+export async function restoreUser(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new HttpError(404, 'User not found');
+  if (!user.archivedAt) throw new HttpError(409, 'User is not deactivated');
+
+  if (user.tenantId) {
+    const tenant = await prisma.tenant.findUnique({ where: { id: user.tenantId } });
+    if (tenant?.archivedAt) throw new HttpError(409, 'Restore their tenant first');
+  }
+
+  await prisma.user.update({ where: { id: userId }, data: { archivedAt: null } });
+  return { user_id: userId, email: user.email };
+}
+
 export async function createOrLinkUser(data: {
   firebaseUid: string;
   email: string;
@@ -397,10 +547,15 @@ export async function reissueDeviceToken(deviceId: string): Promise<string> {
   return createDeviceToken(deviceId);
 }
 
-export async function listUsers(filters: { tenantId?: string; search?: string }) {
+export async function listUsers(filters: {
+  tenantId?: string;
+  search?: string;
+  includeArchived?: boolean;
+}) {
   const users = await prisma.user.findMany({
     where: {
       ...(filters.tenantId ? { tenantId: filters.tenantId } : {}),
+      ...(filters.includeArchived ? {} : { archivedAt: null }),
       ...(filters.search
         ? {
             OR: [

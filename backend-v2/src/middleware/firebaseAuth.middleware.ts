@@ -38,6 +38,13 @@ export async function firebaseAuth(req: AuthRequest, res: Response, next: NextFu
       console.log(`[Auth] Auto-provisioned user + tenant: ${decoded.uid} (${user.email})`);
     }
 
+    // An archived account keeps its Firebase credentials, so without this an
+    // "deleted" user would still authenticate and reach every tenant route.
+    if (user.archivedAt) {
+      next(new HttpError(403, 'This account has been deactivated'));
+      return;
+    }
+
     req.user = user;
     next();
   } catch (error) {

@@ -229,6 +229,39 @@ router.get(
   })
 );
 
+// GET /api/v1/user/devices/:deviceId/shares - Who can see this device
+router.get(
+  '/devices/:deviceId/shares',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    res.json(await userService.listDeviceShares(req.device!));
+  })
+);
+
+const shareSchema = z.object({ email: z.string().email() });
+
+// POST /api/v1/user/devices/:deviceId/shares - Grant a household member
+// access to one device. This is the writer user_device_mappings never had.
+router.post(
+  '/devices/:deviceId/shares',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    const { email } = shareSchema.parse(req.body);
+    res.status(201).json(await userService.shareDevice(req.device!, email));
+  })
+);
+
+// DELETE /api/v1/user/devices/:deviceId/shares/:userId - Revoke a share.
+// Access that comes from tenant membership is not affected.
+router.delete(
+  '/devices/:deviceId/shares/:userId',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    await userService.unshareDevice(req.device!, req.params.userId);
+    res.status(204).send();
+  })
+);
+
 // GET /api/v1/user/devices/:deviceId/tank-profile - Tank shape/dimensions setup
 router.get(
   '/devices/:deviceId/tank-profile',
