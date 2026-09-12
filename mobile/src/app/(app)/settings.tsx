@@ -3,9 +3,12 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Switch, View } from 'react-native';
 
+import notifee from '@notifee/react-native';
+
 import { clearPersistedCache } from '@/api/queryClient';
 import { useAuth } from '@/auth/AuthProvider';
 import { hapticsEnabled, setHapticsEnabled, haptics } from '@/feedback/haptics';
+import { lastRegisteredToken, registerForPush } from '@/push/registration';
 import { Button, Card, Divider, Label, Text } from '@/ui/components';
 import { Screen } from '@/ui/Screen';
 import { radius, space, useTheme, type ThemePreference } from '@/ui/theme';
@@ -22,6 +25,8 @@ export default function SettingsScreen() {
   const { colors, preference, setPreference } = useTheme();
   const [haptic, setHaptic] = useState(hapticsEnabled);
   const [signingOut, setSigningOut] = useState(false);
+  const [pushRegistered, setPushRegistered] = useState(() => !!lastRegisteredToken());
+  const [enablingPush, setEnablingPush] = useState(false);
 
   async function signOut() {
     setSigningOut(true);
@@ -75,6 +80,39 @@ export default function SettingsScreen() {
             );
           })}
         </View>
+      </Card>
+
+      <Card accent={pushRegistered ? undefined : 'warn'}>
+        <Label>Alerts</Label>
+        {pushRegistered ? (
+          <Text variant="body" color="mutedForeground">
+            This phone receives tank alerts. Per-alert sounds and importance are yours to tune in
+            Android&rsquo;s notification settings for AquaMind.
+          </Text>
+        ) : (
+          <>
+            <Text variant="body" color="mutedForeground">
+              Notifications are off, so a low tank or a leak will not reach this phone.
+            </Text>
+            <Button
+              title="Turn on alerts"
+              variant="secondary"
+              loading={enablingPush}
+              onPress={async () => {
+                setEnablingPush(true);
+                try {
+                  const result = await registerForPush();
+                  setPushRegistered(result.granted);
+                  // Permission denied twice is permanent from in-app: Android
+                  // only grants it from system settings after that.
+                  if (!result.granted) await notifee.openNotificationSettings();
+                } finally {
+                  setEnablingPush(false);
+                }
+              }}
+            />
+          </>
+        )}
       </Card>
 
       <Card>

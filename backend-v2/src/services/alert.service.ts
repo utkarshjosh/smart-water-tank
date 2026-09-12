@@ -1,8 +1,27 @@
 import { AlertSeverity, AlertType } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { getMessaging } from '../config/firebase';
 import { env } from '../config/env';
+import { PushData, sendNotificationToTenant } from './fcm.service';
 import { computeLevelPercent } from './tank-profile.service';
+
+// Android notification channels are created by the app at first launch and
+// their sound is immutable afterwards, so the id carries a version. The server
+// picks the channel per severity; anything unknown stays quiet.
+const CHANNEL_BY_SEVERITY: Record<AlertSeverity, string> = {
+  critical: 'aquamind_critical_v1',
+  high: 'aquamind_high_v1',
+  medium: 'aquamind_info_v1',
+  low: 'aquamind_info_v1',
+};
+
+// Human titles, so a lock screen says "Tank low" rather than "tank_low".
+const TITLE_BY_TYPE: Record<AlertType, string> = {
+  tank_full: 'Tank full',
+  tank_low: 'Tank low',
+  battery_low: 'Battery low',
+  device_offline: 'Device offline',
+  leak_detected: 'Possible leak',
+};
 
 export async function processAlertsForMeasurement(
   deviceId: string,
@@ -42,7 +61,8 @@ export async function processAlertsForMeasurement(
           'tank_full',
           'high',
           `Tank is full (${levelPercent.toFixed(0)}%)`,
-          { level_percent: levelPercent, threshold_pct: config.tankFullThresholdPct.toNumber() }
+          { level_percent: levelPercent, threshold_pct: config.tankFullThresholdPct.toNumber() },
+          { level_percent: levelPercent.toFixed(1) }
         );
       }
 
@@ -57,7 +77,8 @@ export async function processAlertsForMeasurement(
           'tank_low',
           'critical',
           `Tank is low (${levelPercent.toFixed(0)}%)`,
-          { level_percent: levelPercent, threshold_pct: config.tankLowThresholdPct.toNumber() }
+          { level_percent: levelPercent, threshold_pct: config.tankLowThresholdPct.toNumber() },
+          { level_percent: levelPercent.toFixed(1) }
         );
       }
     } else {
@@ -141,7 +162,10 @@ async function createAndSendAlert(
   type: AlertType,
   severity: AlertSeverity,
   message: string,
-  payload: unknown
+  payload: unknown,
+  // Extras the app reads straight off the push: enough to update the
+  // home-screen widget without opening a connection.
+  extras: PushData = {}
 ): Promise<void> {
   // Don't create duplicate alerts of the same type for the same device
   // within an hour.
@@ -159,47 +183,78 @@ async function createAndSendAlert(
     data: { deviceId, tenantId, type, severity, message, payload: payload as any },
   });
 
-  await sendFCMNotifications(tenantId, alert.id, alert.deviceId, alert.type, alert.severity, message);
+  await sendAlertNotification(tenantId, alert.id, deviceId, type, severity, message, extras);
 }
 
-async function sendFCMNotifications(
+/**
+ * Shapes one alert into its push envelope. Pure and exported so the contract
+ * the app depends on - a lock-screen title, and enough data to repaint the
+ * home-screen widget without a request - is covered by tests.
+ */
+export function buildAlertNotification(input: {
+  alertId: string;
+  type: AlertType;
+  severity: AlertSeverity;
+  message: string;
+  deviceName: string;
+  hardwareDeviceId: string;
+  online?: boolean;
+  asOf: Date;
+  extras?: PushData;
+}): { title: string; body: string; data: PushData } {
+  return {
+    title: `${TITLE_BY_TYPE[input.type]} · ${input.deviceName}`,
+    body: input.message,
+    data: {
+      alert_id: input.alertId,
+      // Hardware id: what /api/v1/user/devices/:deviceId takes. The internal
+      // UUID is meaningless to the app.
+      device_id: input.hardwareDeviceId,
+      device_name: input.deviceName,
+      type: input.type,
+      severity: input.severity,
+      channel_id: CHANNEL_BY_SEVERITY[input.severity],
+      online: input.online,
+      as_of: input.asOf.toISOString(),
+      ...input.extras,
+    },
+  };
+}
+
+async function sendAlertNotification(
   tenantId: string,
   alertId: string,
   deviceId: string,
   type: AlertType,
   severity: AlertSeverity,
-  message: string
+  message: string,
+  extras: PushData
 ): Promise<void> {
-  const users = await prisma.user.findMany({
-    where: { tenantId, fcmToken: { not: null } },
-    select: { fcmToken: true },
+  // The hardware id is what the app addresses devices by; the internal UUID is
+  // meaningless to it, and the name is what the notification should say.
+  const device = await prisma.device.findUnique({
+    where: { id: deviceId },
+    select: { deviceId: true, name: true, status: true },
   });
 
-  const tokens = users.map((u) => u.fcmToken).filter((t): t is string => !!t);
-  if (tokens.length === 0) {
-    console.log(`No users with FCM tokens for tenant ${tenantId}`);
-    return;
-  }
+  const deviceName = device?.name || device?.deviceId || 'Your tank';
 
-  const notification = {
-    title: 'Water Tank Alert',
-    body: message,
-    data: { alert_id: alertId, device_id: deviceId, type, severity },
-  };
+  const envelope = buildAlertNotification({
+    alertId,
+    type,
+    severity,
+    message,
+    deviceName,
+    hardwareDeviceId: device?.deviceId ?? '',
+    online: device ? device.status === 'online' : undefined,
+    asOf: new Date(),
+    extras,
+  });
 
-  try {
-    const response = await getMessaging().sendEachForMulticast({
-      tokens,
-      notification: { title: notification.title, body: notification.body },
-      data: notification.data,
-      android: { priority: 'high' as const },
-      apns: { headers: { 'apns-priority': '10' } },
-    });
+  const sent = await sendNotificationToTenant(tenantId, envelope.title, envelope.body, envelope.data);
 
+  if (sent > 0) {
     await prisma.alert.update({ where: { id: alertId }, data: { deliveredToFirebase: true } });
-
-    console.log(`Sent ${response.successCount} FCM notifications for alert ${alertId}`);
-  } catch (error) {
-    console.error('Error sending FCM notifications:', error);
   }
+  console.log(`[alerts] ${type} for ${deviceName}: ${sent} notification(s) sent`);
 }

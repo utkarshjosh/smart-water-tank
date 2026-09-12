@@ -8,11 +8,32 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { persister, queryClient } from '@/api/queryClient';
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
+import { usePushMessages } from '@/push/foreground';
+import { registerForPush, watchTokenRefresh } from '@/push/registration';
+import { useNotificationRouting } from '@/push/routing';
 import { ThemeProvider, useTheme } from '@/ui/theme';
 
 // Held until auth resolves, so the first frame the user sees is the right
 // screen. v1 rendered null here and flashed white on every launch.
 void SplashScreen.preventAutoHideAsync();
+
+/**
+ * Push is registered once a user exists, never before: the token is stored
+ * against an account, and asking for the notification permission on the
+ * sign-in screen asks for something the app cannot yet use.
+ */
+function usePushLifecycle(signedIn: boolean) {
+  useEffect(() => {
+    if (!signedIn) return;
+
+    // A denied permission is a legitimate answer; the app works without push.
+    void registerForPush().catch(() => {});
+    return watchTokenRefresh();
+  }, [signedIn]);
+
+  usePushMessages(signedIn);
+  useNotificationRouting(signedIn);
+}
 
 function AuthGate() {
   const { user, initialising } = useAuth();
@@ -34,6 +55,8 @@ function AuthGate() {
   useEffect(() => {
     if (!initialising) void SplashScreen.hideAsync();
   }, [initialising]);
+
+  usePushLifecycle(!initialising && !!user);
 
   return null;
 }

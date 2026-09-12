@@ -53,6 +53,38 @@ export function writeWidgetState(tanks: WidgetTank[]): void {
 }
 
 /**
+ * Merges what a single push told us into the stored state.
+ *
+ * A push is a partial truth — it knows this tank's level and status, nothing
+ * about the others — so it patches one entry and leaves the rest alone. An
+ * unknown device is inserted, because the push may be the first thing this
+ * install has heard about a tank paired elsewhere.
+ */
+export function mergeTank(patch: Partial<WidgetTank> & { deviceId: string }): void {
+  const state = readWidgetState();
+  const index = state.tanks.findIndex((tank) => tank.deviceId === patch.deviceId);
+
+  const base: WidgetTank =
+    index >= 0
+      ? state.tanks[index]
+      : {
+          deviceId: patch.deviceId,
+          name: patch.deviceId,
+          levelPercent: null,
+          volumeL: null,
+          capacityL: null,
+          asOf: null,
+          stale: false,
+          online: true,
+          alert: null,
+        };
+
+  const merged = { ...base, ...patch };
+  const tanks = index >= 0 ? state.tanks.map((tank, i) => (i === index ? merged : tank)) : [...state.tanks, merged];
+  writeWidgetState(tanks);
+}
+
+/**
  * The tank a widget instance should show.
  *
  * Most households have exactly one tank, so an unconfigured widget showing the

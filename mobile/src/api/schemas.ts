@@ -102,6 +102,19 @@ export const deviceAlertsSchema = z.object({
   alerts: z.array(alertSchema),
 });
 
+/** One row of the tenant-wide feed: the same alert, plus which tank it is about. */
+export const feedAlertSchema = alertSchema.extend({
+  device_id: z.string(),
+  device_name: z.string(),
+});
+export type FeedAlert = z.infer<typeof feedAlertSchema>;
+
+export const alertFeedSchema = z.object({
+  alerts: z.array(feedAlertSchema),
+  next_cursor: z.string().nullable(),
+  unacknowledged_count: z.number(),
+});
+
 export const tankProfileSchema = z.object({
   shape: z.enum(['cylindrical', 'cuboidal']),
   parallel_unit_count: z.number(),

@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-import { useCurrentReading, useDevices, useTankProfile } from '@/api/queries';
+import { useAlertFeed, useCurrentReading, useDevices, useTankProfile } from '@/api/queries';
 import type { DeviceSummary } from '@/api/schemas';
 import {
   formatAge,
@@ -37,6 +37,8 @@ export default function TanksScreen() {
 
   const profile = useTankProfile(selected?.id);
   const reading = useCurrentReading(selected?.id);
+  const feed = useAlertFeed();
+  const unacknowledged = feed.data?.pages[0]?.unacknowledged_count ?? 0;
 
   // Keep the home-screen widget in step with whatever the app just learned.
   useEffect(() => {
@@ -133,6 +135,24 @@ export default function TanksScreen() {
           />
         </Card>
       )}
+
+      <Pressable onPress={() => router.push('/alerts')} accessibilityRole="button">
+        <Card accent={unacknowledged > 0 ? 'warn' : undefined}>
+          <View style={styles.activityRow}>
+            <View>
+              <Text variant="heading">Activity</Text>
+              <Text variant="caption" color="mutedForeground">
+                {unacknowledged > 0
+                  ? `${unacknowledged} alert${unacknowledged === 1 ? '' : 's'} need attention`
+                  : 'Nothing needs attention'}
+              </Text>
+            </View>
+            <Text variant="heading" color="mutedForeground">
+              ›
+            </Text>
+          </View>
+        </Card>
+      </Pressable>
 
       {reading.data && (
         <Card>
@@ -261,5 +281,6 @@ const styles = StyleSheet.create({
   heroText: { flex: 1, gap: space.xs },
   statusRow: { alignItems: 'center', flexDirection: 'row', gap: space.sm },
   metrics: { flexDirection: 'row', justifyContent: 'space-between' },
+  activityRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   metric: { gap: 2 },
 });

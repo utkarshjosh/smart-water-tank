@@ -8,7 +8,7 @@ import * as userService from '../services/user.service';
 import * as deviceService from '../services/device.service';
 import * as tankProfileService from '../services/tank-profile.service';
 import * as firmwareService from '../services/firmware.service';
-import { updateUserFCMToken } from '../services/fcm.service';
+import { registerPushToken, removePushToken, updateUserFCMToken } from '../services/fcm.service';
 import { exportUserMeasurements } from '../services/measurement-export.service';
 
 const router = express.Router();
@@ -250,11 +250,70 @@ router.post(
   })
 );
 
+const tenantAlertsQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(100).default(30),
+  cursor: z.string().uuid().optional(),
+  type: z.enum(['tank_full', 'tank_low', 'battery_low', 'device_offline', 'leak_detected']).optional(),
+  acknowledged: z
+    .enum(['true', 'false'])
+    .transform((value) => value === 'true')
+    .optional(),
+});
+
+// GET /api/v1/user/alerts - Tenant-wide alert feed, newest first.
+// One request for the whole feed; the per-device route below stays for a
+// single device's history.
+router.get(
+  '/alerts',
+  asyncHandler(async (req: AuthRequest, res) => {
+    const { limit, cursor, type, acknowledged } = tenantAlertsQuerySchema.parse(req.query);
+    res.json(await userService.listTenantAlerts(req.user!.tenantId!, { limit, cursor, type, acknowledged }));
+  })
+);
+
+// POST /api/v1/user/alerts/:alertId/acknowledge - Acknowledge by alert id
+// alone, which is all a notification action carries.
+router.post(
+  '/alerts/:alertId/acknowledge',
+  asyncHandler(async (req: AuthRequest, res) => {
+    await userService.acknowledgeTenantAlert(req.user!.tenantId!, req.params.alertId, req.user!.id);
+    res.json({ success: true });
+  })
+);
+
+const pushTokenSchema = z.object({
+  token: z.string().min(1).max(4096),
+  platform: z.enum(['android', 'ios', 'web']).default('android'),
+});
+
+// POST /api/v1/user/push-tokens - Register this install for push.
+// One row per install, so a phone and a tablet both ring.
+router.post(
+  '/push-tokens',
+  asyncHandler(async (req: AuthRequest, res) => {
+    const { token, platform } = pushTokenSchema.parse(req.body);
+    await registerPushToken(req.user!.id, token, platform);
+    res.status(201).json({ success: true });
+  })
+);
+
+// DELETE /api/v1/user/push-tokens - Revoke on sign-out, so the backend stops
+// pushing this tenant's alerts to a phone nobody is signed in on.
+router.delete(
+  '/push-tokens',
+  asyncHandler(async (req: AuthRequest, res) => {
+    const { token } = pushTokenSchema.pick({ token: true }).parse(req.body);
+    await removePushToken(req.user!.id, token);
+    res.json({ success: true });
+  })
+);
+
 const fcmTokenSchema = z.object({
   fcm_token: z.string().min(1),
 });
 
-// POST /api/v1/user/fcm-token - Update FCM token
+// POST /api/v1/user/fcm-token - Deprecated alias of POST /push-tokens, kept
+// while v1 app builds are still installed.
 router.post(
   '/fcm-token',
   asyncHandler(async (req: AuthRequest, res) => {

@@ -5,9 +5,11 @@ import { TankWidget } from '@/widget/TankWidget';
 import { pickTank, readWidgetState, writeWidgetState, type WidgetTank } from '@/widget/state';
 
 /**
- * Pushes freshly-fetched device data into widget state and repaints placed
- * widgets. Called whenever the app learns something new, so an open app keeps
- * the home screen honest without waiting for the 30-minute system refresh.
+ * Writes device data into widget state and repaints placed widgets.
+ *
+ * Called whenever the app learns something new, so an open app keeps the home
+ * screen honest without waiting for the 30-minute system refresh. The push
+ * handler calls `repaintWidgets` directly after merging its own patch.
  */
 
 function toWidgetTank(device: DeviceSummary, capacityL: number | null): WidgetTank {
@@ -24,12 +26,8 @@ function toWidgetTank(device: DeviceSummary, capacityL: number | null): WidgetTa
   };
 }
 
-export async function syncWidgets(
-  devices: DeviceSummary[],
-  capacities: Record<string, number | null> = {}
-): Promise<void> {
-  writeWidgetState(devices.map((device) => toWidgetTank(device, capacities[device.id] ?? null)));
-
+/** Repaints from whatever is already stored. Never throws. */
+export async function repaintWidgets(): Promise<void> {
   const state = readWidgetState();
   try {
     await requestWidgetUpdate({
@@ -40,4 +38,12 @@ export async function syncWidgets(
     // No widget placed, or the launcher refused the update. Never surface this:
     // state is written either way, so the next render is still correct.
   }
+}
+
+export async function syncWidgets(
+  devices: DeviceSummary[],
+  capacities: Record<string, number | null> = {}
+): Promise<void> {
+  writeWidgetState(devices.map((device) => toWidgetTank(device, capacities[device.id] ?? null)));
+  await repaintWidgets();
 }

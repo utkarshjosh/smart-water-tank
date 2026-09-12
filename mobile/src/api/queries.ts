@@ -1,4 +1,4 @@
-import { useQuery, type UseQueryResult } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, type UseQueryResult } from '@tanstack/react-query';
 
 import { api } from '@/api/endpoints';
 import { ApiError } from '@/api/client';
@@ -14,8 +14,10 @@ export const queryKeys = {
   me: ['me'] as const,
   devices: ['devices'] as const,
   current: (deviceId: string) => ['device', deviceId, 'current'] as const,
+  /** Tenant-wide feed. Distinct from the per-device history below. */
+  alerts: ['alerts'] as const,
   history: (deviceId: string, days: number) => ['device', deviceId, 'history', days] as const,
-  alerts: (deviceId: string) => ['device', deviceId, 'alerts'] as const,
+  deviceAlerts: (deviceId: string) => ['device', deviceId, 'alerts'] as const,
   tankProfile: (deviceId: string) => ['device', deviceId, 'tank-profile'] as const,
 };
 
@@ -69,5 +71,19 @@ export function useTankProfile(deviceId: string | undefined) {
     // Geometry changes only when the user edits it.
     staleTime: 30 * 60_000,
     queryFn: () => api.getTankProfile(deviceId!),
+  });
+}
+
+/**
+ * The Activity feed. One request per page across every tank, replacing the
+ * per-device fan-out the old app did on every launch.
+ */
+export function useAlertFeed() {
+  return useInfiniteQuery({
+    queryKey: queryKeys.alerts,
+    queryFn: ({ pageParam }) => api.listAlerts({ limit: 30, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+    staleTime: 60_000,
   });
 }

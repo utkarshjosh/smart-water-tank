@@ -1,4 +1,4 @@
-import { Device } from '@prisma/client';
+import { AlertType, Device } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http-error';
 import { isUniqueConstraintError } from '../lib/prisma-errors';
@@ -247,6 +247,70 @@ export async function getDeviceAlerts(device: Device, limit: number) {
 export async function acknowledgeAlert(device: Device, alertId: string, userId: string): Promise<void> {
   const alert = await prisma.alert.findFirst({ where: { id: alertId, deviceId: device.id } });
   if (!alert) throw new HttpError(404, 'Alert not found');
+  await prisma.alert.update({
+    where: { id: alertId },
+    data: { acknowledged: true, acknowledgedBy: userId, acknowledgedAt: new Date() },
+  });
+}
+
+/**
+ * Tenant-wide alert feed, newest first, cursor-paginated.
+ *
+ * Replaces the app fanning out one request per device and sorting client-side.
+ * Backed by the existing @@index([tenantId, createdAt(sort: Desc)]).
+ */
+export async function listTenantAlerts(
+  tenantId: string,
+  options: { limit: number; cursor?: string; type?: AlertType; acknowledged?: boolean }
+) {
+  const { limit, cursor, type, acknowledged } = options;
+
+  const rows = await prisma.alert.findMany({
+    where: {
+      tenantId,
+      ...(type ? { type } : {}),
+      ...(acknowledged === undefined ? {} : { acknowledged }),
+    },
+    // id breaks ties so a cursor can never skip or repeat alerts that share a
+    // timestamp — two thresholds crossing on one measurement does that.
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: limit + 1,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    include: { device: { select: { deviceId: true, name: true } } },
+  });
+
+  const page = rows.slice(0, limit);
+
+  return {
+    alerts: page.map((a) => ({
+      id: a.id,
+      device_id: a.device.deviceId,
+      device_name: a.device.name || a.device.deviceId,
+      type: a.type,
+      severity: a.severity,
+      message: a.message,
+      payload: a.payload,
+      acknowledged: a.acknowledged,
+      created_at: a.createdAt,
+    })),
+    // Null rather than absent, so the client has one thing to check.
+    next_cursor: rows.length > limit ? page[page.length - 1].id : null,
+    unacknowledged_count: await prisma.alert.count({ where: { tenantId, acknowledged: false } }),
+  };
+}
+
+/**
+ * Acknowledge by alert id alone, scoped to the caller's tenant.
+ *
+ * A notification action carries the alert id and nothing else, so requiring the
+ * device id (as the nested route does) would mean a lookup before the user's
+ * tap could do anything.
+ */
+export async function acknowledgeTenantAlert(tenantId: string, alertId: string, userId: string): Promise<void> {
+  const alert = await prisma.alert.findFirst({ where: { id: alertId, tenantId } });
+  if (!alert) throw new HttpError(404, 'Alert not found');
+  if (alert.acknowledged) return;
+
   await prisma.alert.update({
     where: { id: alertId },
     data: { acknowledged: true, acknowledgedBy: userId, acknowledgedAt: new Date() },

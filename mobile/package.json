@@ -12,8 +12,10 @@
     "lint": "expo lint"
   },
   "dependencies": {
+    "@notifee/react-native": "^9.1.8",
     "@react-native-firebase/app": "26.4.0",
     "@react-native-firebase/auth": "26.4.0",
+    "@react-native-firebase/messaging": "^26.4.0",
     "@react-native-google-signin/google-signin": "16.1.5",
     "@shopify/react-native-skia": "2.11.2",
     "@tanstack/query-sync-storage-persister": "5.102.8",

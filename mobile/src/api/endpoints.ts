@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { request } from '@/api/client';
 import {
+  alertFeedSchema,
   claimCodeSchema,
   claimStatusSchema,
   currentReadingSchema,
@@ -41,6 +42,24 @@ export const api = {
 
   acknowledgeAlert: (deviceId: string, alertId: string) =>
     request(`${BASE}/devices/${id(deviceId)}/alerts/${id(alertId)}/acknowledge`, okSchema, { method: 'POST' }),
+
+  /** Tenant-wide feed. One request for every tank, cursor-paginated. */
+  listAlerts: (options: { limit?: number; cursor?: string; acknowledged?: boolean } = {}) => {
+    const params = new URLSearchParams({ limit: String(options.limit ?? 30) });
+    if (options.cursor) params.set('cursor', options.cursor);
+    if (options.acknowledged !== undefined) params.set('acknowledged', String(options.acknowledged));
+    return request(`${BASE}/alerts?${params.toString()}`, alertFeedSchema);
+  },
+
+  /** Acknowledge with only the alert id — all a notification action carries. */
+  acknowledgeAlertById: (alertId: string) =>
+    request(`${BASE}/alerts/${id(alertId)}/acknowledge`, okSchema, { method: 'POST' }),
+
+  registerPushToken: (token: string, platform = 'android') =>
+    request(`${BASE}/push-tokens`, okSchema, { method: 'POST', body: { token, platform } }),
+
+  removePushToken: (token: string) =>
+    request(`${BASE}/push-tokens`, okSchema, { method: 'DELETE', body: { token } }),
 
   getTankProfile: (deviceId: string) =>
     request(`${BASE}/devices/${id(deviceId)}/tank-profile`, tankProfileResponseSchema).then((r) => r.profile),

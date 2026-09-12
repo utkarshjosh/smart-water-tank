@@ -11,6 +11,7 @@ import {
 
 import { auth } from '@/auth/firebase';
 import { signInWithGoogle, signOutGoogle } from '@/auth/google';
+import { unregisterForPush } from '@/push/registration';
 
 /**
  * Auth state for the whole app.
@@ -66,8 +67,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await sendPasswordResetEmail(auth(), email.trim());
       },
       signOut: async () => {
-        // TODO(phase 3): revoke this device's push token before signing out,
-        // or the backend keeps pushing alerts to a signed-out phone.
+        // Revoke first: after signOut there is no token to authenticate the
+        // revoke call with, and the backend would keep pushing this tenant's
+        // alerts to a phone nobody is signed in on.
+        await unregisterForPush();
         await signOutGoogle();
         await signOut(auth());
       },

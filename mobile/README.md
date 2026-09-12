@@ -12,15 +12,28 @@ Plan of record: [`plans/android-app-v2.md`](../plans/android-app-v2.md).
 | 0 | Foundation — scaffold, tokens, primitives, typed API client, build profiles | done |
 | 1 | Auth that never annoys — native Firebase persistence, Google one-tap | done |
 | 2 | Data core — Tanks, detail, Skia charts, offline render | done against today's endpoints |
-| 3 | Alerts & push — channels, tokens, background handler, Activity feed | not started |
+| 3 | Alerts & push — channels, tokens, background handler, Activity feed | done |
 | 4 | Onboarding — pairing wizard done; tank-setup wizard outstanding | partial |
 | 5 | Widgets — 2×2 prototype wired; 2×1 / 4×2, config activity, freshness tiers | partial |
 | 6 | Polish — shared transitions, sound pack, full motion + a11y pass | not started |
 
-Phase 2 reads the endpoints that exist today. The backend additions in plan §5
-(`/user/overview`, bucketed `/series`, the tenant-wide alert feed, multi-device
-push tokens) are what take launch from `1 + 2N` requests to one — when they
-land, `src/api/endpoints.ts` is the only file that changes.
+Phase 3 shipped its backend half too: `/user/alerts` (tenant-wide feed),
+`/user/alerts/:id/acknowledge`, and `POST`/`DELETE /user/push-tokens` backed by
+a new `push_tokens` table. Still outstanding from plan §5 are `/user/overview`
+and the bucketed `/series`, which are what take launch from `1 + 2N` requests to
+one; when they land, `src/api/endpoints.ts` is the only file that changes.
+
+### Push
+
+Alerts arrive on three Android channels (`aquamind_critical_v1`,
+`aquamind_high_v1`, `aquamind_info_v1`), chosen server-side by severity. A
+channel's sound and importance are immutable once created, which is why the ids
+carry a version: shipping the phase-6 sound pack means creating `_v2` channels
+and migrating, not editing `src/push/channels.ts`.
+
+Every alert push carries the tank's level, so the background handler repaints
+the home-screen widget without making a request — the primary freshness tier in
+plan §4. Acknowledge works straight from the notification, in every app state.
 
 ## Setup
 

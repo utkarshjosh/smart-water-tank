@@ -24,6 +24,7 @@ export default function AppLayout() {
     >
       <Stack.Screen name="index" />
       <Stack.Screen name="device/[id]" />
+      <Stack.Screen name="alerts" />
       <Stack.Screen name="settings" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
       <Stack.Screen name="pair" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
     </Stack>
