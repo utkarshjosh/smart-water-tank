@@ -157,12 +157,18 @@ export async function updateMe(userId: string, input: { name?: string }) {
  * this account's alerts until some other login overwrites the token.
  */
 export async function clearFCMToken(userId: string): Promise<void> {
-  const user = await prisma.user.update({ where: { id: userId }, data: { fcmToken: null } });
-  // Fan-out reads push_tokens now, so clearing only the legacy column would
-  // leave a signed-out phone still receiving alerts. Scoped to that one token
-  // so a user's other installs keep working.
-  if (user.fcmToken === null) {
-    await prisma.pushToken.deleteMany({ where: { userId } });
+  // Read the token BEFORE nulling it: fan-out reads push_tokens now, so
+  // clearing only the legacy column would leave a signed-out phone still
+  // receiving alerts. Delete just that one row - this route carries no body,
+  // and wiping every row would sign push out on the user's other installs,
+  // which is the multi-device regression push_tokens exists to prevent.
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { fcmToken: true } });
+  if (!user) throw new HttpError(404, 'User not found');
+
+  await prisma.user.update({ where: { id: userId }, data: { fcmToken: null } });
+
+  if (user.fcmToken) {
+    await prisma.pushToken.deleteMany({ where: { userId, token: user.fcmToken } });
   }
 }
 
