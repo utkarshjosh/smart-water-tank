@@ -43,7 +43,8 @@ export function SegmentedControl<T extends string>({
             aria-selected={active}
             onClick={() => onChange(option.value)}
             className={cn(
-              'flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-label transition-all duration-quick ease-out',
+              // 44px on touch, tightening to 36px where a pointer is precise.
+              'flex h-11 shrink-0 items-center gap-1.5 rounded-md px-3 text-label transition-[background-color,color,box-shadow] duration-quick ease-out md:h-9',
               active ? 'bg-surface text-ink-1 shadow-raised' : 'text-ink-2 hover:text-ink-1'
             )}
           >

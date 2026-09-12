@@ -7,9 +7,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { StatTile } from '@/components/ui/stat-tile';
 import TankLevel from '@/components/TankLevel';
 import TankDiagram from '@/components/tank-setup/TankDiagram';
+import { UsageBars } from '@/components/charts/UsageBars';
 import { LiveIndicator } from './LiveIndicator';
 import { MiniHistory } from './MiniHistory';
-import { formatReading, useAlerts, useCurrent, useTankProfile } from './useDevice';
+import { formatReading, useAlerts, useCurrent, useTankProfile, useUsage } from './useDevice';
 
 /** One screenful: where the tank is right now, plus the last day at a glance. */
 export default function OverviewTab() {
@@ -17,6 +18,7 @@ export default function OverviewTab() {
   const current = useCurrent(deviceId);
   const profile = useTankProfile(deviceId);
   const alerts = useAlerts(deviceId);
+  const usage = useUsage(deviceId, 30);
 
   const active = alerts.data?.find(
     (a) => !a.acknowledged && (a.type === 'leak_detected' || a.type === 'tank_low')
@@ -77,7 +79,12 @@ export default function OverviewTab() {
           unit="%"
           loading={loading}
         />
-        <StatTile label="Volume" value={formatReading(reading?.volume_l)} unit="L" loading={loading} />
+        <StatTile
+          label="Volume"
+          value={formatReading(reading?.volume_l)}
+          unit="L"
+          loading={loading}
+        />
         <StatTile
           label="Temp"
           value={formatReading(reading?.temperature_c, 1)}
@@ -107,6 +114,59 @@ export default function OverviewTab() {
         </CardContent>
       </Card>
 
+      {/* Usage history, from the nightly aggregation the app never surfaced. */}
+      {usage.data && usage.data.days.length > 0 && (
+        <Card>
+          <CardHeader className="flex-row items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-label text-ink-2">Daily usage</CardTitle>
+              <p className="mt-0.5 text-caption text-ink-3">
+                Last {usage.data.totals.days_with_data} days with readings
+              </p>
+            </div>
+            {usage.data.totals.daily_average_l != null && (
+              <div className="text-right">
+                <p className="text-metric-sm tnum text-ink-1">
+                  {Math.round(usage.data.totals.daily_average_l)}
+                  <span className="text-label text-ink-3"> L</span>
+                </p>
+                <p className="text-caption text-ink-3">per day</p>
+              </div>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <UsageBars days={usage.data.days} />
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-caption text-ink-3">
+              <span className="inline-flex items-center gap-1.5">
+                <span aria-hidden className="h-2 w-2 rounded-sm bg-series-volume" />
+                Litres used
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-brand" />
+                {usage.data.totals.refill_events} refill
+                {usage.data.totals.refill_events === 1 ? '' : 's'}
+              </span>
+              {usage.data.totals.leak_days > 0 && (
+                <span className="inline-flex items-center gap-1.5 text-critical-text">
+                  <span aria-hidden className="h-2 w-2 rounded-sm bg-critical" />
+                  {usage.data.totals.leak_days} day
+                  {usage.data.totals.leak_days === 1 ? '' : 's'} flagged
+                </span>
+              )}
+              {usage.data.totals.days_aggregated < usage.data.totals.days_with_data && (
+                <span>
+                  {usage.data.totals.days_with_data - usage.data.totals.days_aggregated} day
+                  {usage.data.totals.days_with_data - usage.data.totals.days_aggregated === 1
+                    ? ''
+                    : 's'}{' '}
+                  pending overnight totals
+                </span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {profile.data && (
         <div className="flex items-center justify-center gap-3 pb-2 text-caption text-ink-3">
           <TankDiagram
@@ -115,7 +175,9 @@ export default function OverviewTab() {
             className="h-10"
           />
           <span>
-            {profile.data.parallel_unit_count > 1 ? `${profile.data.parallel_unit_count} tanks · ` : ''}
+            {profile.data.parallel_unit_count > 1
+              ? `${profile.data.parallel_unit_count} tanks · `
+              : ''}
             {profile.data.height_cm}cm tall · ~{profile.data.total_capacity_l.toFixed(0)}L capacity
           </span>
         </div>

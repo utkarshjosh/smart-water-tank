@@ -5,6 +5,10 @@ module.exports = {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
+      // Tailwind's smallest default is sm:640px, which is wider than every
+      // phone. `xs` is the line below which a 320px-class device needs things
+      // to drop out rather than overflow.
+      screens: { xs: '400px' },
       colors: {
         canvas: 'hsl(var(--canvas))',
         surface: {

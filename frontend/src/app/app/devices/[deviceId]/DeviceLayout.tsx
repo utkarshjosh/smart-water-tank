@@ -52,7 +52,12 @@ export default function DeviceLayout() {
     >
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-3">
-          <Button variant="ghost" size="sm" className="-ml-2" onClick={() => navigate('/app/devices')}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="-ml-2"
+            onClick={() => navigate('/app/devices')}
+          >
             <ArrowLeft size={16} />
             All tanks
           </Button>

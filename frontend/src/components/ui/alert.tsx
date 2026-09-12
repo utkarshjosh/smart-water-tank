@@ -15,11 +15,15 @@ const alertVariants = cva('flex gap-3 rounded-lg border px-4 py-3 text-body', {
   defaultVariants: { variant: 'info' },
 });
 
-const ICONS = { info: Info, good: CheckCircle, warning: Warning, critical: WarningOctagon } as const;
+const ICONS = {
+  info: Info,
+  good: CheckCircle,
+  warning: Warning,
+  critical: WarningOctagon,
+} as const;
 
 export interface AlertProps
-  extends React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof alertVariants> {
+  extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof alertVariants> {
   /** Set false only when the caller supplies its own leading element. */
   icon?: boolean;
 }
@@ -37,11 +41,12 @@ const Alert = React.forwardRef<HTMLDivElement, AlertProps>(
 );
 Alert.displayName = 'Alert';
 
-const AlertTitle = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLParagraphElement>>(
-  ({ className, ...props }, ref) => (
-    <p ref={ref} className={cn('text-label', className)} {...props} />
-  )
-);
+const AlertTitle = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLParagraphElement>
+>(({ className, ...props }, ref) => (
+  <p ref={ref} className={cn('text-label', className)} {...props} />
+));
 AlertTitle.displayName = 'AlertTitle';
 
 const AlertDescription = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(

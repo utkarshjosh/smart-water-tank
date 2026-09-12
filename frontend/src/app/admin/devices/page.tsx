@@ -1,9 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Cpu, MagnifyingGlass } from '@phosphor-icons/react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { ArrowCounterClockwise, Cpu, Eye, MagnifyingGlass, Trash } from '@phosphor-icons/react';
+import api from '@/lib/api';
 import { AppShell } from '@/components/shell';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
@@ -22,9 +26,46 @@ import {
 
 export default function AdminDevicesPage() {
   const navigate = useNavigate();
-  const devices = useAdminDevices();
-  const tenants = useAdminTenants();
+  const queryClient = useQueryClient();
   const [query, setQuery] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
+
+  const devices = useAdminDevices(showArchived);
+  const tenants = useAdminTenants();
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin'] });
+
+  // Decommission, not delete: readings stay and the hardware ID stays claimed,
+  // so a retired sensor cannot silently re-pair itself.
+  const decommission = useMutation({
+    mutationFn: (deviceId: string) => api.delete(`/api/v1/admin/devices/${deviceId}`),
+    onSuccess: (res) => {
+      invalidate();
+      const retained = (res.data as { measurements_retained?: number })?.measurements_retained;
+      toast.success('Device decommissioned', {
+        description:
+          retained != null
+            ? `${retained.toLocaleString()} readings retained. It can be restored.`
+            : 'It can be restored.',
+      });
+    },
+    onError: (err) =>
+      toast.error("Couldn't decommission that device", {
+        description: errorMessage(err, 'Please try again.'),
+      }),
+  });
+
+  const restore = useMutation({
+    mutationFn: (deviceId: string) => api.post(`/api/v1/admin/devices/${deviceId}/restore`),
+    onSuccess: () => {
+      invalidate();
+      toast.success('Device restored');
+    },
+    onError: (err) =>
+      toast.error("Couldn't restore that device", {
+        description: errorMessage(err, 'Please try again.'),
+      }),
+  });
 
   const list = devices.data ?? [];
   const online = list.filter((d) => d.status === 'online').length;
@@ -106,6 +147,41 @@ export default function AdminDevicesPage() {
         <span className="whitespace-nowrap text-ink-2">{relativeTime(d.last_seen)}</span>
       ),
     },
+    {
+      key: 'actions',
+      header: '',
+      align: 'right',
+      cell: (d) =>
+        d.archived_at ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={(e) => {
+              e.stopPropagation();
+              restore.mutate(d.device_id);
+            }}
+            loading={restore.isPending && restore.variables === d.device_id}
+          >
+            <ArrowCounterClockwise size={14} />
+            Restore
+          </Button>
+        ) : (
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label={`Decommission ${d.name || d.device_id}`}
+            onClick={(e) => {
+              // The row itself navigates to the detail page.
+              e.stopPropagation();
+              decommission.mutate(d.device_id);
+            }}
+            loading={decommission.isPending && decommission.variables === d.device_id}
+            className="h-9 w-9"
+          >
+            <Trash size={16} />
+          </Button>
+        ),
+    },
   ];
 
   return (
@@ -124,6 +200,10 @@ export default function AdminDevicesPage() {
                 }))}
                 endpoint="/api/v1/admin/measurements/export"
               />
+              <Button size="sm" variant="ghost" onClick={() => setShowArchived(!showArchived)}>
+                <Eye size={15} />
+                {showArchived ? 'Hide decommissioned' : 'Show decommissioned'}
+              </Button>
               <CreateDeviceDialog tenants={tenants.data ?? []} />
             </>
           }

@@ -1,6 +1,6 @@
 # Backend CRUD Audit
 
-**Status:** all four batches implemented. Two migrations to apply:
+**Status:** all findings closed. Two migrations to apply:
 `20260912090000_add_alert_dismissed_at` and `20260912093000_add_soft_delete` (both additive
 and nullable, safe on a live database). Verified by `npm run verify:crud` — 76 checks
 against a real MySQL/MariaDB, repeatable.
@@ -145,10 +145,21 @@ feature than closing this gap.
 
 ### Still open
 
-- **`daily_summaries` remains unread** (finding 6). Usage totals, refill counts and leak
-  flags are computed nightly and still have no endpoint.
+- ~~`daily_summaries` remains unread~~ — **done.** `GET /user/devices/:id/usage` reads it
+  for refill events and the leak flag (the two things only the nightly job can produce, since
+  both need the full ordered sequence of a day's readings) while litres used, min, avg and max
+  are derived at read time from measurements plus the *current* tank profile. The stored
+  volumes were frozen at aggregation time, so serving them directly would have made this page
+  disagree with every other number in the app the moment a profile was corrected — a test
+  asserts that correcting the profile moves the derived figures. A day with no summary yet
+  reports `used_l: null`, not a fake zero.
 - No single-tenant read (`GET /admin/tenants/:id`).
 - Tank profiles still cannot be deleted, only overwritten.
 - Users still cannot set their own measurement/report interval.
-- The frontend uses rename and alert-dismiss; the sharing and archive endpoints have no UI
-  yet.
+- ~~The sharing and archive endpoints have no UI~~ — **done.** Device sharing is on the
+  device Settings tab (household members shown as non-revocable, explicit shares revocable);
+  tenant archive/restore is on the admin Tenants tab behind a confirmation that fetches the
+  real device/user/reading counts; device decommission/restore is on the admin Devices list,
+  with a "Show decommissioned" toggle.
+- Daily usage is on the device Overview tab as a bar per day, with refill dots, flagged days
+  in red, and dashed slots for days still pending their overnight total.

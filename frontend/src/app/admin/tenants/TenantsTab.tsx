@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import { Buildings, Plus } from '@phosphor-icons/react';
+import { ArrowCounterClockwise, Buildings, Eye, Plus, Trash } from '@phosphor-icons/react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import api from '@/lib/api';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -9,13 +12,30 @@ import { Label } from '@/components/ui/label';
 import { StatTile } from '@/components/ui/stat-tile';
 import { relativeTime, timeSortValue } from '@/lib/time';
 import { errorMessage, useAdminTenants, type AdminTenant } from '../_shared/useAdminData';
+import { ArchiveTenantDialog } from '../_shared/ArchiveDialog';
 import { useCreateTenant } from './useUsers';
 
 export function TenantsTab() {
-  const tenants = useAdminTenants();
-  const createTenant = useCreateTenant();
+  const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
+  const [archiving, setArchiving] = useState<AdminTenant | null>(null);
+
+  const tenants = useAdminTenants(showArchived);
+  const createTenant = useCreateTenant();
+
+  const restore = useMutation({
+    mutationFn: (tenantId: string) => api.post(`/api/v1/admin/tenants/${tenantId}/restore`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin'] });
+      toast.success('Tenant restored');
+    },
+    onError: (err) =>
+      toast.error("Couldn't restore that tenant", {
+        description: errorMessage(err, 'Please try again.'),
+      }),
+  });
 
   const list = tenants.data ?? [];
   const totalDevices = list.reduce((sum, t) => sum + t.device_count, 0);
@@ -63,6 +83,33 @@ export function TenantsTab() {
         <span className="whitespace-nowrap text-ink-2">{relativeTime(t.created_at)}</span>
       ),
     },
+    {
+      key: 'actions',
+      header: '',
+      align: 'right',
+      cell: (t) =>
+        t.archived_at ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => restore.mutate(t.id)}
+            loading={restore.isPending && restore.variables === t.id}
+          >
+            <ArrowCounterClockwise size={14} />
+            Restore
+          </Button>
+        ) : (
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label={`Archive ${t.name}`}
+            onClick={() => setArchiving(t)}
+            className="h-9 w-9"
+          >
+            <Trash size={16} />
+          </Button>
+        ),
+    },
   ];
 
   return (
@@ -80,7 +127,11 @@ export function TenantsTab() {
         </Alert>
       )}
 
-      <div className="flex justify-end">
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button size="sm" variant="ghost" onClick={() => setShowArchived(!showArchived)}>
+          <Eye size={15} />
+          {showArchived ? 'Hide archived' : 'Show archived'}
+        </Button>
         <Button
           size="sm"
           variant={showForm ? 'secondary' : 'primary'}
@@ -134,6 +185,13 @@ export function TenantsTab() {
             description="A tenant owns devices and users. Create one to start provisioning."
           />
         }
+      />
+
+      <ArchiveTenantDialog
+        tenantId={archiving?.id ?? null}
+        tenantName={archiving?.name ?? ''}
+        open={archiving != null}
+        onOpenChange={(next) => !next && setArchiving(null)}
       />
     </div>
   );

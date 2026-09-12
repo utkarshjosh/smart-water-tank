@@ -42,7 +42,11 @@ export default function TenantDevicesPage() {
       variant="tenant"
       title="My tanks"
       action={
-        <Button size="sm" onClick={() => navigate('/app/onboarding')} className="hidden sm:inline-flex">
+        <Button
+          size="sm"
+          onClick={() => navigate('/app/onboarding')}
+          className="hidden sm:inline-flex"
+        >
           <Plus size={16} weight="bold" />
           Add device
         </Button>
@@ -74,7 +78,11 @@ export default function TenantDevicesPage() {
         {list.length > 0 && (
           <div className="grid grid-cols-3 gap-2">
             <StatTile label="Tanks" value={list.length} />
-            <StatTile label="Online" value={online} tone={online === list.length ? 'good' : 'default'} />
+            <StatTile
+              label="Online"
+              value={online}
+              tone={online === list.length ? 'good' : 'default'}
+            />
             <StatTile
               label="Attention"
               value={needsAttention}
@@ -111,7 +119,11 @@ export default function TenantDevicesPage() {
                 >
                   <div className="w-14 shrink-0">
                     {device.has_tank_profile && device.level_percent != null ? (
-                      <TankLevel level={device.level_percent} alert={device.active_alert} showLabel={false} />
+                      <TankLevel
+                        level={device.level_percent}
+                        alert={device.active_alert}
+                        showLabel={false}
+                      />
                     ) : (
                       <div className="flex h-14 w-14 items-center justify-center rounded-md border border-dashed border-line-strong text-ink-3">
                         <SlidersHorizontal size={18} />

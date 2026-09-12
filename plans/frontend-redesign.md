@@ -1,6 +1,6 @@
 # Frontend Redesign — Modern, Mobile-First AquaMind
 
-**Status:** Phases 0–6 done. Phase 7 (polish, Lighthouse, reduced-motion and focus audit) pending.
+**Status:** all phases (0–7) done.
 **Scope:** `frontend/` only (Vite + React 18 + React Router app served from `/var/www/aquamind`).
 The Expo app in `mobile-app/` is explicitly **out of scope** — it has one commit ever and
 adding it would mean maintaining a second, parallel design system.
@@ -422,10 +422,39 @@ against generated data with no backend or auth, so the result can be looked at (
 screenshotted at 390px/1280px) while the remaining phases land. Dev-only — Vite builds
 `index.html` alone, so it never ships.
 
-**Phase 7 — Polish & verify**
-Motion pass, focus-visible audit, Lighthouse mobile (target ≥ 95 a11y, ≥ 90 perf),
-real-device check at 360px / 390px / 768px / 1280px, bundle-size check on the ECharts
-chunk, `prefers-reduced-motion` verification.
+**Phase 7 — Polish & verify** — ✅ DONE
+Every item was run as a measurement, and three of them found real bugs:
+
+1. **The focus ring never rendered.** `:focus-visible { outline: 2px solid hsl(var(--brand)) }`
+   computed to `outline-width: 0px` — a `var()` inside the `outline` shorthand. Rewritten as
+   longhands. Then `transition-all` on the segmented control and tabs was animating
+   `outline-width` from 0, so the ring faded in over 140ms for keyboard users; those now
+   transition only background, colour and box-shadow. **39 focusable elements checked by
+   tabbing through for real** (a programmatic `.focus()` does not set the `:focus-visible`
+   heuristic, which is why a first pass reported false failures) — 0 missing.
+2. **Contrast failures Lighthouse caught that my own tuning missed.** I had checked each ink
+   step against `surface` and `canvas` but not against `surface-sunk` or `brand-wash`:
+   `ink-3` measured 4.42 on `surface-sunk` and `brand` 4.41 on `brand-wash`. Both dropped one
+   lightness step; every ink now clears 4.5:1 against *every* surface it can sit on.
+   Lighthouse accessibility went 96 → **100** on `/welcome`, `/login` and `/signup`.
+3. **Tap targets under the 44px floor the token file itself states.** The segmented control
+   (the primary metric/range switcher) was 36px, as were the `DataTable`'s mobile-only sort
+   controls and the admin row selects. All raised to 44px on touch, tightening to 36px where
+   a pointer is precise.
+
+Also added an `xs: 400px` breakpoint: Tailwind's smallest default is `sm: 640px`, wider than
+every phone, and at 320px the landing header's wordmark plus both actions overflowed. The
+wordmark now yields below `xs` (the logo carries the alt text, so nothing is lost).
+
+**Verified clean:** no horizontal overflow at 320/360/390/414/768/1024/1280/1440 on any
+route; `prefers-reduced-motion` stops every animation and transition; all images have alt
+text; heading levels never skip.
+
+**Not credible from this container:** Lighthouse *performance* reported FCP 24.4s / LCP 51s
+under its 4× CPU throttling on a shared box. CLS 0 and TBT 180ms are the meaningful signals;
+the paint timings need re-measuring on real hardware. Two other Lighthouse flags are
+intentional: `/login` "blocked from indexing" is `robots.txt` doing its job, and the console
+error is this container's proxy (it does not reproduce under Playwright).
 
 ---
 

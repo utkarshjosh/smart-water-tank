@@ -181,7 +181,7 @@ export function DataTable<T>({
               setSort({ key, direction: sort?.key === key ? sort.direction : 'asc' })
             }
           >
-            <SelectTrigger className="h-9 flex-1" aria-label="Sort by">
+            <SelectTrigger className="h-11 flex-1" aria-label="Sort by">
               <SelectValue placeholder="Sort by…" />
             </SelectTrigger>
             <SelectContent>
@@ -197,7 +197,7 @@ export function DataTable<T>({
             disabled={!sort}
             onClick={() => sort && toggle(sort.key)}
             aria-label={sort?.direction === 'asc' ? 'Sort descending' : 'Sort ascending'}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-hairline bg-surface text-ink-2 transition-colors duration-instant hover:bg-surface-hover disabled:opacity-50"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-hairline bg-surface text-ink-2 transition-colors duration-instant hover:bg-surface-hover disabled:opacity-50"
           >
             {sort?.direction === 'desc' ? <ArrowDown size={16} /> : <ArrowUp size={16} />}
           </button>

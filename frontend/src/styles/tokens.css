@@ -23,13 +23,17 @@
   --hairline: 45 8% 90%;        /* the default border - defines most cards   */
   --line-strong: 45 7% 83%;     /* dividers that must read                   */
 
-  /* --- Ink --------------------------------------------------------------- */
+  /* --- Ink ---------------------------------------------------------------
+   * Each step clears 4.5:1 against EVERY surface it can sit on - not just
+   * white. Checking only `surface` and `canvas` left ink-3 at 4.42 on
+   * `surface-sunk` and brand at 4.41 on `brand-wash`, which Lighthouse caught.
+   */
   --ink-1: 240 8% 10%;          /* primary text                              */
   --ink-2: 60 3% 33%;           /* secondary text, labels                    */
-  --ink-3: 55 5% 42%;           /* tertiary, timestamps, axis ticks (4.7:1)  */
+  --ink-3: 55 5% 41%;           /* tertiary, timestamps, axis ticks (4.6:1)  */
 
   /* --- Brand ------------------------------------------------------------- */
-  --brand: 212 68% 46%;         /* primary actions, active nav, focus ring   */
+  --brand: 212 68% 45%;         /* primary actions, active nav, focus ring   */
   --brand-press: 212 72% 39%;
   --brand-wash: 212 80% 95%;    /* selected rows, subtle badges              */
   --brand-ink: 0 0% 100%;       /* text on brand                             */
