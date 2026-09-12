@@ -1,8 +1,15 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { Link, useNavigate } from 'react-router-dom';
+import { CaretRight, Drop, Plus, SlidersHorizontal, Warning } from '@phosphor-icons/react';
 import api from '@/lib/api';
-import { AlertCircle, PlusCircle, Droplets, Settings2 } from 'lucide-react';
-import DeviceCardTankPreview from '@/components/DeviceCardTankPreview';
+import { AppShell } from '@/components/shell';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Skeleton } from '@/components/ui/skeleton';
+import { StatTile } from '@/components/ui/stat-tile';
+import { StatusDot } from '@/components/ui/status-dot';
+import TankLevel from '@/components/TankLevel';
 import MeasurementExportDialog from '@/components/MeasurementExportDialog';
 
 interface Device {
@@ -20,161 +27,137 @@ interface Device {
 
 export default function TenantDevicesPage() {
   const navigate = useNavigate();
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const devices = useQuery({
+    queryKey: ['devices'],
+    queryFn: () =>
+      api.get<{ devices: Device[] }>('/api/v1/user/devices').then((r) => r.data.devices),
+  });
 
-  useEffect(() => {
-    api.get('/api/v1/user/devices')
-      .then(({ data }) => setDevices(data.devices))
-      .catch((err) => setError(err.response?.data?.error || err.message || 'Failed to fetch devices'))
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-sky-500" />
-      </div>
-    );
-  }
-
-  const onlineCount = devices.filter((device) => device.status === 'online').length;
-  const alertCount = devices.filter((device) => device.active_alert).length;
-  const profiledCount = devices.filter((device) => device.has_tank_profile).length;
+  const list = devices.data ?? [];
+  const online = list.filter((d) => d.status === 'online').length;
+  const needsAttention = list.filter((d) => d.active_alert).length;
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-1">
+    <AppShell
+      variant="tenant"
+      title="My tanks"
+      action={
+        <Button size="sm" onClick={() => navigate('/app/onboarding')} className="hidden sm:inline-flex">
+          <Plus size={16} weight="bold" />
+          Add device
+        </Button>
+      }
+    >
+      <div className="space-y-4">
+        <div className="flex items-end justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">My Devices</h1>
-            <p className="text-sm text-slate-600 dark:text-slate-300">
-              Live tank readings, alerts, and setup state.
-            </p>
+            <h1 className="text-display">My tanks</h1>
+            <p className="mt-1 text-body text-ink-2">Live levels, alerts and setup state.</p>
           </div>
+          {list.length > 0 && (
+            <MeasurementExportDialog
+              devices={list.map((d) => ({ id: d.id, name: d.name }))}
+              endpoint="/api/v1/user/measurements/export"
+            />
+          )}
         </div>
-        <div className="flex flex-wrap gap-2">
-          <MeasurementExportDialog
-            devices={devices.map((device) => ({ id: device.id, name: device.name }))}
-            endpoint="/api/v1/user/measurements/export"
+
+        {devices.isError && (
+          <Alert variant="critical">
+            <AlertTitle>Couldn't load your devices</AlertTitle>
+            <AlertDescription>
+              {(devices.error as { message?: string })?.message ?? 'Please try again.'}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {list.length > 0 && (
+          <div className="grid grid-cols-3 gap-2">
+            <StatTile label="Tanks" value={list.length} />
+            <StatTile label="Online" value={online} tone={online === list.length ? 'good' : 'default'} />
+            <StatTile
+              label="Attention"
+              value={needsAttention}
+              tone={needsAttention > 0 ? 'warning' : 'default'}
+            />
+          </div>
+        )}
+
+        {devices.isLoading ? (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-32 w-full" />
+            ))}
+          </div>
+        ) : list.length === 0 ? (
+          <EmptyState
+            icon={Drop}
+            title="No devices yet"
+            description="Pair your first AquaMind sensor to start seeing live data."
+            action={
+              <Button onClick={() => navigate('/app/onboarding')}>
+                <Plus size={16} weight="bold" />
+                Pair your first device
+              </Button>
+            }
           />
-          <button
-            type="button"
-            onClick={() => navigate('/app/onboarding')}
-            className="inline-flex h-9 items-center justify-center rounded-md bg-slate-900 px-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100 dark:focus:ring-offset-slate-950"
-          >
-            <PlusCircle className="mr-2 h-4 w-4" />
-            Add Device
-          </button>
-        </div>
-      </div>
-
-      {devices.length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {[
-            ['Total devices', devices.length],
-            ['Online now', onlineCount],
-            ['Needs attention', alertCount],
-            ['Configured tanks', profiledCount],
-          ].map(([label, value]) => (
-            <div
-              key={label}
-              className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900"
-            >
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
-              <p className="mt-1 text-2xl font-semibold text-slate-950 dark:text-white">{value}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {error && (
-        <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
-          <AlertCircle className="mt-0.5 h-4 w-4 flex-none" />
-          <div>
-            <p className="font-semibold">Error</p>
-            <p className="text-sm">{error}</p>
-          </div>
-        </div>
-      )}
-
-      {devices.length === 0 ? (
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex flex-col items-center gap-4 px-6 py-12 text-center">
-            <div className="rounded-lg bg-sky-100 p-3 text-sky-700 dark:bg-sky-500/10 dark:text-sky-200">
-              <Droplets className="h-8 w-8" />
-            </div>
-            <div>
-              <p className="font-medium text-slate-900 dark:text-white">No devices yet</p>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                Pair your first AquaMind sensor to start seeing live data.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => navigate('/app/onboarding')}
-              className="inline-flex h-10 items-center justify-center rounded-md border border-slate-200 bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 dark:border-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 dark:focus:ring-offset-slate-950"
-            >
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Pair your first device
-            </button>
-          </div>
-        </section>
-      ) : (
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-3">
-          {devices.map((device) => (
-            <article
-              key={device.id}
-              onClick={() => navigate(`/app/devices/${device.id}`)}
-              className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div
-                    className={`mt-1 h-3 w-3 rounded-full ${
-                      device.status === 'online' ? 'bg-emerald-500 shadow-[0_0_0_6px_rgba(16,185,129,0.16)]' : 'bg-rose-500 shadow-[0_0_0_6px_rgba(244,63,94,0.12)]'
-                    }`}
-                  />
-                  <div className="space-y-1">
-                    <div className="font-semibold text-slate-900 dark:text-white">{device.name}</div>
-                    <div className="text-sm text-slate-500 dark:text-slate-400">
-                      Firmware {device.firmware_version || 'Unknown'}
-                    </div>
-                    <div className="text-sm text-slate-500 dark:text-slate-400">
-                      {device.last_measurement ? `Last reading ${new Date(device.last_measurement).toLocaleString()}` : 'No data yet'}
-                    </div>
-                  </div>
-                </div>
-                <span
-                  className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold capitalize ${
-                    device.status === 'online'
-                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
-                      : 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'
-                  }`}
+        ) : (
+          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {list.map((device) => (
+              <li key={device.id}>
+                <Link
+                  to={`/app/devices/${device.id}`}
+                  className="group flex h-full items-center gap-4 rounded-lg border border-hairline bg-surface p-4 transition-[border-color,transform] duration-instant ease-out hover:border-line-strong active:scale-[0.99]"
                 >
-                  {device.status}
-                </span>
-              </div>
+                  <div className="w-14 shrink-0">
+                    {device.has_tank_profile && device.level_percent != null ? (
+                      <TankLevel level={device.level_percent} alert={device.active_alert} showLabel={false} />
+                    ) : (
+                      <div className="flex h-14 w-14 items-center justify-center rounded-md border border-dashed border-line-strong text-ink-3">
+                        <SlidersHorizontal size={18} />
+                      </div>
+                    )}
+                  </div>
 
-              {device.has_tank_profile && device.level_percent != null ? (
-                <DeviceCardTankPreview level={device.level_percent} alert={device.active_alert} />
-              ) : (
-                <div className="mt-4 flex items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 py-4 text-sm font-medium text-sky-700 dark:border-slate-700 dark:text-sky-300">
-                  <Settings2 className="h-4 w-4" />
-                  Set up your tank
-                </div>
-              )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-label text-ink-1">{device.name}</p>
+                    <StatusDot
+                      className="mt-1"
+                      status={device.status === 'online' ? 'online' : 'offline'}
+                      label={device.status === 'online' ? 'Online' : 'Offline'}
+                    />
+                    {device.has_tank_profile && device.level_percent != null ? (
+                      <p className="mt-2 text-metric-sm tnum text-ink-1">
+                        {Math.round(device.level_percent)}
+                        <span className="text-label text-ink-3">%</span>
+                        {device.current_volume != null && (
+                          <span className="ml-2 text-caption text-ink-3">
+                            {Number(device.current_volume).toFixed(0)}L
+                          </span>
+                        )}
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-caption text-brand">Set up your tank</p>
+                    )}
+                    {device.active_alert && (
+                      <p className="mt-1 inline-flex items-center gap-1 text-caption text-warning-text">
+                        <Warning size={13} weight="fill" aria-hidden />
+                        {device.active_alert === 'leak' ? 'Possible leak' : 'Level low'}
+                      </p>
+                    )}
+                  </div>
 
-              <div className="mt-3 text-center text-sm text-slate-500 dark:text-slate-400">
-                {device.current_volume !== null && device.current_volume !== undefined
-                  ? `${Number(device.current_volume).toFixed(1)}L`
-                  : 'No data yet'}
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
-    </div>
+                  <CaretRight
+                    size={16}
+                    className="shrink-0 text-ink-3 transition-transform duration-instant ease-out group-hover:translate-x-0.5"
+                    aria-hidden
+                  />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </AppShell>
   );
 }

@@ -31,13 +31,13 @@ export default function AlertsScreen() {
       await queryClient.cancelQueries({ queryKey: queryKeys.alerts });
       const previous = queryClient.getQueryData(queryKeys.alerts);
       queryClient.setQueryData(queryKeys.alerts, (old: unknown) => {
-        const data = old as { pages: { alerts: FeedAlert[]; unacknowledged_count: number }[] } | undefined;
+        const data = old as { pages: { alerts: FeedAlert[]; unacknowledged: number }[] } | undefined;
         if (!data) return old;
         return {
           ...data,
           pages: data.pages.map((page) => ({
             ...page,
-            unacknowledged_count: Math.max(0, page.unacknowledged_count - 1),
+            unacknowledged: Math.max(0, page.unacknowledged - 1),
             alerts: page.alerts.map((alert) =>
               alert.id === alertId ? { ...alert, acknowledged: true } : alert
             ),
@@ -53,7 +53,7 @@ export default function AlertsScreen() {
   });
 
   const alerts = useMemo(() => feed.data?.pages.flatMap((page) => page.alerts) ?? [], [feed.data]);
-  const unacknowledged = feed.data?.pages[0]?.unacknowledged_count ?? 0;
+  const unacknowledged = feed.data?.pages[0]?.unacknowledged ?? 0;
 
   // Grouped by day: alert timestamps are only useful relative to "today".
   const groups = useMemo(() => {

@@ -12,30 +12,11 @@ import { space, useTheme } from '@/ui/theme';
  * single series, and owning the path means a null reading becomes a real gap
  * instead of a line drawn straight through missing data.
  *
- * Downsampling is done here only because the history endpoint still returns raw
- * rows. Once the bucketed /series endpoint lands (plan §5.2) the server sends
- * ~120 points and `bucket` below can go.
+ * Points arrive already bucketed by the server (/history/series), so this only
+ * draws: no downsampling, and a null value is a real gap the server marked.
  */
 
 export type SeriesPoint = { t: number; v: number | null };
-
-const TARGET_POINTS = 120;
-
-/** Mean of each bucket; a bucket with no readable value stays a gap. */
-function bucket(points: SeriesPoint[]): SeriesPoint[] {
-  if (points.length <= TARGET_POINTS) return points;
-  const size = Math.ceil(points.length / TARGET_POINTS);
-  const out: SeriesPoint[] = [];
-  for (let i = 0; i < points.length; i += size) {
-    const slice = points.slice(i, i + size);
-    const valid = slice.filter((p): p is { t: number; v: number } => p.v !== null);
-    out.push({
-      t: slice[Math.floor(slice.length / 2)].t,
-      v: valid.length ? valid.reduce((sum, p) => sum + p.v, 0) / valid.length : null,
-    });
-  }
-  return out;
-}
 
 export function SeriesChart({
   points,
@@ -51,8 +32,7 @@ export function SeriesChart({
   const { colors } = useTheme();
 
   const chart = useMemo(() => {
-    const sorted = [...points].sort((a, b) => a.t - b.t);
-    const data = bucket(sorted);
+    const data = [...points].sort((a, b) => a.t - b.t);
     const valid = data.filter((p): p is { t: number; v: number } => p.v !== null);
     if (valid.length < 2) return null;
 

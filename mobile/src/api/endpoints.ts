@@ -4,6 +4,7 @@ import { request } from '@/api/client';
 import {
   alertFeedSchema,
   claimCodeSchema,
+  historySeriesSchema,
   claimStatusSchema,
   currentReadingSchema,
   deviceAlertsSchema,
@@ -16,9 +17,10 @@ import {
 /**
  * Every backend call the app makes, in one place.
  *
- * These are today's endpoints. plans/android-app-v2.md §5 adds /user/overview
- * and a bucketed /series; when they land, `listDevices` and `getHistory` are
- * the only two functions that change.
+ * Charts read the server-bucketed /history/series rather than raw rows, so a
+ * span of any length costs a bounded number of points. Still outstanding from
+ * plans/android-app-v2.md §5 is /user/overview, which collapses the launch
+ * requests below into one.
  */
 
 const BASE = '/api/v1/user';
@@ -32,9 +34,14 @@ export const api = {
 
   getCurrent: (deviceId: string) => request(`${BASE}/devices/${id(deviceId)}/current`, currentReadingSchema),
 
-  getHistory: (deviceId: string, days: number, limit = 500) =>
-    request(`${BASE}/devices/${id(deviceId)}/history?days=${days}&limit=${limit}`, historySchema).then(
-      (r) => r.measurements
+  /**
+   * Server-bucketed history: MIN/AVG/MAX per time bucket, so any span costs a
+   * bounded number of points. Preferred over getHistory for charts.
+   */
+  getHistorySeries: (deviceId: string, days: number, metrics = 'level_percent,volume_l') =>
+    request(
+      `${BASE}/devices/${id(deviceId)}/history/series?days=${days}&metrics=${encodeURIComponent(metrics)}`,
+      historySeriesSchema
     ),
 
   getAlerts: (deviceId: string, limit = 50) =>

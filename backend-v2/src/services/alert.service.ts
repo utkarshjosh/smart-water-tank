@@ -234,8 +234,14 @@ async function sendAlertNotification(
   // meaningless to it, and the name is what the notification should say.
   const device = await prisma.device.findUnique({
     where: { id: deviceId },
-    select: { deviceId: true, name: true, status: true },
+    select: { deviceId: true, name: true, status: true, archivedAt: true },
   });
+
+  // A decommissioned device keeps its history but must not raise notifications.
+  if (device?.archivedAt) {
+    console.log(`[alerts] ${type} suppressed: device ${device.deviceId} is archived`);
+    return;
+  }
 
   const deviceName = device?.name || device?.deviceId || 'Your tank';
 

@@ -38,7 +38,7 @@ export default function TanksScreen() {
   const profile = useTankProfile(selected?.id);
   const reading = useCurrentReading(selected?.id);
   const feed = useAlertFeed();
-  const unacknowledged = feed.data?.pages[0]?.unacknowledged_count ?? 0;
+  const unacknowledged = feed.data?.pages[0]?.unacknowledged ?? 0;
 
   // Keep the home-screen widget in step with whatever the app just learned.
   useEffect(() => {

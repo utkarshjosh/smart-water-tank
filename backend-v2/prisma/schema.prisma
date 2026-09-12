@@ -60,6 +60,10 @@ enum SyncMode {
 model Tenant {
   id        String   @id @default(uuid()) @db.Char(36)
   name      String   @db.VarChar(255)
+  // Soft delete. Tenant -> User and Tenant -> Device are onDelete: Cascade, so
+  // a hard delete would silently destroy every user, device, measurement and
+  // alert underneath. Archiving hides the tenant and blocks access instead.
+  archivedAt DateTime? @map("archived_at")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -68,6 +72,7 @@ model Tenant {
   alerts     Alert[]
   claimCodes DeviceClaimCode[]
 
+  @@index([archivedAt])
   @@map("tenants")
 }
 
@@ -82,6 +87,8 @@ model User {
   // parallel for one release so a v1 mobile build keeps receiving alerts;
   // drop once those are gone.
   fcmToken    String?   @map("fcm_token") @db.Text
+  // Soft delete, so acknowledged-by references on historic alerts survive.
+  archivedAt  DateTime? @map("archived_at")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
@@ -92,6 +99,7 @@ model User {
   claimCodesCreated  DeviceClaimCode[]
 
   @@index([tenantId])
+  @@index([archivedAt])
   @@map("users")
 }
 
@@ -105,6 +113,10 @@ model Device {
   status          DeviceStatus @default(offline)
   lastOtaCheckAt  DateTime?    @map("last_ota_check_at")
   configVersion   Int          @default(0) @map("config_version")
+  // Decommissioned rather than deleted: the measurement history stays
+  // queryable and the hardware ID stays claimed, so a retired sensor cannot
+  // silently re-pair itself.
+  archivedAt      DateTime?    @map("archived_at")
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt @map("updated_at")
 
@@ -120,6 +132,7 @@ model Device {
   claimCodes          DeviceClaimCode[]
 
   @@index([tenantId])
+  @@index([archivedAt])
   @@map("devices")
 }
 
@@ -184,6 +197,10 @@ model Alert {
   acknowledged        Boolean       @default(false)
   acknowledgedBy      String?       @map("acknowledged_by") @db.Char(36)
   acknowledgedAt      DateTime?     @map("acknowledged_at")
+  // Dismissing hides an alert from the default feed without destroying the
+  // record - a leak alert is an operational event worth keeping even once
+  // the user has cleared it off their screen.
+  dismissedAt         DateTime?     @map("dismissed_at")
   deliveredToFirebase Boolean       @default(false) @map("delivered_to_firebase")
   createdAt           DateTime      @default(now()) @map("created_at")
 

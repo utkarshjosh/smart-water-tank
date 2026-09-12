@@ -19,7 +19,9 @@
     "typecheck": "tsc --noEmit",
     "simulate-device": "ts-node --transpile-only scripts/simulate-device.ts",
     "mqtt:smoke": "ts-node --transpile-only scripts/mqtt-e2e-smoke.ts",
-    "send-measurement": "ts-node --transpile-only scripts/send-measurement.ts"
+    "send-measurement": "ts-node --transpile-only scripts/send-measurement.ts",
+    "verify:history": "ts-node --transpile-only scripts/verify-history-series.ts",
+    "verify:crud": "ts-node --transpile-only scripts/verify-crud.ts"
   },
   "keywords": [],
   "author": "",

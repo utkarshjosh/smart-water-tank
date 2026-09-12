@@ -93,6 +93,8 @@ export const alertSchema = z.object({
   message: z.string().nullable(),
   payload: z.unknown().nullable(),
   acknowledged: z.boolean(),
+  /** Hidden from the default feed but kept as a record. */
+  dismissed: z.boolean().default(false),
   created_at: isoDate,
 });
 export type Alert = z.infer<typeof alertSchema>;
@@ -111,9 +113,38 @@ export type FeedAlert = z.infer<typeof feedAlertSchema>;
 
 export const alertFeedSchema = z.object({
   alerts: z.array(feedAlertSchema),
+  unacknowledged: z.number(),
   next_cursor: z.string().nullable(),
-  unacknowledged_count: z.number(),
 });
+
+/**
+ * Server-bucketed history. Each point is [epochMs, min, avg, max]; an all-null
+ * triple is a deliberate gap marker so a chart breaks its line instead of
+ * drawing straight through days of missing data.
+ */
+export const seriesPointSchema = z.tuple([
+  z.number(),
+  z.number().nullable(),
+  z.number().nullable(),
+  z.number().nullable(),
+]);
+export type SeriesTuple = z.infer<typeof seriesPointSchema>;
+
+export const historySeriesSchema = z.object({
+  device_id: z.string(),
+  from: isoDate,
+  to: isoDate,
+  bucket: z.string(),
+  bucket_seconds: z.number().nullable(),
+  point_count: z.number(),
+  truncated: z.boolean(),
+  has_tank_profile: z.boolean(),
+  series: z.record(
+    z.string(),
+    z.object({ unit: z.string(), points: z.array(seriesPointSchema) })
+  ),
+});
+export type HistorySeries = z.infer<typeof historySeriesSchema>;
 
 export const tankProfileSchema = z.object({
   shape: z.enum(['cylindrical', 'cuboidal']),

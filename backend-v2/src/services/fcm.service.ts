@@ -101,7 +101,9 @@ async function tokensForUser(userId: string): Promise<string[]> {
 
 async function tokensForTenant(tenantId: string): Promise<string[]> {
   const rows = await prisma.pushToken.findMany({
-    where: { user: { tenantId } },
+    // An archived user is soft-deleted: their rows survive so historic
+    // acknowledgements still resolve, but their phone must stop ringing.
+    where: { user: { tenantId, archivedAt: null } },
     select: { token: true },
   });
   return rows.map((row) => row.token);

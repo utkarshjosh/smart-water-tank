@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 
-import { useCurrentReading, useDevices, useHistory, useTankProfile } from '@/api/queries';
+import { useCurrentReading, useDevices, useHistorySeries, useTankProfile } from '@/api/queries';
 import { haptics } from '@/feedback/haptics';
 import {
   formatAge,
@@ -34,14 +34,16 @@ export default function DeviceDetailScreen() {
   const device = devices.data?.find((candidate) => candidate.id === id);
   const reading = useCurrentReading(id);
   const profile = useTankProfile(id);
-  const history = useHistory(id, RANGES[rangeIndex].days);
+  const history = useHistorySeries(id, RANGES[rangeIndex].days);
 
-  // Percent is the hero here too, so the chart plots it — falling back to raw
+  // Percent is the hero here too, so the chart plots it — falling back to
   // litres for a tank with no profile, where percent cannot be computed.
-  const hasPercent = !!profile.data;
-  const points: SeriesPoint[] = (history.data ?? []).map((point) => ({
-    t: point.timestamp.getTime(),
-    v: hasPercent ? point.level_percent : point.volume_l,
+  // The server buckets and marks gaps; an all-null triple stays a gap.
+  const hasPercent = history.data?.has_tank_profile ?? !!profile.data;
+  const metric = hasPercent ? 'level_percent' : 'volume_l';
+  const points: SeriesPoint[] = (history.data?.series[metric]?.points ?? []).map(([t, , avg]) => ({
+    t,
+    v: avg,
   }));
 
   const refresh = () => {

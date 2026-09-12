@@ -2,7 +2,7 @@ import { useInfiniteQuery, useQuery, type UseQueryResult } from '@tanstack/react
 
 import { api } from '@/api/endpoints';
 import { ApiError } from '@/api/client';
-import type { CurrentReading, DeviceSummary, HistoryPoint } from '@/api/schemas';
+import type { CurrentReading, DeviceSummary } from '@/api/schemas';
 
 /**
  * Query keys and hooks. Stale times are chosen against the device's reporting
@@ -16,7 +16,7 @@ export const queryKeys = {
   current: (deviceId: string) => ['device', deviceId, 'current'] as const,
   /** Tenant-wide feed. Distinct from the per-device history below. */
   alerts: ['alerts'] as const,
-  history: (deviceId: string, days: number) => ['device', deviceId, 'history', days] as const,
+  series: (deviceId: string, days: number) => ['device', deviceId, 'series', days] as const,
   deviceAlerts: (deviceId: string) => ['device', deviceId, 'alerts'] as const,
   tankProfile: (deviceId: string) => ['device', deviceId, 'tank-profile'] as const,
 };
@@ -48,16 +48,17 @@ export function useCurrentReading(deviceId: string | undefined): UseQueryResult<
   });
 }
 
-export function useHistory(deviceId: string | undefined, days: number): UseQueryResult<HistoryPoint[], Error> {
+export function useHistorySeries(deviceId: string | undefined, days: number) {
   return useQuery({
-    queryKey: queryKeys.history(deviceId ?? '', days),
+    queryKey: queryKeys.series(deviceId ?? '', days),
     enabled: !!deviceId,
     staleTime: 5 * 60_000,
     queryFn: async () => {
       try {
-        return await api.getHistory(deviceId!, days);
+        return await api.getHistorySeries(deviceId!, days);
       } catch (error) {
-        if (error instanceof ApiError && error.isNotFound) return [];
+        // No readings yet is a state the chart renders, not an error.
+        if (error instanceof ApiError && error.isNotFound) return null;
         throw error;
       }
     },
