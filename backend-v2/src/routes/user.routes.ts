@@ -10,6 +10,8 @@ import * as tankProfileService from '../services/tank-profile.service';
 import * as firmwareService from '../services/firmware.service';
 import { updateUserFCMToken } from '../services/fcm.service';
 import { exportUserMeasurements } from '../services/measurement-export.service';
+import { BUCKETS, getDeviceHistorySeries } from '../services/history.service';
+import { getDeviceUsage } from '../services/usage.service';
 
 const router = express.Router();
 
@@ -60,6 +62,20 @@ const claimCodeMintLimiter = rateLimit({
   keyGenerator: (req: AuthRequest) => req.user!.id,
 });
 
+const updateMeSchema = z.object({
+  name: z.string().min(1).max(255),
+});
+
+// PUT /api/v1/user/me - Edit your own profile. Email and role stay server-owned.
+router.put(
+  '/me',
+  firebaseAuth,
+  asyncHandler(async (req: AuthRequest, res) => {
+    const validated = updateMeSchema.parse(req.body);
+    res.json(await userService.updateMe(req.user!.id, validated));
+  })
+);
+
 // POST /api/v1/user/devices/claim-code - Mint a short-lived claim code the
 // user types into their device's setup portal.
 router.post(
@@ -79,6 +95,16 @@ router.get(
   })
 );
 
+// DELETE /api/v1/user/devices/claim-code/:code - Kill a live code early, for a
+// code that was read aloud or shared by mistake.
+router.delete(
+  '/devices/claim-code/:code',
+  asyncHandler(async (req: AuthRequest, res) => {
+    await userService.revokeClaimCode(req.user!.tenantId!, req.params.code);
+    res.status(204).send();
+  })
+);
+
 // GET /api/v1/user/devices - List user's accessible devices
 router.get(
   '/devices',
@@ -92,6 +118,27 @@ const measurementExportBodySchema = z.object({
   from: z.coerce.date(),
   to: z.coerce.date(),
 });
+
+const userAlertsQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(200).default(50),
+  include_dismissed: z.coerce.boolean().default(false),
+  unacknowledged: z.coerce.boolean().default(false),
+});
+
+// GET /api/v1/user/alerts - One inbox across every device the caller can see.
+// Alerts could previously only be read one device at a time.
+router.get(
+  '/alerts',
+  asyncHandler(async (req: AuthRequest, res) => {
+    const { limit, include_dismissed, unacknowledged } = userAlertsQuerySchema.parse(req.query);
+    res.json(
+      await userService.getUserAlerts(
+        { id: req.user!.id, tenantId: req.user!.tenantId },
+        { limit, includeDismissed: include_dismissed, onlyUnacknowledged: unacknowledged }
+      )
+    );
+  })
+);
 
 // POST /api/v1/user/measurements/export - Tenant-scoped multi-device CSV export.
 router.post(
@@ -142,6 +189,93 @@ router.get(
   asyncHandler(async (req: DeviceAccessRequest, res) => {
     const { days, limit } = historyQuerySchema.parse(req.query);
     res.json(await userService.getDeviceHistory(req.device!, days, limit));
+  })
+);
+
+const renameDeviceSchema = z.object({
+  // null clears the name, falling back to the hardware ID in the UI.
+  name: z.string().max(255).nullable(),
+});
+
+// PUT /api/v1/user/devices/:deviceId - Rename a device. Devices paired through
+// the self-claim flow arrive with no name at all, so this is the only way one
+// ever gets a human label.
+router.put(
+  '/devices/:deviceId',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    const { name } = renameDeviceSchema.parse(req.body);
+    res.json(await userService.renameDevice(req.device!, name));
+  })
+);
+
+const historySeriesQuerySchema = z.object({
+  from: z.string().optional(),
+  to: z.string().optional(),
+  days: z.coerce.number().positive().optional(),
+  bucket: z.enum(['auto', ...BUCKETS]).default('auto'),
+  metrics: z.string().optional(),
+});
+
+// GET /api/v1/user/devices/:deviceId/history/series - Bucketed history for
+// browsable charts. Unlike /history (raw rows, newest-first) this aggregates
+// MIN/AVG/MAX per time bucket in SQL, so any span costs a bounded number of
+// points and the min/max band shows the draw and refill swings a mean hides.
+router.get(
+  '/devices/:deviceId/history/series',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    const options = historySeriesQuerySchema.parse(req.query);
+    res.json(await getDeviceHistorySeries(req.device!, options));
+  })
+);
+
+// GET /api/v1/user/devices/:deviceId/shares - Who can see this device
+router.get(
+  '/devices/:deviceId/shares',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    res.json(await userService.listDeviceShares(req.device!));
+  })
+);
+
+const shareSchema = z.object({ email: z.string().email() });
+
+// POST /api/v1/user/devices/:deviceId/shares - Grant a household member
+// access to one device. This is the writer user_device_mappings never had.
+router.post(
+  '/devices/:deviceId/shares',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    const { email } = shareSchema.parse(req.body);
+    res.status(201).json(await userService.shareDevice(req.device!, email));
+  })
+);
+
+// DELETE /api/v1/user/devices/:deviceId/shares/:userId - Revoke a share.
+// Access that comes from tenant membership is not affected.
+router.delete(
+  '/devices/:deviceId/shares/:userId',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    await userService.unshareDevice(req.device!, req.params.userId);
+    res.status(204).send();
+  })
+);
+
+const usageQuerySchema = z.object({
+  days: z.coerce.number().int().positive().max(365).default(30),
+});
+
+// GET /api/v1/user/devices/:deviceId/usage - Daily usage history. Finally
+// reads daily_summaries, which the nightly aggregation job has been writing
+// since the beginning with nothing consuming it.
+router.get(
+  '/devices/:deviceId/usage',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    const { days } = usageQuerySchema.parse(req.query);
+    res.json(await getDeviceUsage(req.device!, days));
   })
 );
 
@@ -226,17 +360,40 @@ router.get(
   })
 );
 
-const alertsQuerySchema = z.object({
-  limit: z.coerce.number().int().positive().max(500).default(50),
+const deviceAlertsQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(200).default(50),
+  include_dismissed: z.coerce.boolean().default(false),
 });
 
-// GET /api/v1/user/devices/:deviceId/alerts - Alert history
+// GET /api/v1/user/devices/:deviceId/alerts - Alert history for one device
 router.get(
   '/devices/:deviceId/alerts',
   requireDeviceAccess,
   asyncHandler(async (req: DeviceAccessRequest, res) => {
-    const { limit } = alertsQuerySchema.parse(req.query);
-    res.json(await userService.getDeviceAlerts(req.device!, limit));
+    const { limit, include_dismissed } = deviceAlertsQuerySchema.parse(req.query);
+    res.json(await userService.getDeviceAlerts(req.device!, limit, include_dismissed));
+  })
+);
+
+// DELETE /api/v1/user/devices/:deviceId/alerts/:alertId - Dismiss an alert.
+// The row is kept and merely hidden from the feed, so the operational record
+// of a leak survives the user clearing it off their screen.
+router.delete(
+  '/devices/:deviceId/alerts/:alertId',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    await userService.dismissAlert(req.device!, req.params.alertId);
+    res.status(204).send();
+  })
+);
+
+// POST /api/v1/user/devices/:deviceId/alerts/:alertId/restore - Undo a dismiss
+router.post(
+  '/devices/:deviceId/alerts/:alertId/restore',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    await userService.restoreAlert(req.device!, req.params.alertId);
+    res.status(204).send();
   })
 );
 
@@ -261,6 +418,17 @@ router.post(
     const { fcm_token } = fcmTokenSchema.parse(req.body);
     await updateUserFCMToken(req.user!.id, fcm_token);
     res.json({ success: true });
+  })
+);
+
+// DELETE /api/v1/user/fcm-token - Drop the push token on sign-out. Without
+// this a signed-out phone keeps receiving this account's alerts until some
+// other login happens to overwrite the token.
+router.delete(
+  '/fcm-token',
+  asyncHandler(async (req: AuthRequest, res) => {
+    await userService.clearFCMToken(req.user!.id);
+    res.status(204).send();
   })
 );
 

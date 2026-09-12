@@ -1,36 +1,35 @@
-import * as React from "react"
-import { cva, type VariantProps } from "class-variance-authority"
+import * as React from 'react';
+import { cva, type VariantProps } from 'class-variance-authority';
+import { cn } from '@/lib/utils';
 
-import { cn } from "@/lib/utils"
-
+/**
+ * Status variants pair a wash background with the darkened `-text` step, which
+ * clears 4.5:1 on both the surface and the wash. Status is never carried by
+ * colour alone - callers add an icon or the word itself.
+ */
 const badgeVariants = cva(
-  "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+  'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-caption font-medium',
   {
     variants: {
       variant: {
-        default:
-          "border-transparent bg-primary text-primary-foreground hover:bg-primary/80",
-        secondary:
-          "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        destructive:
-          "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
-        outline: "text-foreground",
+        neutral: 'bg-surface-sunk text-ink-2',
+        brand: 'bg-brand-wash text-brand',
+        good: 'bg-good-wash text-good-text',
+        warning: 'bg-warning-wash text-warning-text',
+        serious: 'bg-serious-wash text-serious-text',
+        critical: 'bg-critical-wash text-critical-text',
+        outline: 'border border-hairline text-ink-2',
       },
     },
-    defaultVariants: {
-      variant: "default",
-    },
+    defaultVariants: { variant: 'neutral' },
   }
-)
+);
 
 export interface BadgeProps
-  extends React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof badgeVariants> {}
+  extends React.HTMLAttributes<HTMLSpanElement>, VariantProps<typeof badgeVariants> {}
 
 function Badge({ className, variant, ...props }: BadgeProps) {
-  return (
-    <div className={cn(badgeVariants({ variant }), className)} {...props} />
-  )
+  return <span className={cn(badgeVariants({ variant }), className)} {...props} />;
 }
 
-export { Badge, badgeVariants }
+export { Badge, badgeVariants };

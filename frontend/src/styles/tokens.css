@@ -1,0 +1,103 @@
+/**
+ * AquaMind design tokens - the single source of truth.
+ *
+ * Light only, deliberately: dark mode was half-built (336 `dark:` variants for
+ * a mode that rendered a #0f172a tank panel inside otherwise-light pages) and
+ * doubled the cost of every future edit.
+ *
+ * Warm-neutral ground, one considered blue, no cyan, no gradients on surfaces.
+ * Anything that needs a colour reaches for a token here, never a raw
+ * `slate-800` utility.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* --- Surfaces ---------------------------------------------------------- */
+  --canvas: 60 6% 97%;          /* app background                            */
+  --surface: 0 0% 100%;         /* cards, sheets, popovers                   */
+  --surface-sunk: 60 6% 94%;    /* inset wells, table heads, empty states    */
+  --surface-hover: 60 6% 96%;
+
+  /* --- Lines ------------------------------------------------------------- */
+  --hairline: 45 8% 90%;        /* the default border - defines most cards   */
+  --line-strong: 45 7% 83%;     /* dividers that must read                   */
+
+  /* --- Ink ---------------------------------------------------------------
+   * Each step clears 4.5:1 against EVERY surface it can sit on - not just
+   * white. Checking only `surface` and `canvas` left ink-3 at 4.42 on
+   * `surface-sunk` and brand at 4.41 on `brand-wash`, which Lighthouse caught.
+   */
+  --ink-1: 240 8% 10%;          /* primary text                              */
+  --ink-2: 60 3% 33%;           /* secondary text, labels                    */
+  --ink-3: 55 5% 41%;           /* tertiary, timestamps, axis ticks (4.6:1)  */
+
+  /* --- Brand ------------------------------------------------------------- */
+  --brand: 212 68% 45%;         /* primary actions, active nav, focus ring   */
+  --brand-press: 212 72% 39%;
+  --brand-wash: 212 80% 95%;    /* selected rows, subtle badges              */
+  --brand-ink: 0 0% 100%;       /* text on brand                             */
+
+  /* --- Status (reserved; always paired with an icon + label) -------------
+   * The base step is the dot/icon/mark colour; `-wash` is its chip background;
+   * `-text` is the darkened step for when the status has to BE the text
+   * (>= 4.5:1 on both the surface and its own wash).
+   */
+  --good: 120 86% 34%;
+  --good-wash: 120 55% 94%;
+  --good-text: 120 86% 27%;
+  --warning: 41 96% 54%;
+  --warning-wash: 41 90% 93%;
+  --warning-text: 41 96% 29%;
+  --serious: 18 78% 64%;
+  --serious-wash: 18 80% 95%;
+  --serious-text: 18 78% 41%;
+  --critical: 0 61% 53%;
+  --critical-wash: 0 75% 96%;
+  --critical-text: 0 61% 45%;
+
+  /* --- Chart series ------------------------------------------------------
+   * Validated all-pairs on a white surface: lightness band PASS, chroma PASS,
+   * CVD separation PASS (worst dE 9.2), normal-vision PASS (worst dE 16.3).
+   * --series-volume measures 2.82:1 on white, under 3:1 - it always ships
+   * with a direct value label, never colour alone.
+   */
+  --series-level: #2a78d6;
+  --series-volume: #1baf7a;
+  --series-temperature: #eb6834;
+  --series-battery: #4a3aa7;
+
+  /* --- Radius ------------------------------------------------------------ */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  /* --- Elevation - exactly two. Resting cards use their hairline. --------- */
+  --shadow-raised: 0 1px 2px rgb(22 22 26 / 0.06), 0 4px 12px rgb(22 22 26 / 0.05);
+  --shadow-overlay: 0 4px 8px rgb(22 22 26 / 0.06), 0 16px 40px rgb(22 22 26 / 0.12);
+
+  /* --- Motion ------------------------------------------------------------
+   * Nothing runs longer than 260ms. "Swift" is a budget, not a vibe.
+   */
+  --ease-out: cubic-bezier(0.2, 0, 0.38, 0.9);
+  --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --duration-instant: 90ms;
+  --duration-quick: 140ms;
+  --duration-smooth: 220ms;
+
+  /* --- Layout ------------------------------------------------------------ */
+  --header-h: 56px;
+  --tabbar-h: 56px;
+  --sidebar-w: 240px;
+  --sidebar-w-rail: 64px;
+  --content-max: 1200px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-instant: 0ms;
+    --duration-quick: 0ms;
+    --duration-smooth: 0ms;
+  }
+}

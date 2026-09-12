@@ -40,7 +40,13 @@ router.get(
   '/devices',
   asyncHandler(async (req, res) => {
     const { tenant_id, status } = listDevicesQuerySchema.parse(req.query);
-    res.json({ devices: await adminService.listDevices({ tenantId: tenant_id, status }) });
+    res.json({
+      devices: await adminService.listDevices({
+        tenantId: tenant_id,
+        status,
+        includeArchived: req.query.include_archived === 'true',
+      }),
+    });
   })
 );
 
@@ -86,6 +92,31 @@ router.get(
   '/devices/:deviceId',
   asyncHandler(async (req, res) => {
     res.json(await adminService.getDeviceDetail(req.params.deviceId));
+  })
+);
+
+const updateDeviceSchema = z
+  .object({
+    name: z.string().max(255).nullable().optional(),
+    tenant_id: z.string().uuid().optional(),
+  })
+  .refine((body) => body.name !== undefined || body.tenant_id !== undefined, {
+    message: 'Provide name or tenant_id',
+  });
+
+// PUT /api/v1/admin/devices/:deviceId - Rename a device, or move it to
+// another tenant. Moving a device changes who can see its whole history, so
+// it is its own explicit call rather than a side effect of another write.
+router.put(
+  '/devices/:deviceId',
+  asyncHandler(async (req, res) => {
+    const body = updateDeviceSchema.parse(req.body);
+    res.json(
+      await adminService.updateDevice(req.params.deviceId, {
+        ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(body.tenant_id !== undefined ? { tenantId: body.tenant_id } : {}),
+      })
+    );
   })
 );
 
@@ -203,6 +234,109 @@ router.delete(
   })
 );
 
+const adminAlertsQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(500).default(100),
+  tenant_id: z.string().uuid().optional(),
+  device_id: z.string().optional(),
+  severity: z.enum(['low', 'medium', 'high', 'critical']).optional(),
+  acknowledged: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
+  include_dismissed: z.coerce.boolean().default(false),
+  hours: z.coerce.number().int().positive().max(24 * 365).optional(),
+});
+
+// GET /api/v1/admin/alerts - Fleet-wide alert feed. The dashboard's 24-hour
+// alert count previously had nothing to drill into.
+router.get(
+  '/alerts',
+  asyncHandler(async (req, res) => {
+    const q = adminAlertsQuerySchema.parse(req.query);
+    res.json(
+      await adminService.listAlerts({
+        limit: q.limit,
+        tenantId: q.tenant_id,
+        deviceId: q.device_id,
+        severity: q.severity,
+        acknowledged: q.acknowledged,
+        includeDismissed: q.include_dismissed,
+        since: q.hours ? new Date(Date.now() - q.hours * 3_600_000) : undefined,
+      })
+    );
+  })
+);
+
+// GET /api/v1/admin/tenants/:tenantId/archive-preview - What an archive takes
+// with it, so the UI can confirm with real numbers instead of a vague warning.
+router.get(
+  '/tenants/:tenantId/archive-preview',
+  asyncHandler(async (req, res) => {
+    res.json(await adminService.previewTenantArchive(req.params.tenantId));
+  })
+);
+
+// DELETE /api/v1/admin/tenants/:tenantId - Archive a tenant and everything
+// under it. Soft: the cascade rules make a real delete destructive, so this
+// blocks access and keeps the history. `confirm=true` is required because the
+// blast radius is a whole organisation.
+router.delete(
+  '/tenants/:tenantId',
+  asyncHandler(async (req, res) => {
+    if (req.query.confirm !== 'true') {
+      throw new HttpError(
+        400,
+        'Archiving a tenant also archives its devices and users. Re-send with ?confirm=true.'
+      );
+    }
+    res.json(await adminService.archiveTenant(req.params.tenantId));
+  })
+);
+
+// POST /api/v1/admin/tenants/:tenantId/restore
+router.post(
+  '/tenants/:tenantId/restore',
+  asyncHandler(async (req, res) => {
+    res.json(await adminService.restoreTenant(req.params.tenantId));
+  })
+);
+
+// DELETE /api/v1/admin/devices/:deviceId - Decommission a device. Readings are
+// retained; the device stops being served and its hardware ID stays claimed so
+// a retired sensor cannot silently re-pair.
+router.delete(
+  '/devices/:deviceId',
+  asyncHandler(async (req, res) => {
+    res.json(await adminService.archiveDevice(req.params.deviceId));
+  })
+);
+
+// POST /api/v1/admin/devices/:deviceId/restore
+router.post(
+  '/devices/:deviceId/restore',
+  asyncHandler(async (req, res) => {
+    res.json(await adminService.restoreDevice(req.params.deviceId));
+  })
+);
+
+// DELETE /api/v1/admin/users/:userId - Deactivate an account. Firebase
+// credentials still exist, so firebaseAuth enforces the block; historic
+// acknowledged-by references on alerts survive.
+router.delete(
+  '/users/:userId',
+  asyncHandler(async (req: AuthRequest, res) => {
+    res.json(await adminService.archiveUser(req.params.userId, req.user!.id));
+  })
+);
+
+// POST /api/v1/admin/users/:userId/restore
+router.post(
+  '/users/:userId/restore',
+  asyncHandler(async (req, res) => {
+    res.json(await adminService.restoreUser(req.params.userId));
+  })
+);
+
 // GET /api/v1/admin/analytics/summary - System-wide analytics
 router.get(
   '/analytics/summary',
@@ -215,7 +349,9 @@ router.get(
 router.get(
   '/tenants',
   asyncHandler(async (req, res) => {
-    res.json({ tenants: await adminService.listTenants() });
+    res.json({
+      tenants: await adminService.listTenants({ includeArchived: req.query.include_archived === 'true' }),
+    });
   })
 );
 
@@ -283,7 +419,13 @@ router.get(
   '/users',
   asyncHandler(async (req, res) => {
     const { tenant_id, search } = listUsersQuerySchema.parse(req.query);
-    res.json({ users: await adminService.listUsers({ tenantId: tenant_id, search }) });
+    res.json({
+      users: await adminService.listUsers({
+        tenantId: tenant_id,
+        search,
+        includeArchived: req.query.include_archived === 'true',
+      }),
+    });
   })
 );
 

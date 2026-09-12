@@ -1,377 +1,288 @@
-import { lazy, Suspense, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Activity, ShieldCheck, Zap, BarChart3, Waves, Smartphone, ArrowRight } from 'lucide-react';
+import {
+  ArrowRight,
+  Bell,
+  ChartLine,
+  DeviceMobile,
+  Drop,
+  ShieldCheck,
+  WarningCircle,
+} from '@phosphor-icons/react';
+import TankLevel, { type TankAlert } from '@/components/TankLevel';
+import { Sparkline } from '@/components/charts/Sparkline';
+import { Button } from '@/components/ui/button';
+import type { SeriesPoint } from '@/lib/metrics';
 
-const GlassTank = lazy(() => import('@/components/GlassTank'));
+// A week of levels for the preview: drains through the day, refills at night.
+const DEMO_SERIES: SeriesPoint[] = Array.from({ length: 168 }, (_, i) => {
+  const t = Date.now() - (167 - i) * 3_600_000;
+  const day = (i % 24) / 24;
+  const v = Math.round((94 - day * 62 + Math.sin(i / 5) * 3) * 10) / 10;
+  return [t, v - 1.5, v, v + 1.5];
+});
+
+const FEATURES = [
+  {
+    icon: Drop,
+    title: 'Know the level, not a guess',
+    body: 'An ultrasonic sensor reads the water line and the server turns it into litres using your tank’s real dimensions — so percent and volume never disagree.',
+  },
+  {
+    icon: WarningCircle,
+    title: 'Catch a leak by its drain rate',
+    body: 'An overnight drop with no tap running is a leak. AquaMind watches the rate between readings and tells you when it looks wrong.',
+  },
+  {
+    icon: Bell,
+    title: 'Alerts you set yourself',
+    body: 'Pick the low and full marks that matter for your tank. You get a push when the level crosses them, not a generic threshold.',
+  },
+];
+
+const STATS = [
+  { label: 'Weekly average', value: '840 L', note: '12% below last week' },
+  { label: 'Peak usage', value: '8:00 AM', note: 'Consistent for 3 weeks' },
+  { label: 'Refills this week', value: '6', note: 'Every night, ~11 PM' },
+];
 
 export default function LandingPage() {
-  // Simulation State
-  const [tankLevel, setTankLevel] = useState(84);
-  const [alert, setAlert] = useState<string | null>(null);
+  const [level, setLevel] = useState(84);
+  const [alert, setAlert] = useState<TankAlert>(null);
 
-  const simulateLeak = () => {
-    setAlert('leak');
-    setTankLevel((prev: number) => Math.max(0, prev - 10));
-  };
-
-  const simulateFill = () => {
-    setAlert('filling');
-    setTankLevel((prev: number) => Math.min(100, prev + 15));
-    setTimeout(() => setAlert(null), 3000);
-  };
-
-  const simulateLow = () => {
-    setAlert('low');
-    setTankLevel(15);
-  };
-
-  const tankFallback = (
-    <div className="mx-auto flex h-80 w-64 items-center justify-center rounded-[2rem] border border-white/15 bg-white/5">
-      <div className="h-32 w-32 rounded-full border-4 border-cyan-400/20 border-t-cyan-300 animate-spin" />
-    </div>
-  );
+  const demos: { label: string; onClick: () => void }[] = [
+    {
+      label: 'Leak',
+      onClick: () => {
+        setAlert('leak');
+        setLevel((v) => Math.max(0, v - 18));
+      },
+    },
+    {
+      label: 'Refill',
+      onClick: () => {
+        setAlert(null);
+        setLevel(96);
+      },
+    },
+    {
+      label: 'Low',
+      onClick: () => {
+        setAlert('low');
+        setLevel(12);
+      },
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-[#0f172a] text-white overflow-hidden relative selection:bg-cyan-500/30" suppressHydrationWarning>
-      {/* Background Gradients - Deep Aquatic Blues */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-900/40 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '8s' }} />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-teal-900/30 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '12s', animationDelay: '2s' }} />
-        <div className="absolute top-[40%] left-[30%] w-[30%] h-[30%] bg-cyan-900/20 rounded-full blur-[100px] animate-pulse" style={{ animationDuration: '10s', animationDelay: '1s' }} />
-      </div>
-
-      {/* Glass Overlay Texture */}
-      <div className="fixed inset-0 bg-[url('/noise.svg')] opacity-[0.03] pointer-events-none mix-blend-overlay"></div>
-
-      {/* Navigation */}
-      <nav className="fixed top-0 w-full z-50 px-6 py-6">
-        <div className="max-w-7xl mx-auto flex justify-between items-center bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl px-6 py-4 shadow-lg ring-1 ring-white/5">
-          <div className="flex items-center gap-2">
-            <div className="relative w-10 h-10">
-              <img
-                src="/logo.png"
-                alt="AquaMind Logo"
-                className="h-full w-full object-contain"
-              />
-            </div>
-            <span className="text-xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
-              AquaMind
-            </span>
-          </div>
-          <div className="hidden md:flex gap-8 text-sm font-medium text-slate-300">
-            <a href="#features" className="hover:text-white transition-colors">Features</a>
-            <a href="#analytics" className="hover:text-white transition-colors">Analytics</a>
-            <a href="#about" className="hover:text-white transition-colors">About</a>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link to="/login" className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors">
-              Log in
-            </Link>
-            <Link to="/signup" className="px-5 py-2 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl text-sm font-medium transition-all hover:shadow-[0_0_20px_rgba(6,182,212,0.3)] flex items-center gap-2">
-              <Smartphone className="w-4 h-4" />
-              <span>Get Started</span>
-            </Link>
-          </div>
+    <div className="min-h-screen bg-canvas">
+      <header className="safe-top sticky top-0 z-40 border-b border-hairline bg-surface/90 backdrop-blur">
+        <div className="mx-auto flex h-header max-w-content items-center gap-3 px-4 sm:px-6">
+          <img src="/logo.png" alt="AquaMind" className="h-7 w-7 shrink-0 object-contain" />
+          {/* Below 400px the wordmark yields to the two actions; the logo
+              still carries the alt text, so nothing is lost to a reader. */}
+          <span className="hidden text-title xs:inline">AquaMind</span>
+          <nav className="ml-auto flex items-center gap-1 sm:gap-2">
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/login">Log in</Link>
+            </Button>
+            <Button asChild size="sm">
+              <Link to="/signup">Get started</Link>
+            </Button>
+          </nav>
         </div>
-      </nav>
+      </header>
 
-      {/* Hero Section */}
-      <section className="relative pt-40 pb-20 px-6">
-        <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
-          <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-medium mb-6">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
-              </span>
-              AI-Powered Water Intelligence
-            </div>
-            <h1 className="text-5xl md:text-7xl font-bold leading-tight mb-6 tracking-tight">
-              <span className="bg-clip-text text-transparent bg-gradient-to-r from-white via-cyan-100 to-blue-200">
-                Clarity in Every Drop
-              </span>
-            </h1>
-            <p className="text-lg text-slate-400 mb-8 leading-relaxed max-w-lg">
-              Experience the weightlessness of total control. Our edge AI understands your water usage patterns, predicting needs before they arise.
-            </p>
-            <div className="flex flex-wrap gap-4">
-              <Link to="/signup" className="px-8 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl font-semibold shadow-[0_0_40px_rgba(6,182,212,0.4)] hover:shadow-[0_0_60px_rgba(6,182,212,0.6)] transition-all hover:scale-[1.02] flex items-center gap-3">
-                <ArrowRight className="w-5 h-5" />
-                Get Started
-              </Link>
-            </div>
-          </div>
-
-          <div className="relative animate-in fade-in slide-in-from-bottom-6 duration-700 delay-150">
-            {/* Main Glass Card - Dashboard Preview */}
-            <div className="relative z-10 bg-gradient-to-b from-white/10 to-white/5 backdrop-blur-2xl border border-white/20 rounded-3xl p-8 shadow-[0_20px_50px_rgba(0,0,0,0.3)] transition-transform duration-300 hover:-translate-y-1">
-              <div className="flex justify-between items-center mb-6">
-                <div>
-                  <h3 className="text-sm text-slate-400 uppercase tracking-wider">Live Status</h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <div className={`w-2 h-2 rounded-full ${alert === 'leak' ? 'bg-red-500 animate-ping' : 'bg-green-500'}`} />
-                    <span className="text-sm font-medium text-slate-200">
-                      {alert === 'leak' ? 'Leak Detected' : 'System Normal'}
-                    </span>
-                  </div>
-                </div>
-                <div className="p-3 bg-cyan-500/20 rounded-xl">
-                  <Waves className="w-6 h-6 text-cyan-400" />
-                </div>
-              </div>
-
-              {/* Animated Glass Tank */}
-              <div className="mb-8 py-4">
-                <Suspense fallback={tankFallback}>
-                  <GlassTank level={tankLevel} alert={alert} />
-                </Suspense>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white/5 rounded-xl p-4 border border-white/5">
-                  <div className="text-xs text-slate-400 mb-1">Daily Usage</div>
-                  <div className="text-xl font-semibold">1,240 L</div>
-                </div>
-                <div className="bg-white/5 rounded-xl p-4 border border-white/5">
-                  <div className="text-xs text-slate-400 mb-1">Prediction</div>
-                  <div className="text-xl font-semibold text-green-400">Normal</div>
-                </div>
-              </div>
-
-              {/* Simulation Controls */}
-              <div className="mt-6 pt-6 border-t border-white/10">
-                <div className="text-xs text-slate-400 mb-3 uppercase tracking-wider">Simulation Controls</div>
-                <div className="flex gap-2 justify-center">
-                  <button
-                    onClick={simulateLeak}
-                    className="px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-300 text-xs rounded-lg border border-red-500/30 transition-colors"
-                  >
-                    Leak
-                  </button>
-                  <button
-                    onClick={simulateFill}
-                    className="px-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 text-xs rounded-lg border border-blue-500/30 transition-colors"
-                  >
-                    Fill
-                  </button>
-                  <button
-                    onClick={simulateLow}
-                    className="px-3 py-1.5 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 text-xs rounded-lg border border-yellow-500/30 transition-colors"
-                  >
-                    Low
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Floating Elements */}
-            <div
-              className="absolute -top-10 -right-10 bg-white/10 backdrop-blur-xl border border-white/20 p-4 rounded-2xl shadow-xl z-20 animate-pulse"
-              style={{ animationDuration: '6s' }}
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-500/20 rounded-lg">
-                  <ShieldCheck className="w-5 h-5 text-green-400" />
-                </div>
-                <div>
-                  <div className="text-xs text-slate-300">System Status</div>
-                  <div className="text-sm font-semibold">Protected</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Features Grid */}
-      <section id="features" className="py-32 px-6 relative z-10">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-20">
-            <h2 className="text-3xl md:text-5xl font-bold mb-6">Transparent Intelligence</h2>
-            <p className="text-slate-400 max-w-2xl mx-auto">
-              Our edge device processes data locally, giving you instant insights without latency.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            {[
-              {
-                icon: <Activity className="w-8 h-8 text-blue-400" />,
-                title: "Pattern Recognition",
-                desc: "AI learns your daily habits to optimize water storage and reduce wastage."
-              },
-              {
-                icon: <ShieldCheck className="w-8 h-8 text-teal-400" />,
-                title: "Leak Prevention",
-                desc: "Instant alerts for seepage or abnormal flow rates, protecting your home."
-              },
-              {
-                icon: <BarChart3 className="w-8 h-8 text-cyan-400" />,
-                title: "Smart Forecasting",
-                desc: "Predictive analytics tell you exactly how much water you'll need tomorrow."
-              }
-            ].map((feature, i) => (
-              <div
-                key={i}
-                className="group p-8 rounded-3xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all duration-300 hover:-translate-y-2"
-              >
-                <div className="mb-6 p-4 bg-white/5 rounded-2xl w-fit group-hover:bg-white/10 transition-colors">
-                  {feature.icon}
-                </div>
-                <h3 className="text-xl font-bold mb-4">{feature.title}</h3>
-                <p className="text-slate-400 leading-relaxed">
-                  {feature.desc}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Analytics Section */}
-      <section id="analytics" className="py-32 px-6 relative z-10 bg-white/5">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid lg:grid-cols-2 gap-16 items-center">
+      <main>
+        {/* Hero. One column on a phone; the preview only sits beside the copy
+            once there is room for both. */}
+        <section className="mx-auto max-w-content px-4 pb-12 pt-10 sm:px-6 sm:pt-16 lg:pb-20 lg:pt-24">
+          <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-14">
             <div>
-              <h2 className="text-3xl md:text-5xl font-bold mb-6">Deep Dive Analytics</h2>
-              <p className="text-slate-400 mb-8 leading-relaxed">
-                Understand your consumption like never before. Our advanced analytics dashboard provides granular insights into your water usage patterns, helping you save water and money.
+              <span className="inline-flex items-center gap-2 rounded-full bg-brand-wash px-3 py-1 text-caption font-medium text-brand">
+                <DeviceMobile size={14} weight="fill" aria-hidden />
+                Works on the phone in your pocket
+              </span>
+              <h1 className="mt-5 text-[2rem] leading-[1.1] tracking-tight sm:text-[2.75rem] lg:text-[3.25rem]">
+                Know exactly how much water you have left.
+              </h1>
+              <p className="mt-4 max-w-lg text-body text-ink-2 sm:text-[1.0625rem]">
+                AquaMind reads your tank every few minutes, turns it into litres, and tells you when
+                the level drops faster than it should. No climbing up to look.
               </p>
+              <div className="mt-7 flex flex-wrap gap-3">
+                <Button asChild size="lg">
+                  <Link to="/signup">
+                    Get started
+                    <ArrowRight size={18} weight="bold" />
+                  </Link>
+                </Button>
+                <Button asChild variant="secondary" size="lg">
+                  <Link to="/login">I already have a device</Link>
+                </Button>
+              </div>
+            </div>
 
-              <div className="space-y-6">
-                {[
-                  { label: "Weekly Average", value: "840 L", trend: "-12%", trendColor: "text-green-400" },
-                  { label: "Peak Usage Time", value: "8:00 AM", trend: "Normal", trendColor: "text-slate-400" },
-                  { label: "Estimated Savings", value: "$45/mo", trend: "+5%", trendColor: "text-green-400" }
-                ].map((stat, i) => (
-                  <div key={i} className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
-                    <span className="text-slate-300">{stat.label}</span>
-                    <div className="text-right">
-                      <div className="font-bold text-xl">{stat.value}</div>
-                      <div className={`text-xs ${stat.trendColor}`}>{stat.trend}</div>
-                    </div>
+            {/* Live preview - a real component, not a picture of one. */}
+            <div className="rounded-xl border border-hairline bg-surface p-5 sm:p-6">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-caption font-medium uppercase tracking-wide text-ink-3">
+                    Roof tank
+                  </p>
+                  <p className="mt-1 flex items-center gap-1.5 text-label text-ink-1">
+                    <span
+                      aria-hidden
+                      className={`h-2 w-2 rounded-full ${alert === 'leak' ? 'bg-critical' : alert === 'low' ? 'bg-warning' : 'bg-good'}`}
+                    />
+                    {alert === 'leak'
+                      ? 'Possible leak'
+                      : alert === 'low'
+                        ? 'Level low'
+                        : 'All normal'}
+                  </p>
+                </div>
+                <span className="rounded-md bg-surface-sunk px-2 py-1 text-caption text-ink-2">
+                  Live
+                </span>
+              </div>
+
+              <div className="mx-auto my-5 w-36 sm:w-40">
+                <TankLevel level={level} alert={alert} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-lg bg-surface-sunk px-3 py-2">
+                  <p className="text-caption text-ink-3">Volume</p>
+                  <p className="mt-0.5 text-metric-sm tnum text-ink-1">
+                    {Math.round(level * 9)}
+                    <span className="text-label text-ink-3"> L</span>
+                  </p>
+                </div>
+                <div className="rounded-lg bg-surface-sunk px-3 py-2">
+                  <p className="text-caption text-ink-3">Used today</p>
+                  <p className="mt-0.5 text-metric-sm tnum text-ink-1">
+                    212<span className="text-label text-ink-3"> L</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 border-t border-hairline pt-4">
+                <p className="text-caption uppercase tracking-wide text-ink-3">Try it</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {demos.map((demo) => (
+                    <Button key={demo.label} variant="secondary" size="sm" onClick={demo.onClick}>
+                      {demo.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="border-y border-hairline bg-surface">
+          <div className="mx-auto max-w-content px-4 py-14 sm:px-6 lg:py-20">
+            <h2 className="max-w-xl text-[1.5rem] leading-tight tracking-tight sm:text-[2rem]">
+              Three things a tank sensor should actually do
+            </h2>
+            <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {FEATURES.map((feature) => (
+                <div key={feature.title} className="rounded-lg border border-hairline p-5">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-wash text-brand">
+                    <feature.icon size={20} weight="fill" aria-hidden />
+                  </span>
+                  <h3 className="mt-4 text-label text-ink-1">{feature.title}</h3>
+                  <p className="mt-2 text-body text-ink-2">{feature.body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-content px-4 py-14 sm:px-6 lg:py-20">
+          <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-14">
+            <div>
+              <h2 className="text-[1.5rem] leading-tight tracking-tight sm:text-[2rem]">
+                Every reading, kept and browsable
+              </h2>
+              <p className="mt-4 max-w-lg text-body text-ink-2">
+                Pan and pinch through a week or a year. Readings are averaged into buckets as you
+                zoom out, with the high and low of each bucket kept — so an overnight draw or a
+                refill spike never gets smoothed away.
+              </p>
+              <dl className="mt-7 space-y-2">
+                {STATS.map((stat) => (
+                  <div
+                    key={stat.label}
+                    className="flex items-center justify-between gap-4 rounded-lg border border-hairline bg-surface px-4 py-3"
+                  >
+                    <dt className="text-body text-ink-2">{stat.label}</dt>
+                    <dd className="text-right">
+                      <div className="text-metric-sm tnum text-ink-1">{stat.value}</div>
+                      <div className="text-caption text-ink-3">{stat.note}</div>
+                    </dd>
                   </div>
                 ))}
-              </div>
+              </dl>
             </div>
 
-            <div className="relative">
-              {/* Mock Analytics Dashboard */}
-              <div className="bg-[#0f172a] rounded-3xl border border-white/10 p-6 shadow-2xl relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5" />
-
-                <div className="flex justify-between items-center mb-8 relative z-10">
-                  <h3 className="font-bold text-lg">Usage Trends</h3>
-                  <select className="bg-white/5 border border-white/10 rounded-lg px-3 py-1 text-sm text-slate-300 outline-none">
-                    <option>This Week</option>
-                    <option>This Month</option>
-                  </select>
-                </div>
-
-                {/* Mock Chart Area */}
-                <div className="h-64 flex items-end justify-between gap-3 relative z-10 px-4 pb-2">
-                  {/* Grid Lines */}
-                  <div className="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-20">
-                    <div className="w-full h-[1px] bg-white" />
-                    <div className="w-full h-[1px] bg-white" />
-                    <div className="w-full h-[1px] bg-white" />
-                    <div className="w-full h-[1px] bg-white" />
-                  </div>
-
-                  {[30, 45, 25, 60, 75, 50, 40].map((h, i) => (
-                    <div key={i} className="w-full h-full flex items-end relative group">
-                      {/* Bar Background */}
-                      <div className="absolute bottom-0 w-full h-full bg-white/5 rounded-t-lg" />
-
-                      {/* Active Bar */}
-                      <div
-                        className="w-full bg-gradient-to-t from-cyan-500 to-blue-500 rounded-t-lg relative z-10 group-hover:from-cyan-400 group-hover:to-blue-400 transition-colors shadow-[0_0_20px_rgba(6,182,212,0.3)]"
-                        style={{ height: `${h}%` }}
-                      >
-                        {/* Top Glow */}
-                        <div className="absolute top-0 left-0 w-full h-1 bg-white/50" />
-                      </div>
-
-                      {/* Tooltip */}
-                      <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-[#1e293b] border border-white/20 px-3 py-1.5 rounded-lg text-xs font-bold opacity-0 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0 z-20 whitespace-nowrap shadow-xl">
-                        {h * 10} Liters
-                        <div className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 w-2 h-2 bg-[#1e293b] border-r border-b border-white/20 transform rotate-45" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex justify-between mt-4 text-xs text-slate-500">
-                  <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
-                </div>
+            <div className="rounded-xl border border-hairline bg-surface p-4 sm:p-5">
+              <div className="flex items-center justify-between">
+                <p className="text-label text-ink-1">Level, last 7 days</p>
+                <span className="inline-flex items-center gap-1.5 text-caption text-ink-3">
+                  <ChartLine size={14} aria-hidden />
+                  168 readings
+                </span>
               </div>
-
-              {/* Floating Log Card */}
-              <div
-                className="absolute -bottom-10 -right-10 bg-[#1e293b] p-6 rounded-2xl border border-white/10 shadow-xl max-w-xs z-20 animate-in fade-in slide-in-from-right-6 duration-700 delay-300"
-              >
-                <h4 className="text-sm font-semibold text-slate-300 mb-4">Recent Activity</h4>
-                <div className="space-y-4">
-                  {[
-                    { event: "Pump Started", time: "2 mins ago", icon: Zap, color: "text-yellow-400" },
-                    { event: "Leak Check Passed", time: "1 hour ago", icon: ShieldCheck, color: "text-green-400" }
-                  ].map((log, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                      <div className={`p-2 rounded-lg bg-white/5 ${log.color}`}>
-                        <log.icon size={14} />
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium">{log.event}</div>
-                        <div className="text-xs text-slate-500">{log.time}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              <div className="mt-3">
+                <Sparkline points={DEMO_SERIES} min={0} max={100} height={180} />
+              </div>
+              <div className="mt-2 flex justify-between text-caption tnum text-ink-3">
+                <span>0%</span>
+                <span>refills nightly</span>
+                <span>100%</span>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* CTA Section */}
-      <section id="about" className="py-32 px-6 scroll-mt-32">
-        <div className="max-w-5xl mx-auto relative">
-          <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/20 to-blue-600/20 blur-3xl rounded-full" />
-          <div className="relative bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[3rem] p-12 md:p-20 text-center overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500 to-transparent opacity-50" />
-
-            <h2 className="text-4xl md:text-6xl font-bold mb-8 tracking-tight">
-              Ready to see clearly?
+        <section className="border-t border-hairline bg-surface">
+          <div className="mx-auto max-w-3xl px-4 py-16 text-center sm:px-6 lg:py-24">
+            <ShieldCheck size={32} weight="fill" className="mx-auto text-brand" aria-hidden />
+            <h2 className="mt-5 text-[1.75rem] leading-tight tracking-tight sm:text-[2.25rem]">
+              Set it up once, stop thinking about it
             </h2>
-            <p className="text-xl text-slate-300 mb-12 max-w-2xl mx-auto">
-              Join thousands of smart homes that have switched to intelligent water management.
+            <p className="mx-auto mt-4 max-w-xl text-body text-ink-2">
+              Pair the sensor, enter your tank’s height and shape, and AquaMind handles the rest —
+              including firmware updates, which install overnight on their own.
             </p>
-            <Link to="/signup" className="inline-flex items-center justify-center px-10 py-5 bg-white text-slate-900 rounded-full font-bold text-lg hover:bg-cyan-50 transition-colors shadow-[0_0_30px_rgba(255,255,255,0.3)] gap-3">
-              <ArrowRight className="w-5 h-5" />
-              Get Started
-            </Link>
+            <Button asChild size="lg" className="mt-7">
+              <Link to="/signup">
+                Get started
+                <ArrowRight size={18} weight="bold" />
+              </Link>
+            </Button>
           </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
-      {/* Footer */}
-      <section className="border-t border-white/10 py-12 px-6 bg-[#0f172a]/50 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6 text-slate-500 text-sm">
-          <div className="flex flex-col gap-2">
-            <span>© 2024 AquaMind. All rights reserved.</span>
-            <span className="flex items-center gap-1">
-              Designed by <a href="https://UtkarshJoshi.com" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300 transition-colors">UtkarshJoshi</a>
-            </span>
-          </div>
-          <div className="flex gap-8">
-            <a href="#" className="hover:text-slate-300 transition-colors">Privacy</a>
-            <a href="#" className="hover:text-slate-300 transition-colors">Terms</a>
-            <a href="#" className="hover:text-slate-300 transition-colors">Contact</a>
-          </div>
+      <footer className="border-t border-hairline">
+        <div className="mx-auto flex max-w-content flex-col gap-3 px-4 py-8 text-caption text-ink-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <span>© {new Date().getFullYear()} AquaMind</span>
+          <span>
+            Designed by{' '}
+            <a
+              href="https://UtkarshJoshi.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-brand hover:underline"
+            >
+              UtkarshJoshi
+            </a>
+          </span>
         </div>
-      </section>
+      </footer>
     </div>
   );
 }
-
-
-

@@ -57,8 +57,8 @@ sudo apt update && sudo apt upgrade -y
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt install -y nodejs
 
-# Install PostgreSQL
-sudo apt install -y postgresql postgresql-contrib
+# Install MySQL (schema.prisma declares provider = "mysql")
+sudo apt install -y mysql-server
 
 # Install Nginx
 sudo apt install -y nginx
@@ -83,16 +83,16 @@ sudo su - aquamind
 
 ## Step 2: Database Setup
 
-### 2.1 PostgreSQL Configuration
+### 2.1 MySQL Configuration
 
 ```bash
-# Switch to postgres user
-sudo -u postgres psql
+sudo mysql
 
-# In PostgreSQL prompt:
-CREATE DATABASE aquamind_db;
-CREATE USER aquamind_user WITH PASSWORD 'your_secure_password_here';
-GRANT ALL PRIVILEGES ON DATABASE aquamind_db TO aquamind_user;
+# In the MySQL prompt:
+CREATE DATABASE aquamind_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'aquamind_user'@'localhost' IDENTIFIED BY 'your_secure_password_here';
+GRANT ALL PRIVILEGES ON aquamind_db.* TO 'aquamind_user'@'localhost';
+FLUSH PRIVILEGES;
 \q
 ```
 
@@ -100,10 +100,14 @@ GRANT ALL PRIVILEGES ON DATABASE aquamind_db TO aquamind_user;
 
 ```bash
 # After deploying backend code, run:
-cd /path/to/backend
+cd /path/to/backend-v2
 npm run build
-npm run migrate
+npm run prisma:deploy   # = prisma migrate deploy
 ```
+
+> `./deploy.sh backend` already does this - it backs up the database, applies
+> migrations, and only then restarts PM2. Run the steps by hand only if you are
+> deploying without the script.
 
 ---
 
@@ -140,7 +144,7 @@ PORT=3000
 NODE_ENV=production
 
 # Database Configuration
-DATABASE_URL=postgresql://aquamind_user:your_secure_password_here@localhost:5432/aquamind_db
+DATABASE_URL=mysql://aquamind_user:your_secure_password_here@localhost:3306/aquamind_db
 
 # Firebase Admin SDK
 FIREBASE_PROJECT_ID=your-firebase-project-id

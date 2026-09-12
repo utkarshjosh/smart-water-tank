@@ -1,28 +1,34 @@
 import { useEffect, useState } from 'react';
-import Layout from '@/components/Layout';
+import { AppShell } from '@/components/shell';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
-  AlertCircle,
-  CheckCircle2,
-  Download,
-  Upload,
-  FileUp,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Broadcast,
+  CheckCircle,
   Cpu,
+  DownloadSimple,
+  FileArrowUp,
   HardDrive,
-  RadioTower,
-  PackageCheck,
-  RotateCcw,
-  Trash2,
-} from 'lucide-react';
+  Package,
+  ArrowCounterClockwise,
+  Trash,
+  UploadSimple,
+  WarningCircle,
+} from '@phosphor-icons/react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
@@ -341,80 +347,80 @@ export default function FirmwarePage() {
 
   const toggleDeviceSelection = (deviceId: string) => {
     setSelectedDevices((prev) =>
-      prev.includes(deviceId)
-        ? prev.filter((id) => id !== deviceId)
-        : [...prev, deviceId]
+      prev.includes(deviceId) ? prev.filter((id) => id !== deviceId) : [...prev, deviceId]
     );
   };
 
   if (loading) {
     return (
-      <Layout>
+      <AppShell variant="admin">
         <div className="flex h-full items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
-      </Layout>
+      </AppShell>
     );
   }
 
   const activeFirmware = firmware.find((fw) => fw.is_active);
   const latestFirmware = firmware[0];
   const totalFirmwareBytes = firmware.reduce((total, fw) => total + fw.file_size, 0);
-  const averageRollout = firmware.length > 0
-    ? Math.round(firmware.reduce((total, fw) => total + fw.rollout_percentage, 0) / firmware.length)
-    : 0;
+  const averageRollout =
+    firmware.length > 0
+      ? Math.round(
+          firmware.reduce((total, fw) => total + fw.rollout_percentage, 0) / firmware.length
+        )
+      : 0;
   const firmwareStats = [
     {
       label: 'Versions',
       value: firmware.length,
       detail: activeFirmware ? `Active v${activeFirmware.version}` : 'No active build',
-      icon: PackageCheck,
-      color: 'text-slate-700 dark:text-slate-200',
+      icon: Package,
+      color: 'text-ink-2',
     },
     {
       label: 'Managed devices',
       value: devices.length,
       detail: `${tenants.length} tenants`,
       icon: Cpu,
-      color: 'text-sky-600 dark:text-sky-300',
+      color: 'text-brand',
     },
     {
       label: 'Storage',
       value: `${(totalFirmwareBytes / 1024).toFixed(1)} KB`,
       detail: latestFirmware ? `Latest v${latestFirmware.version}` : 'No uploads',
       icon: HardDrive,
-      color: 'text-emerald-600 dark:text-emerald-300',
+      color: 'text-good-text',
     },
     {
       label: 'Avg rollout',
       value: `${averageRollout}%`,
       detail: 'Across versions',
-      icon: RadioTower,
-      color: 'text-amber-600 dark:text-amber-300',
+      icon: Broadcast,
+      color: 'text-warning-text',
     },
   ];
 
   return (
-    <Layout>
+    <AppShell variant="admin">
       <div className="space-y-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-950 dark:text-white">Firmware management</h1>
-            <p className="text-sm text-slate-600 dark:text-slate-300">
-              Upload binaries, track deployed builds, and stage rollouts.
+            <h1 className="text-display tracking-tight text-ink-1">Firmware management</h1>
+            <p className="text-body text-ink-2">
+              UploadSimple binaries, track deployed builds, and stage rollouts.
             </p>
           </div>
           {activeFirmware && (
-            <div className="inline-flex h-9 w-fit items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
-              v{activeFirmware.version} active
+            <div className="inline-flex h-9 w-fit items-center gap-2 rounded-md border border-hairline bg-surface px-3 text-label text-ink-2">
+              <CheckCircle className="h-4 w-4 text-good-text" />v{activeFirmware.version} active
             </div>
           )}
         </div>
 
         {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
+          <Alert variant="critical">
+            <WarningCircle className="h-4 w-4" />
             <AlertTitle>Error</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
@@ -422,7 +428,7 @@ export default function FirmwarePage() {
 
         {successMessage && (
           <Alert>
-            <CheckCircle2 className="h-4 w-4" />
+            <CheckCircle className="h-4 w-4" />
             <AlertTitle>Success</AlertTitle>
             <AlertDescription>{successMessage}</AlertDescription>
           </Alert>
@@ -432,14 +438,16 @@ export default function FirmwarePage() {
           {firmwareStats.map((stat) => {
             const Icon = stat.icon;
             return (
-              <Card key={stat.label} className="border-slate-200 shadow-sm dark:border-slate-800">
+              <Card key={stat.label} className="border-hairline">
                 <CardContent className="flex items-center justify-between gap-3 p-4">
                   <div className="min-w-0">
-                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">{stat.label}</p>
-                    <p className={`mt-1 truncate text-xl font-semibold ${stat.color}`}>{stat.value}</p>
-                    <p className="truncate text-xs text-slate-500 dark:text-slate-400">{stat.detail}</p>
+                    <p className="text-caption font-medium uppercase tracking-wide text-ink-3">
+                      {stat.label}
+                    </p>
+                    <p className={`mt-1 truncate text-title ${stat.color}`}>{stat.value}</p>
+                    <p className="truncate text-caption text-ink-3">{stat.detail}</p>
                   </div>
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface-sunk">
                     <Icon className={`h-4 w-4 ${stat.color}`} />
                   </div>
                 </CardContent>
@@ -449,177 +457,182 @@ export default function FirmwarePage() {
         </div>
 
         <div className="grid gap-3 xl:grid-cols-[0.82fr_1.18fr]">
-        <Card className="border-slate-200 shadow-sm dark:border-slate-800">
-          <CardHeader className="border-b border-slate-100 p-4 dark:border-slate-800">
-            <CardTitle className="text-base font-semibold tracking-normal">Upload firmware</CardTitle>
-            <CardDescription>Binary package and release metadata.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-4">
-            <form onSubmit={handleUpload} className="space-y-3">
-              <div className="space-y-2">
-                <Label htmlFor="firmware">Firmware file</Label>
-                <div
-                  onDragEnter={handleDragEnter}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  className={`
-                    relative rounded-lg border border-dashed p-5 text-center transition-all
-                    ${isDragging 
-                      ? 'border-sky-500 bg-sky-50 dark:bg-sky-500/10'
-                      : 'border-slate-300 hover:border-sky-400 dark:border-slate-700'
+          <Card className="border-hairline">
+            <CardHeader className="border-b border-hairline p-4">
+              <CardTitle className="text-title tracking-normal">UploadSimple firmware</CardTitle>
+              <CardDescription>Binary package and release metadata.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-4">
+              <form onSubmit={handleUpload} className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="firmware">Firmware file</Label>
+                  <div
+                    onDragEnter={handleDragEnter}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    className={`relative rounded-lg border border-dashed p-5 text-center transition-all ${
+                      isDragging
+                        ? 'border-brand bg-brand-wash'
+                        : 'border-line-strong hover:border-brand'
                     }
-                    ${selectedFile ? 'border-sky-500 bg-sky-50 dark:bg-sky-500/10' : ''}
-                  `}
-                >
-                  <input
-                    type="file"
-                    id="firmware"
-                    name="firmware"
-                    accept=".bin"
-                    onChange={handleFileInputChange}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    required
-                  />
-                  <div className="flex flex-col items-center justify-center space-y-2">
-                    <FileUp className={`h-8 w-8 ${isDragging || selectedFile ? 'text-sky-600 dark:text-sky-300' : 'text-slate-400'}`} />
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium">
-                        {selectedFile ? (
-                          <span className="text-sky-700 dark:text-sky-200">{selectedFile.name}</span>
-                        ) : isDragging ? (
-                          <span className="text-sky-700 dark:text-sky-200">Drop the file here</span>
-                        ) : (
-                          <>
-                            <span className="text-sky-700 hover:underline dark:text-sky-200">Click to upload</span>
-                            {' or drag and drop'}
-                          </>
-                        )}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {selectedFile 
-                          ? `${(selectedFile.size / 1024).toFixed(2)} KB`
-                          : 'Firmware file (.bin)'
-                        }
-                      </p>
+                    ${selectedFile ? 'border-brand bg-brand-wash ' : ''}
+ `}
+                  >
+                    <input
+                      type="file"
+                      id="firmware"
+                      name="firmware"
+                      accept=".bin"
+                      onChange={handleFileInputChange}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      required
+                    />
+                    <div className="flex flex-col items-center justify-center space-y-2">
+                      <FileArrowUp
+                        className={`h-8 w-8 ${isDragging || selectedFile ? 'text-brand ' : 'text-ink-3'}`}
+                      />
+                      <div className="space-y-1">
+                        <p className="text-label">
+                          {selectedFile ? (
+                            <span className="text-brand">{selectedFile.name}</span>
+                          ) : isDragging ? (
+                            <span className="text-brand">Drop the file here</span>
+                          ) : (
+                            <>
+                              <span className="text-brand hover:underline">Click to upload</span>
+                              {' or drag and drop'}
+                            </>
+                          )}
+                        </p>
+                        <p className="text-caption text-ink-3">
+                          {selectedFile
+                            ? `${(selectedFile.size / 1024).toFixed(2)} KB`
+                            : 'Firmware file (.bin)'}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="version">Version</Label>
-                <Input
-                  type="text"
-                  id="version"
-                  name="version"
-                  required
-                  placeholder="e.g., 1.0.0"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  name="description"
-                  rows={3}
-                  placeholder="Release notes or compatibility details"
-                />
-              </div>
-              <Button type="submit" disabled={uploading} size="sm">
-                <Upload className="h-4 w-4" />
-                {uploading ? 'Uploading...' : 'Upload Firmware'}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+                <div className="space-y-2">
+                  <Label htmlFor="version">Version</Label>
+                  <Input
+                    type="text"
+                    id="version"
+                    name="version"
+                    required
+                    placeholder="e.g., 1.0.0"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    name="description"
+                    rows={3}
+                    placeholder="Release notes or compatibility details"
+                  />
+                </div>
+                <Button type="submit" disabled={uploading} size="sm">
+                  <UploadSimple className="h-4 w-4" />
+                  {uploading ? 'Uploading...' : 'UploadSimple Firmware'}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
 
-        <Card className="border-slate-200 shadow-sm dark:border-slate-800">
-          <CardHeader className="border-b border-slate-100 p-4 dark:border-slate-800">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <CardTitle className="text-base font-semibold tracking-normal">Firmware versions</CardTitle>
-                <CardDescription>Build inventory and rollout controls.</CardDescription>
+          <Card className="border-hairline">
+            <CardHeader className="border-b border-hairline p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-title tracking-normal">Firmware versions</CardTitle>
+                  <CardDescription>Build inventory and rollout controls.</CardDescription>
+                </div>
+                <Badge variant="outline" className="shrink-0">
+                  {firmware.length} total
+                </Badge>
               </div>
-              <Badge variant="outline" className="shrink-0">{firmware.length} total</Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            {firmware.length === 0 ? (
-              <div className="p-8 text-center">
-                <PackageCheck className="mx-auto h-8 w-8 text-slate-400" />
-                <p className="mt-3 text-sm font-medium text-slate-700 dark:text-slate-200">No firmware uploaded</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Upload a .bin package to begin rollout management.</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                {firmware.map((fw) => (
-                  <div key={fw.id} className="grid gap-3 p-4 lg:grid-cols-[1fr_140px_310px] lg:items-center">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-semibold text-slate-950 dark:text-white">Version {fw.version}</p>
-                          {fw.is_active && (
-                            <Badge variant="default">Active</Badge>
-                          )}
-                      </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {firmware.length === 0 ? (
+                <div className="p-8 text-center">
+                  <Package className="mx-auto h-8 w-8 text-ink-3" />
+                  <p className="mt-3 text-label text-ink-2">No firmware uploaded</p>
+                  <p className="text-caption text-ink-3">
+                    UploadSimple a .bin package to begin rollout management.
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y divide-hairline">
+                  {firmware.map((fw) => (
+                    <div
+                      key={fw.id}
+                      className="grid gap-3 p-4 lg:grid-cols-[1fr_140px_310px] lg:items-center"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-body font-semibold text-ink-1">Version {fw.version}</p>
+                          {fw.is_active && <Badge variant="brand">Active</Badge>}
+                        </div>
                         {fw.description && (
-                        <p className="mt-1 line-clamp-2 text-sm text-slate-600 dark:text-slate-300">{fw.description}</p>
+                          <p className="mt-1 line-clamp-2 text-body text-ink-2">{fw.description}</p>
                         )}
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        <p className="mt-1 text-caption text-ink-3">
                           {(fw.file_size / 1024).toFixed(2)} KB • Uploaded{' '}
                           {new Date(fw.created_at).toLocaleString()}
-                      </p>
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                        <span>Rollout</span>
-                        <span className="font-medium text-slate-700 dark:text-slate-200">{fw.rollout_percentage}%</span>
+                        </p>
                       </div>
-                      <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                        <div className="h-full rounded-full bg-sky-500" style={{ width: `${fw.rollout_percentage}%` }} />
+                      <div>
+                        <div className="flex items-center justify-between text-caption text-ink-3">
+                          <span>Rollout</span>
+                          <span className="font-medium text-ink-2">{fw.rollout_percentage}%</span>
+                        </div>
+                        <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-sunk">
+                          <div
+                            className="h-full rounded-full bg-brand"
+                            style={{ width: `${fw.rollout_percentage}%` }}
+                          />
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                        <Button
-                          onClick={() => handleOpenRolloutModal(fw)}
-                          size="sm"
-                        >
+                      <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                        <Button onClick={() => handleOpenRolloutModal(fw)} size="sm">
                           Rollout
                         </Button>
                         <Button
-                          variant="outline"
+                          variant="secondary"
                           size="sm"
                           onClick={() => handleDownload(fw)}
                           disabled={downloadingFirmwareId === fw.id}
                         >
-                          <Download className="h-4 w-4" />
-                          {downloadingFirmwareId === fw.id ? 'Downloading…' : 'Download'}
+                          <DownloadSimple className="h-4 w-4" />
+                          {downloadingFirmwareId === fw.id ? 'Downloading…' : 'DownloadSimple'}
                         </Button>
                         {fw.is_active ? (
                           <Button
-                            variant="outline"
+                            variant="secondary"
                             size="sm"
                             onClick={() => openFirmwareAction('unroll', fw)}
                           >
-                            <RotateCcw className="h-4 w-4" />
+                            <ArrowCounterClockwise className="h-4 w-4" />
                             Unroll
                           </Button>
                         ) : (
                           <Button
-                            variant="destructive"
+                            variant="danger"
                             size="sm"
                             onClick={() => openFirmwareAction('delete', fw)}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash className="h-4 w-4" />
                             Delete
                           </Button>
                         )}
                       </div>
                     </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* Rollout Modal */}
@@ -634,8 +647,8 @@ export default function FirmwarePage() {
               </DialogHeader>
 
               {error && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
+                <Alert variant="critical">
+                  <WarningCircle className="h-4 w-4" />
                   <AlertTitle>Error</AlertTitle>
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
@@ -643,7 +656,7 @@ export default function FirmwarePage() {
 
               {successMessage && (
                 <Alert>
-                  <CheckCircle2 className="h-4 w-4" />
+                  <CheckCircle className="h-4 w-4" />
                   <AlertTitle>Success</AlertTitle>
                   <AlertDescription>{successMessage}</AlertDescription>
                 </Alert>
@@ -654,7 +667,9 @@ export default function FirmwarePage() {
                   <Label>Rollout Type</Label>
                   <RadioGroup
                     value={rolloutType}
-                    onValueChange={(value) => setRolloutType(value as 'devices' | 'tenants' | 'percentage')}
+                    onValueChange={(value) =>
+                      setRolloutType(value as 'devices' | 'tenants' | 'percentage')
+                    }
                   >
                     <div className="flex items-center space-x-2">
                       <RadioGroupItem value="devices" id="devices" />
@@ -687,7 +702,10 @@ export default function FirmwarePage() {
                         ) : (
                           <div className="space-y-3">
                             {devices.map((device) => (
-                              <div key={device.device_id} className="flex items-start space-x-3 p-2 hover:bg-accent rounded-md">
+                              <div
+                                key={device.device_id}
+                                className="flex items-start space-x-3 p-2 hover:bg-accent rounded-md"
+                              >
                                 <Checkbox
                                   id={`device-${device.device_id}`}
                                   checked={selectedDevices.includes(device.device_id)}
@@ -697,11 +715,12 @@ export default function FirmwarePage() {
                                   htmlFor={`device-${device.device_id}`}
                                   className="flex-1 cursor-pointer"
                                 >
-                                  <div className="text-sm font-medium">
+                                  <div className="text-label">
                                     {device.name || device.device_id}
                                   </div>
-                                  <div className="text-xs text-muted-foreground">
-                                    {device.device_id} • {device.tenant_name} • v{device.firmware_version || 'N/A'}
+                                  <div className="text-caption text-muted-foreground">
+                                    {device.device_id} • {device.tenant_name} • v
+                                    {device.firmware_version || 'N/A'}
                                   </div>
                                 </label>
                               </div>
@@ -723,7 +742,10 @@ export default function FirmwarePage() {
                         ) : (
                           <div className="space-y-3">
                             {tenants.map((tenant) => (
-                              <div key={tenant.id} className="flex items-center space-x-3 p-2 hover:bg-accent rounded-md">
+                              <div
+                                key={tenant.id}
+                                className="flex items-center space-x-3 p-2 hover:bg-accent rounded-md"
+                              >
                                 <Checkbox
                                   id={`tenant-${tenant.id}`}
                                   checked={selectedTenants.includes(tenant.id)}
@@ -731,13 +753,15 @@ export default function FirmwarePage() {
                                     if (checked) {
                                       setSelectedTenants([...selectedTenants, tenant.id]);
                                     } else {
-                                      setSelectedTenants(selectedTenants.filter((id) => id !== tenant.id));
+                                      setSelectedTenants(
+                                        selectedTenants.filter((id) => id !== tenant.id)
+                                      );
                                     }
                                   }}
                                 />
                                 <label
                                   htmlFor={`tenant-${tenant.id}`}
-                                  className="text-sm font-medium cursor-pointer flex-1"
+                                  className="text-label cursor-pointer flex-1"
                                 >
                                   {tenant.name}
                                 </label>
@@ -770,9 +794,9 @@ export default function FirmwarePage() {
                         onChange={(e) => setRolloutPercentage(parseInt(e.target.value) || 1)}
                         className="w-20"
                       />
-                      <span className="text-sm text-muted-foreground">%</span>
+                      <span className="text-body text-muted-foreground">%</span>
                     </div>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-caption text-muted-foreground">
                       This will randomly select {rolloutPercentage}% of all devices
                     </p>
                   </div>
@@ -782,16 +806,13 @@ export default function FirmwarePage() {
               <DialogFooter>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="secondary"
                   onClick={handleCloseRolloutModal}
                   disabled={rollingOut}
                 >
                   Cancel
                 </Button>
-                <Button
-                  onClick={handleRollout}
-                  disabled={rollingOut}
-                >
+                <Button onClick={handleRollout} disabled={rollingOut}>
                   {rollingOut ? 'Rolling out...' : 'Rollout Firmware'}
                 </Button>
               </DialogFooter>
@@ -810,7 +831,8 @@ export default function FirmwarePage() {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>
-                  {firmwareAction.type === 'unroll' ? 'Unroll' : 'Delete'} firmware {firmwareAction.firmware.version}?
+                  {firmwareAction.type === 'unroll' ? 'Unroll' : 'Delete'} firmware{' '}
+                  {firmwareAction.firmware.version}?
                 </DialogTitle>
                 <DialogDescription>
                   {firmwareAction.type === 'unroll'
@@ -820,8 +842,8 @@ export default function FirmwarePage() {
               </DialogHeader>
 
               {firmwareActionError && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
+                <Alert variant="critical">
+                  <WarningCircle className="h-4 w-4" />
                   <AlertTitle>Action failed</AlertTitle>
                   <AlertDescription>{firmwareActionError}</AlertDescription>
                 </Alert>
@@ -830,7 +852,7 @@ export default function FirmwarePage() {
               <DialogFooter>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="secondary"
                   onClick={closeFirmwareAction}
                   disabled={runningFirmwareAction}
                 >
@@ -838,19 +860,23 @@ export default function FirmwarePage() {
                 </Button>
                 <Button
                   type="button"
-                  variant={firmwareAction.type === 'delete' ? 'destructive' : 'default'}
+                  variant={firmwareAction.type === 'delete' ? 'danger' : 'primary'}
                   onClick={handleFirmwareAction}
                   disabled={runningFirmwareAction}
                 >
                   {runningFirmwareAction
-                    ? firmwareAction.type === 'unroll' ? 'Unrolling…' : 'Deleting…'
-                    : firmwareAction.type === 'unroll' ? 'Unroll firmware' : 'Delete firmware'}
+                    ? firmwareAction.type === 'unroll'
+                      ? 'Unrolling…'
+                      : 'Deleting…'
+                    : firmwareAction.type === 'unroll'
+                      ? 'Unroll firmware'
+                      : 'Delete firmware'}
                 </Button>
               </DialogFooter>
             </DialogContent>
           )}
         </Dialog>
       </div>
-    </Layout>
+    </AppShell>
   );
 }

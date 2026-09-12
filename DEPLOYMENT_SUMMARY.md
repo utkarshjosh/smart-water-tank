@@ -1,5 +1,11 @@
 # AquaMind Deployment Summary - What You Need
 
+> **Note:** the PostgreSQL references below are stale. `backend-v2/prisma/schema.prisma`
+> declares `provider = "mysql"`, and every migration under `prisma/migrations/` is written in
+> MySQL syntax, so MySQL/MariaDB is what actually runs. `DEPLOYMENT.md` and `deploy.sh` are
+> the current source of truth for deployment.
+
+
 ## ✅ What We've Set Up
 
 1. **Deployment Guide** (`DEPLOYMENT.md`) - Complete step-by-step instructions
