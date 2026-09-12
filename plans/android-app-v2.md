@@ -213,20 +213,29 @@ from `1 + 2N` requests to **1**. Also fix the N+1 *inside*
 `listDevicesForTenant` (`user.service.ts:126` does 4 queries per device in a
 `Promise.all` loop) with grouped queries. Serve an `ETag`.
 
-### 6.2 `GET /api/v1/user/devices/:id/series?range=24h|7d|30d&buckets=120`
+### 6.2 Bucketed series — **done**, on the web-UI branch
+Landed as `GET /api/v1/user/devices/:id/history/series` (MIN/AVG/MAX per bucket
+in SQL, with explicit gap markers). The app reads it; its client-side
+downsampling is gone.
+
+<details><summary>Original spec</summary>
+
+`GET /api/v1/user/devices/:id/series?range=24h|7d|30d&buckets=120`
 Server-side downsampling: `GROUP BY` time bucket returning
 `{t, min, max, avg, n}`. Today the app pulls up to 1,000 raw rows and plots 10
 of them. A phone should download ~120 points for any range, ever. Let the
 bucket carry min/max so the chart can draw a range band — it tells the refill
 story better than a mean line.
 
-### 6.3 `GET /api/v1/user/alerts?limit&cursor&type&acknowledged`
-Tenant-wide, cursor-paginated. Kills the N+1 in `AlertsScreen`. The index
-`@@index([tenantId, createdAt(sort: Desc)])` already exists.
+</details>
 
-### 6.4 `POST /api/v1/user/alerts/:alertId/acknowledge`
-Device-agnostic sibling of the existing nested route, so a notification action
-can acknowledge with only the `alert_id` the FCM payload carries.
+### 6.3 Alert feed — **done**
+`GET /api/v1/user/alerts`, from the web-UI branch, extended here with optional
+cursor pagination. Covers explicitly shared devices, not just the tenant's.
+
+### 6.4 Acknowledge by id — **done**
+`POST /api/v1/user/alerts/:alertId/acknowledge`, so a notification action can
+acknowledge with only the `alert_id` the FCM payload carries.
 
 ### 6.5 `GET /api/v1/user/devices/:id/summaries?days=30`
 `daily_summaries` is computed nightly by `aggregation.service.ts` — usage,
@@ -243,7 +252,7 @@ to phones — mosquitto has no WS listener and `mqtt-auth.routes.ts` ACLs are
 device-scoped (`devices/<id>/…` only); adding user auth + a WS listener there
 is a much bigger surface than one SSE route.
 
-### 6.7 Multi-device push tokens — **required, not optional**
+### 6.7 Multi-device push tokens — **done**
 `User.fcmToken` is a single column. Sign in on a tablet and the phone silently
 stops receiving alerts; sign out and the backend keeps pushing to a signed-out
 device forever. Add:
@@ -268,9 +277,9 @@ parallel for one release, then drop it.
 Add `device_name`, `level_percent`, `as_of` to the alert `data` map so both the
 notification text and the widget can render without a follow-up fetch.
 
-### 6.9 `PATCH /api/v1/user/devices/:id` — rename
-User routes have no rename; only admin can. Renaming your own tank is table
-stakes.
+### 6.9 Rename — **done**
+Landed on the web-UI branch as `PUT /api/v1/user/devices/:id` (not PATCH). The
+app does not call it yet; that is part of phase 4.
 
 ---
 

@@ -57,22 +57,34 @@ Project `watertank-7c30e`.
 
 ## Part 2 — Backend (deploy the push_tokens migration)
 
-The app registers a push token per install, which needs the new table. On the
-server:
+This branch now carries the web-UI rework's backend work too, so there are
+**three** pending migrations, and they must apply in this order:
+
+| Migration | Adds |
+|---|---|
+| `20260912090000_add_alert_dismissed_at` | `alerts.dismissed_at` |
+| `20260912093000_add_soft_delete` | `archived_at` on tenants, devices, users |
+| `20260912100000_add_push_tokens` | the `push_tokens` table |
+
+All three are additive — new nullable columns and a new table — so they are
+safe to apply while the old app is still on phones. On the server:
 
 ```bash
 cd backend-v2
 git fetch && git checkout claude/android-app-modernization-fhsoib && git pull
 npm install
-npx prisma migrate status      # should list 20260912090000_add_push_tokens as pending
+npx prisma migrate status      # should list the three above as pending
 npx prisma migrate deploy
 npm run build
 pm2 restart aquamind-backend   # whatever name ecosystem.config.js uses
 ```
 
-The migration only adds a table; it touches nothing existing, so it is safe to
-apply while the old app is still installed on phones. `users.fcm_token` stays
-and is still written, so v1 builds keep receiving alerts through the switchover.
+`users.fcm_token` stays and is still written, so v1 builds keep receiving alerts
+through the switchover.
+
+> If the web-UI branch has already been deployed to this server, the first two
+> are applied and only `add_push_tokens` is pending. That is fine — `migrate
+> deploy` applies whatever is outstanding.
 
 ✅ **Check:**
 ```bash
