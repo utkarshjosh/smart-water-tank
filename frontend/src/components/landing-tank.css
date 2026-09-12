@@ -1,0 +1,27 @@
+.landing-tank {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  margin-inline: auto;
+}
+
+.landing-tank svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.landing-tank__water {
+  transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.landing-tank__reading {
+  margin-top: -4px;
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-tank__water {
+    transition: none;
+  }
+}
