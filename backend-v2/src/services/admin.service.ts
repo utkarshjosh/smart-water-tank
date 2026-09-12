@@ -226,6 +226,44 @@ export async function updateTenant(tenantId: string, name: string) {
   return prisma.tenant.update({ where: { id: tenantId }, data: { name } });
 }
 
+/**
+ * Admin-side device edit: rename, and move a device between tenants.
+ *
+ * Reassigning a tenant is deliberately explicit rather than a side effect of
+ * some other call - it changes who can see the device's whole history.
+ */
+export async function updateDevice(
+  deviceIdString: string,
+  data: { name?: string | null; tenantId?: string }
+) {
+  const device = await prisma.device.findUnique({ where: { deviceId: deviceIdString } });
+  if (!device) throw new HttpError(404, 'Device not found');
+
+  if (data.tenantId !== undefined) {
+    const tenant = await prisma.tenant.findUnique({ where: { id: data.tenantId } });
+    if (!tenant) throw new HttpError(404, 'Tenant not found');
+  }
+
+  const trimmed = data.name?.trim();
+  const updated = await prisma.device.update({
+    where: { id: device.id },
+    data: {
+      ...(data.name !== undefined ? { name: trimmed ? trimmed : null } : {}),
+      ...(data.tenantId !== undefined ? { tenantId: data.tenantId } : {}),
+    },
+    include: { tenant: true },
+  });
+
+  return {
+    id: updated.id,
+    device_id: updated.deviceId,
+    name: updated.name,
+    tenant_id: updated.tenantId,
+    tenant_name: updated.tenant?.name ?? null,
+    status: updated.status,
+  };
+}
+
 export async function createOrLinkUser(data: {
   firebaseUid: string;
   email: string;

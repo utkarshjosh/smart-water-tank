@@ -89,6 +89,31 @@ router.get(
   })
 );
 
+const updateDeviceSchema = z
+  .object({
+    name: z.string().max(255).nullable().optional(),
+    tenant_id: z.string().uuid().optional(),
+  })
+  .refine((body) => body.name !== undefined || body.tenant_id !== undefined, {
+    message: 'Provide name or tenant_id',
+  });
+
+// PUT /api/v1/admin/devices/:deviceId - Rename a device, or move it to
+// another tenant. Moving a device changes who can see its whole history, so
+// it is its own explicit call rather than a side effect of another write.
+router.put(
+  '/devices/:deviceId',
+  asyncHandler(async (req, res) => {
+    const body = updateDeviceSchema.parse(req.body);
+    res.json(
+      await adminService.updateDevice(req.params.deviceId, {
+        ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(body.tenant_id !== undefined ? { tenantId: body.tenant_id } : {}),
+      })
+    );
+  })
+);
+
 // POST /api/v1/admin/devices/:deviceId/config - Update device config
 router.post(
   '/devices/:deviceId/config',

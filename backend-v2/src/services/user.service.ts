@@ -117,6 +117,63 @@ export async function getMe(userId: string) {
   return toUserDto(user);
 }
 
+/**
+ * Rename a device, or clear the name back to the hardware ID.
+ *
+ * Devices paired through the self-claim flow are created with no name at all
+ * (claimDevice inserts only deviceId/tenantId/status), and until now nothing
+ * could set one - so every self-claimed tank showed its raw hardware ID
+ * forever. `name` was only ever populated by the admin create path.
+ */
+export async function renameDevice(device: Device, name: string | null) {
+  const trimmed = name?.trim() ?? '';
+  const updated = await prisma.device.update({
+    where: { id: device.id },
+    data: { name: trimmed === '' ? null : trimmed },
+  });
+  return getDeviceInfo(updated);
+}
+
+/** Update the caller's own profile. Email and role are deliberately not editable here. */
+export async function updateMe(userId: string, input: { name?: string }) {
+  const data: { name?: string } = {};
+  if (input.name !== undefined) {
+    const trimmed = input.name.trim();
+    if (trimmed === '') throw new HttpError(400, 'name cannot be empty');
+    data.name = trimmed;
+  }
+  if (Object.keys(data).length === 0) throw new HttpError(400, 'Nothing to update');
+
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data,
+    include: { tenant: true },
+  });
+  return toUserDto(user);
+}
+
+/**
+ * Drop the stored push token. Without this a signed-out phone keeps receiving
+ * this account's alerts until some other login overwrites the token.
+ */
+export async function clearFCMToken(userId: string): Promise<void> {
+  await prisma.user.update({ where: { id: userId }, data: { fcmToken: null } });
+}
+
+/** Expire a live claim code early, so a code read aloud by mistake can be killed. */
+export async function revokeClaimCode(tenantId: string, code: string): Promise<void> {
+  const codeHash = hashClaimCode(code);
+  const claim = await prisma.deviceClaimCode.findFirst({ where: { codeHash, tenantId } });
+  if (!claim) throw new HttpError(404, 'Claim code not found');
+  if (claim.consumedAt) throw new HttpError(409, 'That code has already been used');
+
+  // Expiring rather than deleting keeps the audit trail of who minted it.
+  await prisma.deviceClaimCode.update({
+    where: { id: claim.id },
+    data: { expiresAt: new Date() },
+  });
+}
+
 export async function listDevicesForTenant(tenantId: string, userId: string) {
   const devices = await prisma.device.findMany({
     where: { OR: [{ tenantId }, { userMappings: { some: { userId } } }] },

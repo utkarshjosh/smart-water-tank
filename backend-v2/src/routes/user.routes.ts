@@ -61,6 +61,20 @@ const claimCodeMintLimiter = rateLimit({
   keyGenerator: (req: AuthRequest) => req.user!.id,
 });
 
+const updateMeSchema = z.object({
+  name: z.string().min(1).max(255),
+});
+
+// PUT /api/v1/user/me - Edit your own profile. Email and role stay server-owned.
+router.put(
+  '/me',
+  firebaseAuth,
+  asyncHandler(async (req: AuthRequest, res) => {
+    const validated = updateMeSchema.parse(req.body);
+    res.json(await userService.updateMe(req.user!.id, validated));
+  })
+);
+
 // POST /api/v1/user/devices/claim-code - Mint a short-lived claim code the
 // user types into their device's setup portal.
 router.post(
@@ -77,6 +91,16 @@ router.get(
   '/devices/claim-code/:code/status',
   asyncHandler(async (req: AuthRequest, res) => {
     res.json(await userService.getClaimCodeStatus(req.user!.tenantId!, req.params.code));
+  })
+);
+
+// DELETE /api/v1/user/devices/claim-code/:code - Kill a live code early, for a
+// code that was read aloud or shared by mistake.
+router.delete(
+  '/devices/claim-code/:code',
+  asyncHandler(async (req: AuthRequest, res) => {
+    await userService.revokeClaimCode(req.user!.tenantId!, req.params.code);
+    res.status(204).send();
   })
 );
 
@@ -143,6 +167,23 @@ router.get(
   asyncHandler(async (req: DeviceAccessRequest, res) => {
     const { days, limit } = historyQuerySchema.parse(req.query);
     res.json(await userService.getDeviceHistory(req.device!, days, limit));
+  })
+);
+
+const renameDeviceSchema = z.object({
+  // null clears the name, falling back to the hardware ID in the UI.
+  name: z.string().max(255).nullable(),
+});
+
+// PUT /api/v1/user/devices/:deviceId - Rename a device. Devices paired through
+// the self-claim flow arrive with no name at all, so this is the only way one
+// ever gets a human label.
+router.put(
+  '/devices/:deviceId',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    const { name } = renameDeviceSchema.parse(req.body);
+    res.json(await userService.renameDevice(req.device!, name));
   })
 );
 
@@ -283,6 +324,17 @@ router.post(
     const { fcm_token } = fcmTokenSchema.parse(req.body);
     await updateUserFCMToken(req.user!.id, fcm_token);
     res.json({ success: true });
+  })
+);
+
+// DELETE /api/v1/user/fcm-token - Drop the push token on sign-out. Without
+// this a signed-out phone keeps receiving this account's alerts until some
+// other login happens to overwrite the token.
+router.delete(
+  '/fcm-token',
+  asyncHandler(async (req: AuthRequest, res) => {
+    await userService.clearFCMToken(req.user!.id);
+    res.status(204).send();
   })
 );
 

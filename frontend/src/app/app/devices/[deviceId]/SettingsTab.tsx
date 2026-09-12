@@ -8,7 +8,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import { deviceKeys, useDevice, useDeviceConfig, useFirmwareStatus, type ConfigDto } from './useDevice';
+import {
+  deviceKeys,
+  useDevice,
+  useDeviceConfig,
+  useFirmwareStatus,
+  type ConfigDto,
+  type DeviceInfo,
+} from './useDevice';
 
 export default function SettingsTab() {
   const { deviceId } = useParams<{ deviceId: string }>();
@@ -19,12 +26,40 @@ export default function SettingsTab() {
 
   const [low, setLow] = useState('');
   const [full, setFull] = useState('');
+  const [name, setName] = useState('');
+  const [nameDirty, setNameDirty] = useState(false);
+
+  // A device paired through the self-claim flow arrives with no name, so the
+  // API echoes the hardware ID back as the name. Treat that as "unnamed" so
+  // the field starts empty rather than pre-filled with a hardware ID.
+  useEffect(() => {
+    if (!device.data || nameDirty) return;
+    setName(device.data.name === device.data.id ? '' : device.data.name);
+  }, [device.data, nameDirty]);
 
   useEffect(() => {
     if (!config.data) return;
-    setLow(config.data.tank_low_threshold_pct != null ? String(config.data.tank_low_threshold_pct) : '');
-    setFull(config.data.tank_full_threshold_pct != null ? String(config.data.tank_full_threshold_pct) : '');
+    setLow(
+      config.data.tank_low_threshold_pct != null ? String(config.data.tank_low_threshold_pct) : ''
+    );
+    setFull(
+      config.data.tank_full_threshold_pct != null ? String(config.data.tank_full_threshold_pct) : ''
+    );
   }, [config.data]);
+
+  const rename = useMutation({
+    mutationFn: () =>
+      api
+        .put<DeviceInfo>(`/api/v1/user/devices/${deviceId}`, { name: name.trim() || null })
+        .then((r) => r.data),
+    onSuccess: (data) => {
+      queryClient.setQueryData(deviceKeys.info(deviceId), data);
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
+      setNameDirty(false);
+      toast.success(name.trim() ? 'Device renamed' : 'Name cleared');
+    },
+    onError: () => toast.error("Couldn't rename this device", { description: 'Please try again.' }),
+  });
 
   const save = useMutation({
     mutationFn: () =>
@@ -48,6 +83,33 @@ export default function SettingsTab() {
 
   return (
     <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Name</CardTitle>
+          <CardDescription>
+            What this tank is called across the app. Leave it empty to fall back to the hardware ID.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="device-name">Device name</Label>
+            <Input
+              id="device-name"
+              value={name}
+              placeholder={device.data?.id ?? 'Roof tank'}
+              onChange={(e) => {
+                setName(e.target.value);
+                setNameDirty(true);
+              }}
+              maxLength={255}
+            />
+          </div>
+          <Button onClick={() => rename.mutate()} loading={rename.isPending} disabled={!nameDirty}>
+            Save name
+          </Button>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Alert thresholds</CardTitle>
@@ -90,8 +152,8 @@ export default function SettingsTab() {
           </Button>
           {config.data && (
             <p className="text-caption text-ink-3">
-              Measures every {Math.round(config.data.measurement_interval_ms / 1000)}s, reports every{' '}
-              {Math.round(config.data.report_interval_ms / 1000)}s.
+              Measures every {Math.round(config.data.measurement_interval_ms / 1000)}s, reports
+              every {Math.round(config.data.report_interval_ms / 1000)}s.
             </p>
           )}
         </CardContent>
@@ -109,13 +171,20 @@ export default function SettingsTab() {
               <Field label="Device ID" value={device.data?.id} mono />
               <Field
                 label="Last seen"
-                value={device.data?.last_seen ? new Date(device.data.last_seen).toLocaleString() : 'Never'}
+                value={
+                  device.data?.last_seen
+                    ? new Date(device.data.last_seen).toLocaleString()
+                    : 'Never'
+                }
               />
               <Field
                 label="Current firmware"
                 value={firmware.data?.current_version || device.data?.firmware_version || 'Unknown'}
               />
-              <Field label="Latest available" value={firmware.data?.latest_known_version || 'Unknown'} />
+              <Field
+                label="Latest available"
+                value={firmware.data?.latest_known_version || 'Unknown'}
+              />
               <div className="col-span-2">
                 <dt className="text-caption font-medium text-ink-3">Updates</dt>
                 <dd className="mt-1 text-body text-ink-2">
