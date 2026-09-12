@@ -4,13 +4,33 @@ import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Buildings, MagnifyingGlass, Plus, UserPlus, Users, WarningCircle } from '@phosphor-icons/react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Buildings,
+  MagnifyingGlass,
+  Plus,
+  UserPlus,
+  Users,
+  WarningCircle,
+} from '@phosphor-icons/react';
 
 type UserRole = 'user' | 'tenant_owner' | 'admin' | 'super_admin';
 
@@ -59,7 +79,7 @@ interface FirebaseUser {
 
 export default function TenantsPage() {
   const [activeTab, setActiveTab] = useState<'tenants' | 'users'>('tenants');
-  
+
   // Tenants state
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,7 +87,7 @@ export default function TenantsPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newTenantName, setNewTenantName] = useState('');
   const [creating, setCreating] = useState(false);
-  
+
   // Users state
   const [databaseUsers, setDatabaseUsers] = useState<DatabaseUser[]>([]);
   const [firebaseUsers, setFirebaseUsers] = useState<FirebaseUser[]>([]);
@@ -124,7 +144,7 @@ export default function TenantsPage() {
         params.append('search', firebaseSearch.trim());
       }
       params.append('limit', '50');
-      
+
       const response = await api.get(`/api/v1/admin/users/firebase?${params.toString()}`);
       setFirebaseUsers(response.data.users);
     } catch (err: any) {
@@ -161,7 +181,7 @@ export default function TenantsPage() {
       // Refresh both lists
       await fetchDatabaseUsers();
       await searchFirebaseUsers();
-      
+
       // Clear selection
       setSelectedTenantForUser((prev) => {
         const next = { ...prev };
@@ -214,7 +234,7 @@ export default function TenantsPage() {
 
   const handleCreateTenant = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!newTenantName.trim()) {
       setError('Tenant name is required');
       return;
@@ -227,10 +247,10 @@ export default function TenantsPage() {
       const response = await api.post('/api/v1/admin/tenants', {
         name: newTenantName.trim(),
       });
-      
+
       // Refresh tenants list
       await fetchTenants();
-      
+
       // Reset form
       setNewTenantName('');
       setShowCreateForm(false);
@@ -268,12 +288,18 @@ export default function TenantsPage() {
             </div>
             <div className="rounded-md border border-border bg-card px-3 py-2">
               <div className="text-[11px] font-medium uppercase text-muted-foreground">Users</div>
-              <div className="text-lg font-semibold">{activeTab === 'users' ? databaseUsers.length : totalTenantUsers}</div>
+              <div className="text-lg font-semibold">
+                {activeTab === 'users' ? databaseUsers.length : totalTenantUsers}
+              </div>
             </div>
           </div>
         </div>
 
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'tenants' | 'users')} className="space-y-4">
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => setActiveTab(value as 'tenants' | 'users')}
+          className="space-y-4"
+        >
           <TabsList className="h-9 rounded-md">
             <TabsTrigger value="tenants" className="h-7 gap-2 px-3 text-xs">
               <Buildings className="h-3.5 w-3.5" />
@@ -291,10 +317,15 @@ export default function TenantsPage() {
               <div>
                 <h2 className="text-base font-semibold">Tenant roster</h2>
                 <p className="text-sm text-muted-foreground">
-                  {tenants.length} tenant{tenants.length === 1 ? '' : 's'} across {totalDevices} device{totalDevices === 1 ? '' : 's'}
+                  {tenants.length} tenant{tenants.length === 1 ? '' : 's'} across {totalDevices}{' '}
+                  device{totalDevices === 1 ? '' : 's'}
                 </p>
               </div>
-              <Button onClick={() => setShowCreateForm(!showCreateForm)} size="sm" variant={showCreateForm ? 'secondary' : 'primary'}>
+              <Button
+                onClick={() => setShowCreateForm(!showCreateForm)}
+                size="sm"
+                variant={showCreateForm ? 'secondary' : 'primary'}
+              >
                 {showCreateForm ? (
                   'Cancel'
                 ) : (
@@ -320,7 +351,10 @@ export default function TenantsPage() {
                   <CardTitle className="text-base">Create tenant</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <form onSubmit={handleCreateTenant} className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+                  <form
+                    onSubmit={handleCreateTenant}
+                    className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end"
+                  >
                     <div className="space-y-1.5">
                       <Label htmlFor="tenant-name">Tenant Name</Label>
                       <Input
@@ -333,11 +367,7 @@ export default function TenantsPage() {
                       />
                     </div>
                     <div className="flex gap-2">
-                      <Button
-                        type="submit"
-                        disabled={creating || !newTenantName.trim()}
-                        size="sm"
-                      >
+                      <Button type="submit" disabled={creating || !newTenantName.trim()} size="sm">
                         {creating ? 'Creating...' : 'Create'}
                       </Button>
                       <Button
@@ -379,7 +409,9 @@ export default function TenantsPage() {
                       <CardContent className="p-4">
                         <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
                           <div className="min-w-0">
-                            <CardTitle className="truncate text-sm font-semibold">{tenant.name}</CardTitle>
+                            <CardTitle className="truncate text-sm font-semibold">
+                              {tenant.name}
+                            </CardTitle>
                             <CardDescription className="mt-1 text-xs">
                               Created {new Date(tenant.created_at).toLocaleDateString()}
                             </CardDescription>
@@ -387,11 +419,15 @@ export default function TenantsPage() {
                           <div className="grid grid-cols-2 gap-2 sm:w-44">
                             <div className="rounded-md bg-muted/50 px-3 py-2 text-right">
                               <div className="text-sm font-semibold">{tenant.device_count}</div>
-                              <div className="text-[11px] uppercase text-muted-foreground">Devices</div>
+                              <div className="text-[11px] uppercase text-muted-foreground">
+                                Devices
+                              </div>
                             </div>
                             <div className="rounded-md bg-muted/50 px-3 py-2 text-right">
                               <div className="text-sm font-semibold">{tenant.user_count}</div>
-                              <div className="text-[11px] uppercase text-muted-foreground">Users</div>
+                              <div className="text-[11px] uppercase text-muted-foreground">
+                                Users
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -409,7 +445,8 @@ export default function TenantsPage() {
               <div>
                 <h2 className="text-base font-semibold">User assignments</h2>
                 <p className="text-sm text-muted-foreground">
-                  {databaseUsers.length} database user{databaseUsers.length === 1 ? '' : 's'} · {unassignedUsers} unassigned · {linkedFirebaseUsers} Firebase linked
+                  {databaseUsers.length} database user{databaseUsers.length === 1 ? '' : 's'} ·{' '}
+                  {unassignedUsers} unassigned · {linkedFirebaseUsers} Firebase linked
                 </p>
               </div>
               <Button
@@ -453,29 +490,33 @@ export default function TenantsPage() {
                       placeholder="MagnifyingGlass by email, name, or UID..."
                       className="flex-1"
                     />
-                    <Button
-                      onClick={searchFirebaseUsers}
-                      disabled={usersLoading}
-                      size="sm"
-                    >
+                    <Button onClick={searchFirebaseUsers} disabled={usersLoading} size="sm">
                       {usersLoading ? 'Searching...' : 'MagnifyingGlass'}
                     </Button>
                   </div>
 
                   {firebaseUsers.length > 0 && (
                     <div className="mt-4">
-                      <h4 className="mb-2 text-sm font-medium">Firebase users ({firebaseUsers.length})</h4>
+                      <h4 className="mb-2 text-sm font-medium">
+                        Firebase users ({firebaseUsers.length})
+                      </h4>
                       <div className="max-h-96 space-y-2 overflow-y-auto pr-1">
                         {firebaseUsers.map((user) => (
                           <Card key={user.uid} className="rounded-md">
                             <CardContent className="p-3">
                               <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
                                 <div className="min-w-0">
-                                  <div className="truncate text-sm font-medium">{user.email || user.uid}</div>
+                                  <div className="truncate text-sm font-medium">
+                                    {user.email || user.uid}
+                                  </div>
                                   {user.displayName && (
-                                    <div className="text-sm text-muted-foreground">{user.displayName}</div>
+                                    <div className="text-sm text-muted-foreground">
+                                      {user.displayName}
+                                    </div>
                                   )}
-                                  <div className="mt-1 truncate text-xs text-muted-foreground">UID: {user.uid}</div>
+                                  <div className="mt-1 truncate text-xs text-muted-foreground">
+                                    UID: {user.uid}
+                                  </div>
                                   {user.is_linked && user.tenant_name && (
                                     <Badge variant="brand" className="mt-2">
                                       Linked to {user.tenant_name}
@@ -491,7 +532,10 @@ export default function TenantsPage() {
                                   <Select
                                     value={selectedRoleForUser[user.uid] || user.role || 'user'}
                                     onValueChange={(value: UserRole) =>
-                                      setSelectedRoleForUser((prev) => ({ ...prev, [user.uid]: value }))
+                                      setSelectedRoleForUser((prev) => ({
+                                        ...prev,
+                                        [user.uid]: value,
+                                      }))
                                     }
                                   >
                                     <SelectTrigger className="h-9 w-full sm:w-[200px]">
@@ -505,9 +549,12 @@ export default function TenantsPage() {
                                       ))}
                                     </SelectContent>
                                   </Select>
-                                  {(selectedRoleForUser[user.uid] || user.role || 'user') !== 'super_admin' && (
+                                  {(selectedRoleForUser[user.uid] || user.role || 'user') !==
+                                    'super_admin' && (
                                     <Select
-                                      value={selectedTenantForUser[user.uid] || user.tenant_id || ''}
+                                      value={
+                                        selectedTenantForUser[user.uid] || user.tenant_id || ''
+                                      }
                                       onValueChange={(value) =>
                                         setSelectedTenantForUser((prev) => ({
                                           ...prev,
@@ -531,8 +578,9 @@ export default function TenantsPage() {
                                     onClick={() => handleSaveFirebaseUser(user)}
                                     disabled={
                                       !user.email ||
-                                      (selectedRoleForUser[user.uid] || user.role || 'user') !== 'super_admin' &&
-                                        !(selectedTenantForUser[user.uid] || user.tenant_id) ||
+                                      ((selectedRoleForUser[user.uid] || user.role || 'user') !==
+                                        'super_admin' &&
+                                        !(selectedTenantForUser[user.uid] || user.tenant_id)) ||
                                       linkingUser === user.uid
                                     }
                                     size="sm"
@@ -570,7 +618,8 @@ export default function TenantsPage() {
                   </div>
                 ) : databaseUsers.length === 0 ? (
                   <p className="py-8 text-center text-sm text-muted-foreground">
-                    No users found in database. MagnifyingGlass Firebase users above to link them to tenants.
+                    No users found in database. MagnifyingGlass Firebase users above to link them to
+                    tenants.
                   </p>
                 ) : (
                   <div className="overflow-x-auto">
@@ -587,7 +636,9 @@ export default function TenantsPage() {
                       <TableBody>
                         {databaseUsers.map((user) => (
                           <TableRow key={user.id}>
-                            <TableCell className="max-w-[260px] truncate py-2 font-medium">{user.email}</TableCell>
+                            <TableCell className="max-w-[260px] truncate py-2 font-medium">
+                              {user.email}
+                            </TableCell>
                             <TableCell className="py-2">{user.name || '-'}</TableCell>
                             <TableCell>
                               {user.tenant_name || (
@@ -597,7 +648,9 @@ export default function TenantsPage() {
                             <TableCell>
                               <Select
                                 value={user.role}
-                                onValueChange={(value: UserRole) => handleUpdateUserRole(user.id, value)}
+                                onValueChange={(value: UserRole) =>
+                                  handleUpdateUserRole(user.id, value)
+                                }
                                 disabled={linkingUser === user.id}
                               >
                                 <SelectTrigger className="h-9 w-[190px]">
@@ -623,7 +676,13 @@ export default function TenantsPage() {
                                 disabled={linkingUser === user.id || user.role === 'super_admin'}
                               >
                                 <SelectTrigger className="h-9 w-[180px]">
-                                  <SelectValue placeholder={user.role === 'super_admin' ? 'Platform access' : 'Change tenant...'} />
+                                  <SelectValue
+                                    placeholder={
+                                      user.role === 'super_admin'
+                                        ? 'Platform access'
+                                        : 'Change tenant...'
+                                    }
+                                  />
                                 </SelectTrigger>
                                 <SelectContent>
                                   {tenants.map((tenant) => (
@@ -648,5 +707,3 @@ export default function TenantsPage() {
     </AppShell>
   );
 }
-
-
