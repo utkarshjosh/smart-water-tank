@@ -18,6 +18,7 @@ import TankLevel from '@/components/TankLevel';
 import { METRICS, type Metric, type SeriesPoint } from '@/lib/metrics';
 import { Drop, CaretRight, Warning, Cpu } from '@phosphor-icons/react';
 import { DataTable, type Column } from '@/components/ui/data-table';
+import { UsageBars } from '@/components/charts/UsageBars';
 import { PageHeader } from '@/components/ui/page-header';
 import { relativeTime, timeSortValue } from '@/lib/time';
 import '@/app/globals.css';
@@ -45,6 +46,22 @@ function makeSeries(): SeriesPoint[] {
 }
 
 const SERIES = makeSeries();
+
+// 30 days of usage: a few refill days, one flagged day, two not yet aggregated.
+const DEMO_USAGE = Array.from({ length: 30 }, (_, i) => {
+  const d = new Date(Date.now() - (29 - i) * 86_400_000);
+  const pending = i >= 28;
+  return {
+    date: d.toISOString().slice(0, 10),
+    used_l: pending ? null : Math.round(420 + Math.sin(i / 3) * 180 + (i % 7 === 0 ? 220 : 0)),
+    min_l: 120,
+    avg_l: 480,
+    max_l: 900,
+    refill_events: i % 4 === 0 ? 1 : 0,
+    leak_suspected: i === 11,
+    readings: 288,
+  };
+});
 
 interface DemoRow {
   id: string;
@@ -321,6 +338,17 @@ function Preview() {
           caption="Devices"
           empty={<EmptyState icon={Cpu} title="No devices" />}
         />
+      </Section>
+
+      <Section title="Daily usage (no chart bundle)">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-label text-ink-2">Daily usage</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <UsageBars days={DEMO_USAGE} />
+          </CardContent>
+        </Card>
       </Section>
 
       <Section title="Controls">

@@ -33,10 +33,13 @@
     font-feature-settings: 'tnum';
   }
 
+  /* Longhands, not the `outline` shorthand: a var() inside the shorthand left
+     the computed outline-width at 0px, so the ring silently never rendered. */
   :focus-visible {
-    outline: 2px solid hsl(var(--brand));
+    outline-width: 2px;
+    outline-style: solid;
+    outline-color: hsl(var(--brand));
     outline-offset: 2px;
-    border-radius: var(--radius-sm);
   }
 
   /* Focus rings belong to keyboard users; a tap should not leave one behind. */

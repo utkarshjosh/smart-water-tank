@@ -73,7 +73,7 @@ export function UsersTab() {
           onValueChange={(value: UserRole) => updateRole.mutate({ userId: u.id, role: value })}
           disabled={updateRole.isPending}
         >
-          <SelectTrigger className="h-9 w-[168px]" aria-label={`Role for ${u.email}`}>
+          <SelectTrigger className="h-11 w-[168px] md:h-9" aria-label={`Role for ${u.email}`}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -99,7 +99,7 @@ export function UsersTab() {
             onValueChange={(value) => updateTenant.mutate({ userId: u.id, tenantId: value })}
             disabled={updateTenant.isPending}
           >
-            <SelectTrigger className="h-9 w-[180px]" aria-label={`Tenant for ${u.email}`}>
+            <SelectTrigger className="h-11 w-[180px] md:h-9" aria-label={`Tenant for ${u.email}`}>
               <SelectValue placeholder="Unassigned" />
             </SelectTrigger>
             <SelectContent>
@@ -275,7 +275,7 @@ function FirebaseUserRow({
         <div className="flex flex-wrap items-center gap-2">
           <Select value={role} onValueChange={(v: UserRole) => onRoleChange(v)} disabled={busy}>
             <SelectTrigger
-              className="h-9 w-[168px]"
+              className="h-11 w-[168px] md:h-9"
               aria-label={`Role for ${user.email ?? user.uid}`}
             >
               <SelectValue />
@@ -292,7 +292,7 @@ function FirebaseUserRow({
           {!isTenantless(role) && (
             <Select value={tenantId} onValueChange={onTenantChange} disabled={busy}>
               <SelectTrigger
-                className="h-9 w-[180px]"
+                className="h-11 w-[180px] md:h-9"
                 aria-label={`Tenant for ${user.email ?? user.uid}`}
               >
                 <SelectValue placeholder="Pick a tenant" />

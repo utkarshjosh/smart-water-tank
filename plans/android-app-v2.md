@@ -237,10 +237,10 @@ cursor pagination. Covers explicitly shared devices, not just the tenant's.
 `POST /api/v1/user/alerts/:alertId/acknowledge`, so a notification action can
 acknowledge with only the `alert_id` the FCM payload carries.
 
-### 6.5 `GET /api/v1/user/devices/:id/summaries?days=30`
-`daily_summaries` is computed nightly by `aggregation.service.ts` — usage,
-refill counts, leak suspicion — and has **no user-facing route**. Free feature
-already paid for.
+### 6.5 Daily usage — **done**
+Landed on `main` as `GET /api/v1/user/devices/:id/usage`, finally surfacing what
+`aggregation.service.ts` has been computing nightly. The app does not read it
+yet — that is a detail-screen addition.
 
 ### 6.6 `GET /api/v1/user/stream` (SSE)
 Live telemetry to a foregrounded app: hook `GatewayCore.handleTelemetry` and

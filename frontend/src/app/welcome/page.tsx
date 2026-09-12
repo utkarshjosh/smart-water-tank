@@ -51,17 +51,37 @@ export default function LandingPage() {
   const [alert, setAlert] = useState<TankAlert>(null);
 
   const demos: { label: string; onClick: () => void }[] = [
-    { label: 'Leak', onClick: () => { setAlert('leak'); setLevel((v) => Math.max(0, v - 18)); } },
-    { label: 'Refill', onClick: () => { setAlert(null); setLevel(96); } },
-    { label: 'Low', onClick: () => { setAlert('low'); setLevel(12); } },
+    {
+      label: 'Leak',
+      onClick: () => {
+        setAlert('leak');
+        setLevel((v) => Math.max(0, v - 18));
+      },
+    },
+    {
+      label: 'Refill',
+      onClick: () => {
+        setAlert(null);
+        setLevel(96);
+      },
+    },
+    {
+      label: 'Low',
+      onClick: () => {
+        setAlert('low');
+        setLevel(12);
+      },
+    },
   ];
 
   return (
     <div className="min-h-screen bg-canvas">
       <header className="safe-top sticky top-0 z-40 border-b border-hairline bg-surface/90 backdrop-blur">
         <div className="mx-auto flex h-header max-w-content items-center gap-3 px-4 sm:px-6">
-          <img src="/logo.png" alt="" className="h-7 w-7 shrink-0 object-contain" />
-          <span className="text-title">AquaMind</span>
+          <img src="/logo.png" alt="AquaMind" className="h-7 w-7 shrink-0 object-contain" />
+          {/* Below 400px the wordmark yields to the two actions; the logo
+              still carries the alt text, so nothing is lost to a reader. */}
+          <span className="hidden text-title xs:inline">AquaMind</span>
           <nav className="ml-auto flex items-center gap-1 sm:gap-2">
             <Button asChild variant="ghost" size="sm">
               <Link to="/login">Log in</Link>
@@ -87,8 +107,8 @@ export default function LandingPage() {
                 Know exactly how much water you have left.
               </h1>
               <p className="mt-4 max-w-lg text-body text-ink-2 sm:text-[1.0625rem]">
-                AquaMind reads your tank every few minutes, turns it into litres, and tells
-                you when the level drops faster than it should. No climbing up to look.
+                AquaMind reads your tank every few minutes, turns it into litres, and tells you when
+                the level drops faster than it should. No climbing up to look.
               </p>
               <div className="mt-7 flex flex-wrap gap-3">
                 <Button asChild size="lg">
@@ -115,10 +135,16 @@ export default function LandingPage() {
                       aria-hidden
                       className={`h-2 w-2 rounded-full ${alert === 'leak' ? 'bg-critical' : alert === 'low' ? 'bg-warning' : 'bg-good'}`}
                     />
-                    {alert === 'leak' ? 'Possible leak' : alert === 'low' ? 'Level low' : 'All normal'}
+                    {alert === 'leak'
+                      ? 'Possible leak'
+                      : alert === 'low'
+                        ? 'Level low'
+                        : 'All normal'}
                   </p>
                 </div>
-                <span className="rounded-md bg-surface-sunk px-2 py-1 text-caption text-ink-2">Live</span>
+                <span className="rounded-md bg-surface-sunk px-2 py-1 text-caption text-ink-2">
+                  Live
+                </span>
               </div>
 
               <div className="mx-auto my-5 w-36 sm:w-40">
@@ -181,9 +207,9 @@ export default function LandingPage() {
                 Every reading, kept and browsable
               </h2>
               <p className="mt-4 max-w-lg text-body text-ink-2">
-                Pan and pinch through a week or a year. Readings are averaged into buckets
-                as you zoom out, with the high and low of each bucket kept — so an
-                overnight draw or a refill spike never gets smoothed away.
+                Pan and pinch through a week or a year. Readings are averaged into buckets as you
+                zoom out, with the high and low of each bucket kept — so an overnight draw or a
+                refill spike never gets smoothed away.
               </p>
               <dl className="mt-7 space-y-2">
                 {STATS.map((stat) => (
@@ -228,8 +254,8 @@ export default function LandingPage() {
               Set it up once, stop thinking about it
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-body text-ink-2">
-              Pair the sensor, enter your tank’s height and shape, and AquaMind handles
-              the rest — including firmware updates, which install overnight on their own.
+              Pair the sensor, enter your tank’s height and shape, and AquaMind handles the rest —
+              including firmware updates, which install overnight on their own.
             </p>
             <Button asChild size="lg" className="mt-7">
               <Link to="/signup">

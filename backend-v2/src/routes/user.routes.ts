@@ -11,6 +11,7 @@ import * as firmwareService from '../services/firmware.service';
 import { registerPushToken, removePushToken, updateUserFCMToken } from '../services/fcm.service';
 import { exportUserMeasurements } from '../services/measurement-export.service';
 import { BUCKETS, getDeviceHistorySeries } from '../services/history.service';
+import { getDeviceUsage } from '../services/usage.service';
 
 const router = express.Router();
 
@@ -261,6 +262,22 @@ router.delete(
   asyncHandler(async (req: DeviceAccessRequest, res) => {
     await userService.unshareDevice(req.device!, req.params.userId);
     res.status(204).send();
+  })
+);
+
+const usageQuerySchema = z.object({
+  days: z.coerce.number().int().positive().max(365).default(30),
+});
+
+// GET /api/v1/user/devices/:deviceId/usage - Daily usage history. Finally
+// reads daily_summaries, which the nightly aggregation job has been writing
+// since the beginning with nothing consuming it.
+router.get(
+  '/devices/:deviceId/usage',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    const { days } = usageQuerySchema.parse(req.query);
+    res.json(await getDeviceUsage(req.device!, days));
   })
 );
 

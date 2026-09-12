@@ -22,6 +22,7 @@ export interface AdminDevice {
   current_volume: number | null;
   last_measurement: string | null;
   created_at: string;
+  archived_at?: string | null;
 }
 
 export interface AdminTenant {
@@ -30,6 +31,7 @@ export interface AdminTenant {
   created_at: string;
   device_count: number;
   user_count: number;
+  archived_at?: string | null;
 }
 
 const get = <T>(url: string) => api.get<T>(url).then((r) => r.data);
@@ -41,16 +43,22 @@ export const useAdminSummary = () =>
     queryFn: () => get<AdminSummary>('/api/v1/admin/analytics/summary'),
   });
 
-export const useAdminDevices = () =>
+export const useAdminDevices = (includeArchived = false) =>
   useQuery({
-    queryKey: ['admin', 'devices'],
-    queryFn: () => get<{ devices: AdminDevice[] }>('/api/v1/admin/devices').then((d) => d.devices),
+    queryKey: ['admin', 'devices', { includeArchived }],
+    queryFn: () =>
+      get<{ devices: AdminDevice[] }>(
+        `/api/v1/admin/devices${includeArchived ? '?include_archived=true' : ''}`
+      ).then((d) => d.devices),
   });
 
-export const useAdminTenants = () =>
+export const useAdminTenants = (includeArchived = false) =>
   useQuery({
-    queryKey: ['admin', 'tenants'],
-    queryFn: () => get<{ tenants: AdminTenant[] }>('/api/v1/admin/tenants').then((d) => d.tenants),
+    queryKey: ['admin', 'tenants', { includeArchived }],
+    queryFn: () =>
+      get<{ tenants: AdminTenant[] }>(
+        `/api/v1/admin/tenants${includeArchived ? '?include_archived=true' : ''}`
+      ).then((d) => d.tenants),
   });
 
 export const errorMessage = (err: unknown, fallback: string) => {

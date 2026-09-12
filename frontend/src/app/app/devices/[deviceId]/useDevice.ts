@@ -44,7 +44,7 @@ export interface FirmwareStatus {
   last_checked_at: string | null;
 }
 
-const get = <T,>(url: string) => api.get<T>(url).then((r) => r.data);
+const get = <T>(url: string) => api.get<T>(url).then((r) => r.data);
 
 export const deviceKeys = {
   info: (id?: string) => ['device', id] as const,
@@ -81,7 +81,9 @@ export const useTankProfile = (id?: string) =>
     queryKey: deviceKeys.profile(id),
     enabled: Boolean(id),
     queryFn: () =>
-      get<{ profile: TankProfileDto | null }>(`/api/v1/user/devices/${id}/tank-profile`).then((d) => d.profile),
+      get<{ profile: TankProfileDto | null }>(`/api/v1/user/devices/${id}/tank-profile`).then(
+        (d) => d.profile
+      ),
   });
 
 export const useAlerts = (id?: string) =>
@@ -108,3 +110,59 @@ export const useFirmwareStatus = (id?: string) =>
 
 export const formatReading = (value: number | null | undefined, digits = 0) =>
   value == null ? null : Number(value).toFixed(digits);
+
+export interface UsageDay {
+  date: string;
+  used_l: number | null;
+  min_l: number | null;
+  avg_l: number | null;
+  max_l: number | null;
+  refill_events: number;
+  leak_suspected: boolean;
+  readings: number;
+}
+
+export interface UsageResponse {
+  device_id: string;
+  from: string;
+  to: string;
+  has_tank_profile: boolean;
+  capacity_l: number | null;
+  days: UsageDay[];
+  totals: {
+    used_l: number | null;
+    daily_average_l: number | null;
+    refill_events: number;
+    leak_days: number;
+    days_with_data: number;
+    days_aggregated: number;
+  };
+}
+
+export const useUsage = (id?: string, days = 30) =>
+  useQuery({
+    queryKey: ['device', id, 'usage', days],
+    enabled: Boolean(id),
+    queryFn: () => get<UsageResponse>(`/api/v1/user/devices/${id}/usage?days=${days}`),
+  });
+
+export interface DeviceShare {
+  user_id: string;
+  email: string;
+  name: string | null;
+  role: string;
+  via: 'tenant' | 'share';
+  revocable: boolean;
+  redundant?: boolean;
+  shared_at?: string;
+}
+
+export const useDeviceShares = (id?: string) =>
+  useQuery({
+    queryKey: ['device', id, 'shares'],
+    enabled: Boolean(id),
+    queryFn: () =>
+      get<{ device_id: string; members: DeviceShare[]; shares: DeviceShare[] }>(
+        `/api/v1/user/devices/${id}/shares`
+      ),
+  });

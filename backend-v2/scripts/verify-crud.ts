@@ -4,6 +4,7 @@
 import { prisma } from '../src/lib/prisma';
 import * as userService from '../src/services/user.service';
 import * as adminService from '../src/services/admin.service';
+import { getDeviceUsage } from '../src/services/usage.service';
 import { getAccessibleDeviceOrThrow } from '../src/lib/access';
 import { hashClaimCode } from '../src/lib/claim-code';
 
@@ -484,6 +485,101 @@ async function main() {
   // Nothing above destroyed data.
   const survivingReadings = await prisma.measurement.count({ where: { deviceId: deviceB.id } });
   check('no readings were destroyed by any archive', survivingReadings === beforeCount + 1);
+
+  // --- daily usage: daily_summaries finally has a reader --------------------
+  console.log('');
+  const usageDevice = await prisma.device.create({
+    data: { deviceId: `crud-usage-${suffix}`, tenantId: tenant.id, name: 'Usage tank', status: 'online' },
+  });
+  await prisma.tankProfile.create({
+    data: {
+      deviceId: usageDevice.id,
+      shape: 'cuboidal',
+      parallelUnitCount: 1,
+      heightCm: 90,
+      lengthCm: 100,
+      widthCm: 100,
+      sensorOffsetCm: 0,
+      deadZoneCm: 20,
+    },
+  });
+
+  // Three days of readings, draining 20 -> 80 cm distance each day.
+  const dayStart = (offset: number) => {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - offset);
+    d.setUTCHours(1, 0, 0, 0);
+    return d;
+  };
+  for (const offset of [3, 2, 1]) {
+    const base = dayStart(offset);
+    for (let h = 0; h < 12; h++) {
+      await prisma.measurement.create({
+        data: {
+          deviceId: usageDevice.id,
+          timestamp: new Date(base.getTime() + h * 3_600_000),
+          levelCm: 20 + h * 5,
+          volumeL: 900 - h * 64,
+        },
+      });
+    }
+  }
+  // A summary for one of those days only, so the "not yet aggregated" path
+  // is exercised alongside the aggregated one.
+  const summaryDate = new Date(dayStart(2).toISOString().slice(0, 10));
+  await prisma.dailySummary.create({
+    data: {
+      deviceId: usageDevice.id,
+      date: summaryDate,
+      totalUsageL: 640,
+      minVolumeL: 132,
+      maxVolumeL: 900,
+      avgVolumeL: 500,
+      refillEvents: 2,
+      leakSuspected: true,
+    },
+  });
+
+  const usage = await getDeviceUsage(usageDevice, 7);
+  check('usage returns one row per day with readings', usage.days.length === 3, `${usage.days.length} days`);
+  check('usage reports the derived capacity', usage.capacity_l === 900, `${usage.capacity_l} L`);
+  check('usage knows the device has a profile', usage.has_tank_profile === true);
+
+  const aggregated = usage.days.find((d) => d.date === summaryDate.toISOString().slice(0, 10));
+  check('the aggregated day carries refill events from daily_summaries', aggregated?.refill_events === 2);
+  check('the aggregated day carries the leak flag', aggregated?.leak_suspected === true);
+  check('the aggregated day carries used litres', aggregated?.used_l === 640, `${aggregated?.used_l} L`);
+
+  // min/max are derived from the CURRENT profile, not the frozen summary
+  // volumes: distance 20cm is full (900 L) and 75cm is near empty.
+  check(
+    'min and max are derived at read time, and inverted correctly',
+    aggregated != null && aggregated.max_l === 900 && aggregated.min_l != null && aggregated.min_l < 300,
+    `min=${aggregated?.min_l} max=${aggregated?.max_l}`
+  );
+
+  const notAggregated = usage.days.filter((d) => d.used_l == null);
+  check('days without a summary report null usage, not a fake zero', notAggregated.length === 2, `${notAggregated.length} days`);
+  check('those days still carry derived min/avg/max', notAggregated.every((d) => d.max_l != null));
+
+  check('totals only average over aggregated days', usage.totals.days_aggregated === 1, `${usage.totals.days_aggregated}`);
+  check('totals sum used litres', usage.totals.used_l === 640, `${usage.totals.used_l} L`);
+  check('totals count refills and leak days', usage.totals.refill_events === 2 && usage.totals.leak_days === 1);
+
+  // A profile correction must move the derived numbers - the point of
+  // deriving them instead of serving the frozen summary volumes.
+  await prisma.tankProfile.update({
+    where: { deviceId: usageDevice.id },
+    data: { lengthCm: 200 },
+  });
+  const doubled = await getDeviceUsage(usageDevice, 7);
+  check(
+    'correcting the tank profile moves the derived volumes',
+    doubled.capacity_l === 1800 && doubled.days.some((d) => d.max_l === 1800),
+    `capacity ${doubled.capacity_l} L`
+  );
+
+  await expectThrow('a days value over the cap is rejected', () => getDeviceUsage(usageDevice, 400), 400);
 
   await prisma.tenant.deleteMany({ where: { id: { in: [tenant.id, other.id] } } });
   await prisma.$disconnect();
