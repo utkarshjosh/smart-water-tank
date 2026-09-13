@@ -3,16 +3,7 @@ import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  CaretDown,
-  CaretUp,
-  Cylinder,
-  FloppyDisk,
-  Gauge,
-  Ruler,
-  Stack,
-  WarningCircle,
-} from '@phosphor-icons/react';
+import { CaretDown, CaretUp, FloppyDisk, Gauge, Ruler, WarningCircle } from '@phosphor-icons/react';
 import TankDiagram from './TankDiagram';
 
 export interface TankProfileDto {
@@ -165,9 +156,9 @@ export function TankSetupWizard({
       </div>
 
       <div className="grid gap-0 md:grid-cols-[0.9fr_1.1fr]">
-        <div className="border-b border-slate-100 bg-slate-950 p-4 text-slate-100 md:border-b-0 md:border-r">
+        <div className="border-b border-slate-100 bg-surface p-4 text-ink-1 md:border-b-0 md:border-r">
           <div className="flex h-full min-h-72 flex-col justify-between gap-4">
-            <div className="flex items-center justify-center rounded-lg bg-white/5 px-4 py-5 ring-1 ring-white/10">
+            <div className="flex items-center justify-center rounded-lg bg-surface px-4 py-5">
               <TankDiagram
                 shape={form.shape}
                 unitCount={form.parallelUnitCount}
@@ -176,22 +167,18 @@ export function TankSetupWizard({
               />
             </div>
             <div className="grid grid-cols-3 gap-2">
-              <div className="rounded-md bg-white/5 px-3 py-2 ring-1 ring-white/10">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-                  Shape
-                </p>
+              <div className="rounded-md bg-surface-sunk px-3 py-2 ring-1 ring-hairline">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-ink-3">Shape</p>
                 <p className="mt-1 truncate text-sm font-semibold capitalize">
                   {form.shape || 'Unset'}
                 </p>
               </div>
-              <div className="rounded-md bg-white/5 px-3 py-2 ring-1 ring-white/10">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-                  Units
-                </p>
+              <div className="rounded-md bg-surface-sunk px-3 py-2 ring-1 ring-hairline">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-ink-3">Units</p>
                 <p className="mt-1 text-sm font-semibold">{form.parallelUnitCount}</p>
               </div>
-              <div className="rounded-md bg-white/5 px-3 py-2 ring-1 ring-white/10">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
+              <div className="rounded-md bg-surface-sunk px-3 py-2 ring-1 ring-hairline">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-ink-3">
                   Capacity
                 </p>
                 <p className="mt-1 truncate text-sm font-semibold">
@@ -223,11 +210,9 @@ export function TankSetupWizard({
                   {
                     shape: 'cylindrical' as const,
                     label: 'Plastic household tank',
-                    icon: Cylinder,
                   },
-                  { shape: 'cuboidal' as const, label: 'Cuboidal / sump tank', icon: Stack },
+                  { shape: 'cuboidal' as const, label: 'Cuboidal / sump tank' },
                 ].map((option) => {
-                  const Icon = option.icon;
                   return (
                     <button
                       key={option.shape}
@@ -235,11 +220,11 @@ export function TankSetupWizard({
                       onClick={() => setForm((f) => ({ ...f, shape: option.shape }))}
                       className={`flex min-h-28 flex-col items-start justify-between rounded-lg border p-3 text-left transition-colors ${
                         form.shape === option.shape
-                          ? 'border-cyan-500 bg-cyan-50 text-cyan-950'
-                          : 'border-slate-200 hover:border-cyan-300'
+                          ? 'border-brand bg-brand-wash text-brand'
+                          : 'border-slate-200 hover:border-brand'
                       }`}
                     >
-                      <Icon className="h-5 w-5 text-cyan-600" />
+                      <TankDiagram shape={option.shape} className="h-20" />
                       <span className="text-sm font-semibold">{option.label}</span>
                     </button>
                   );

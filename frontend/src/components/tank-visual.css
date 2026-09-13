@@ -1,0 +1,37 @@
+.tank-visual {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.tank-visual__level {
+  transition:
+    transform 1100ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 700ms ease;
+}
+.tank-visual__wave {
+  animation: tank-wave 5s linear infinite;
+  animation-play-state: paused;
+}
+.tank-visual__wave--back {
+  animation-duration: 7s;
+  animation-direction: reverse;
+}
+.tank-visual[data-moving='true'] .tank-visual__wave {
+  animation-play-state: running;
+}
+@keyframes tank-wave {
+  from {
+    translate: 0 0;
+  }
+  to {
+    translate: -100px 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tank-visual__level {
+    transition: none;
+  }
+  .tank-visual__wave {
+    animation: none;
+  }
+}

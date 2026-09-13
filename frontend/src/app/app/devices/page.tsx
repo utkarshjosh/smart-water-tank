@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
-import { CaretRight, Drop, Plus, SlidersHorizontal, Warning } from '@phosphor-icons/react';
+import { CaretRight, Drop, Plus, Warning } from '@phosphor-icons/react';
 import api from '@/lib/api';
 import { AppShell } from '@/components/shell';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -20,6 +20,7 @@ interface Device {
   last_seen: string;
   current_volume: number | null;
   level_percent: number | null;
+  level_percent_stale: boolean;
   has_tank_profile: boolean;
   last_measurement: string | null;
   active_alert: 'leak' | 'low' | null;
@@ -117,18 +118,14 @@ export default function TenantDevicesPage() {
                   to={`/app/devices/${device.id}`}
                   className="group flex h-full items-center gap-4 rounded-lg border border-hairline bg-surface p-4 transition-[border-color,transform] duration-instant ease-out hover:border-line-strong active:scale-[0.99]"
                 >
-                  <div className="w-14 shrink-0">
-                    {device.has_tank_profile && device.level_percent != null ? (
-                      <TankLevel
-                        level={device.level_percent}
-                        alert={device.active_alert}
-                        showLabel={false}
-                      />
-                    ) : (
-                      <div className="flex h-14 w-14 items-center justify-center rounded-md border border-dashed border-line-strong text-ink-3">
-                        <SlidersHorizontal size={18} />
-                      </div>
-                    )}
+                  <div className="w-24 shrink-0">
+                    <TankLevel
+                      level={device.has_tank_profile ? device.level_percent : null}
+                      alert={device.active_alert}
+                      showLabel={false}
+                      stale={device.level_percent_stale || device.status !== 'online'}
+                      animated={false}
+                    />
                   </div>
 
                   <div className="min-w-0 flex-1">
@@ -149,8 +146,15 @@ export default function TenantDevicesPage() {
                         )}
                       </p>
                     ) : (
-                      <p className="mt-2 text-caption text-brand">Set up your tank</p>
+                      <p className="mt-2 text-caption text-brand">
+                        {device.has_tank_profile ? 'Awaiting a reading' : 'Set up your tank'}
+                      </p>
                     )}
+                    {device.has_tank_profile &&
+                      device.level_percent != null &&
+                      device.level_percent_stale && (
+                        <p className="mt-1 text-caption text-ink-3">Last known level</p>
+                      )}
                     {device.active_alert && (
                       <p className="mt-1 inline-flex items-center gap-1 text-caption text-warning-text">
                         <Warning size={13} weight="fill" aria-hidden />

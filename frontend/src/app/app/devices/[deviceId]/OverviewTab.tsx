@@ -10,12 +10,20 @@ import TankDiagram from '@/components/tank-setup/TankDiagram';
 import { UsageBars } from '@/components/charts/UsageBars';
 import { LiveIndicator } from './LiveIndicator';
 import { MiniHistory } from './MiniHistory';
-import { formatReading, useAlerts, useCurrent, useTankProfile, useUsage } from './useDevice';
+import {
+  formatReading,
+  useAlerts,
+  useCurrent,
+  useDevice,
+  useTankProfile,
+  useUsage,
+} from './useDevice';
 
 /** One screenful: where the tank is right now, plus the last day at a glance. */
 export default function OverviewTab() {
   const { deviceId } = useParams<{ deviceId: string }>();
   const current = useCurrent(deviceId);
+  const device = useDevice(deviceId);
   const profile = useTankProfile(deviceId);
   const alerts = useAlerts(deviceId);
   const usage = useUsage(deviceId, 30);
@@ -26,6 +34,9 @@ export default function OverviewTab() {
   const tankAlert = active ? (active.type === 'leak_detected' ? 'leak' : 'low') : null;
   const reading = current.data;
   const loading = current.isLoading || profile.isLoading;
+  const stale = Boolean(
+    reading?.level_percent_stale || (device.data && device.data.status !== 'online')
+  );
 
   return (
     <div className="space-y-4">
@@ -39,11 +50,16 @@ export default function OverviewTab() {
       <Card>
         <CardContent className="flex flex-col items-center gap-4 pt-5">
           {loading ? (
-            <Skeleton className="h-36 w-40" />
+            <Skeleton className="h-72 w-64" />
           ) : profile.data && reading?.level_percent != null ? (
             <>
-              <div className="w-40">
-                <TankLevel level={reading.level_percent} alert={tankAlert} />
+              <div className="w-60 sm:w-72">
+                <TankLevel
+                  level={reading.level_percent}
+                  alert={tankAlert}
+                  shape={profile.data.shape}
+                  stale={stale}
+                />
               </div>
               {reading.level_percent_stale && (
                 <p className="inline-flex items-center gap-1.5 rounded-full bg-surface-sunk px-2.5 py-1 text-caption text-ink-2">
@@ -57,11 +73,14 @@ export default function OverviewTab() {
               <LiveIndicator
                 timestamp={reading.timestamp}
                 fetching={current.isFetching}
-                stale={reading.level_percent_stale}
+                stale={stale}
               />
             </>
           ) : (
             <div className="flex flex-col items-center gap-3 py-6 text-center">
+              <div className="w-48">
+                <TankLevel level={null} showLabel={false} animated={false} />
+              </div>
               <p className="text-body text-ink-2">
                 {profile.data
                   ? 'No sensor reading yet.'
