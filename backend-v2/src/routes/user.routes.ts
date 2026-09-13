@@ -4,6 +4,7 @@ import rateLimit from 'express-rate-limit';
 import { AuthRequest, firebaseAuth, requireTenant } from '../middleware/firebaseAuth.middleware';
 import { DeviceAccessRequest, requireDeviceAccess } from '../lib/access';
 import { asyncHandler } from '../lib/async-handler';
+import { alertThresholdsSchema } from '../lib/alert-thresholds';
 import * as userService from '../services/user.service';
 import * as deviceService from '../services/device.service';
 import * as tankProfileService from '../services/tank-profile.service';
@@ -334,15 +335,10 @@ router.get(
   })
 );
 
-// Absent = keep the stored value, null = clear it back to "not set".
-const alertThresholdsSchema = z.object({
-  tank_low_threshold_pct: z.coerce.number().min(0).max(100).nullable().optional(),
-  tank_full_threshold_pct: z.coerce.number().min(0).max(100).nullable().optional(),
-  battery_low_threshold_v: z.coerce.number().min(0).nullable().optional(),
-});
-
 // PUT /api/v1/user/devices/:deviceId/alert-thresholds - Tenant-editable alert
-// thresholds. Predates /alert-rules; kept for the web app, same columns.
+// thresholds. Omitting a field keeps it; sending null clears it, which turns
+// that alert off for this device. Predates /alert-rules; kept for the web app,
+// same columns.
 router.put(
   '/devices/:deviceId/alert-thresholds',
   requireDeviceAccess,

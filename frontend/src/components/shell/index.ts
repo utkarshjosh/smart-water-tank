@@ -1,8 +1,10 @@
-export { AppShell } from './app-shell';
 export { AuthLayout } from './auth-layout';
 export { AppHeader } from './app-header';
 export { AppLoader } from './app-loader';
 export { RouteFallback } from './route-fallback';
+export { RouteSkeleton } from './route-skeleton';
+export { ShellLayout, ShellAction } from './shell-layout';
+export { usePageHeading } from './shell-context';
 export { BottomTabBar } from './bottom-tab-bar';
 export { SideNav } from './side-nav';
 export { navFor, TENANT_NAV, ADMIN_NAV, type NavItem, type ShellVariant } from './nav-config';

@@ -24,6 +24,7 @@ export interface DatabaseUser {
   tenant_name: string | null;
   role: string;
   created_at: string;
+  archived_at?: string | null;
 }
 
 export interface FirebaseUser {

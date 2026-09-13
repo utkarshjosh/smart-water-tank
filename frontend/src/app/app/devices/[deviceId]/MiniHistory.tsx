@@ -18,7 +18,11 @@ export function MiniHistory({ deviceId }: { deviceId?: string }) {
 
   if (isLoading) return <Skeleton className="mx-2 h-[120px]" />;
 
-  const points = data?.series.level_percent?.points ?? [];
+  // `series?.`, not `series.`: the generic on api.get is a compile-time
+  // assertion, not a runtime check, so a response without this key throws
+  // here and takes the whole page down instead of showing the empty state
+  // three lines below.
+  const points = data?.series?.level_percent?.points ?? [];
   if (points.filter((p) => p[2] != null).length < 2) {
     return (
       <p className="px-2 py-8 text-center text-caption text-ink-3">

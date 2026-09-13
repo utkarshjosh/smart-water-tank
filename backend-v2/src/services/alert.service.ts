@@ -23,6 +23,30 @@ const TITLE_BY_TYPE: Record<AlertType, string> = {
   leak_detected: 'Possible leak',
 };
 
+/**
+ * Whether a reading crosses a configured threshold.
+ *
+ * Null is the only way an alert is off, and that is deliberate. The legacy
+ * litre and battery rules used a truthy check, which made a stored 0 an
+ * accidental disable switch on those rules but not on the percentage ones -
+ * the same value meaning two different things depending on which branch ran.
+ * Here 0 is always a real threshold and null is always off.
+ */
+export function thresholdCrossed(
+  reading: number | null | undefined,
+  threshold: number | null | undefined,
+  direction: 'at-or-above' | 'at-or-below' | 'below'
+): reading is number {
+  if (reading == null || threshold == null) return false;
+  if (direction === 'at-or-above') return reading >= threshold;
+  if (direction === 'at-or-below') return reading <= threshold;
+  return reading < threshold;
+}
+
+/** Decimal columns arrive as Prisma Decimal; null stays null. */
+const num = (value: { toNumber(): number } | null | undefined): number | null =>
+  value == null ? null : value.toNumber();
+
 export async function processAlertsForMeasurement(
   deviceId: string,
   measurement: { levelCm: number | null; volumeL: number | null; batteryV: number | null }
@@ -37,13 +61,17 @@ export async function processAlertsForMeasurement(
   const profile = device.tankProfile;
   const { levelCm, volumeL, batteryV } = measurement;
 
-  // Each rule can be switched off per device (issue #13). The thresholds come
-  // from the same catalog the settings screen renders, so what the user sees
-  // is what fires.
+  // Read once, as plain numbers. null means that threshold is not set, which
+  // is one of two ways an alert is off for this device - the other is the
+  // rule's enabled flag (issue #13). Both come from the same catalog the
+  // settings screen renders, so what the user sees is what fires.
   const tankLowOn = isAlertRuleEnabled(config, 'tank_low');
   const tankFullOn = isAlertRuleEnabled(config, 'tank_full');
-  const tankLowPct = effectiveThreshold(config, 'tank_low');
-  const tankFullPct = effectiveThreshold(config, 'tank_full');
+  const fullPct = num(config?.tankFullThresholdPct);
+  const lowPct = num(config?.tankLowThresholdPct);
+  const fullL = num(config?.tankFullThresholdL);
+  const lowL = num(config?.tankLowThresholdL);
+  const batteryMinV = effectiveThreshold(config, 'battery_low');
 
   // A null reading means the sensor couldn't be read this cycle - there's
   // nothing to alert on, and it must not be treated as "tank is empty".
@@ -51,70 +79,64 @@ export async function processAlertsForMeasurement(
     // With a tank profile, thresholds are percentage-based (device-agnostic,
     // works for parallel-plumbed tanks). Without one yet, fall back to the
     // legacy liter thresholds so existing devices keep alerting unchanged.
-    if (profile && (tankFullPct != null || tankLowPct != null)) {
+    if (profile && (fullPct != null || lowPct != null)) {
       const levelPercent = computeLevelPercent(levelCm, {
         heightCm: profile.heightCm.toNumber(),
         sensorOffsetCm: profile.sensorOffsetCm.toNumber(),
         deadZoneCm: profile.deadZoneCm.toNumber(),
       });
 
-      if (tankFullOn && levelPercent != null && tankFullPct != null && levelPercent >= tankFullPct) {
+      if (tankFullOn && thresholdCrossed(levelPercent, fullPct, 'at-or-above')) {
         await createAndSendAlert(
           device.id,
           device.tenantId,
           'tank_full',
           `Tank is full (${levelPercent.toFixed(0)}%)`,
-          { level_percent: levelPercent, threshold_pct: tankFullPct },
+          { level_percent: levelPercent, threshold_pct: fullPct },
           { level_percent: levelPercent.toFixed(1) }
         );
       }
 
-      if (tankLowOn && levelPercent != null && tankLowPct != null && levelPercent <= tankLowPct) {
+      if (tankLowOn && thresholdCrossed(levelPercent, lowPct, 'at-or-below')) {
         await createAndSendAlert(
           device.id,
           device.tenantId,
           'tank_low',
           `Tank is low (${levelPercent.toFixed(0)}%)`,
-          { level_percent: levelPercent, threshold_pct: tankLowPct },
+          { level_percent: levelPercent, threshold_pct: lowPct },
           { level_percent: levelPercent.toFixed(1) }
         );
       }
     } else {
-      // `!= null`, not truthy: a threshold of 0 L is a real setting, and the
-      // only way to switch a rule off is its enabled flag.
-      const tankFullL = config?.tankFullThresholdL?.toNumber() ?? null;
-      const tankLowL = config?.tankLowThresholdL?.toNumber() ?? null;
-
-      if (tankFullOn && tankFullL != null && volumeL >= tankFullL) {
+      if (tankFullOn && thresholdCrossed(volumeL, fullL, 'at-or-above')) {
         await createAndSendAlert(
           device.id,
           device.tenantId,
           'tank_full',
           `Tank is full (${volumeL.toFixed(1)}L)`,
-          { volume_l: volumeL, threshold: tankFullL }
+          { volume_l: volumeL, threshold: fullL }
         );
       }
 
-      if (tankLowOn && tankLowL != null && volumeL <= tankLowL) {
+      if (tankLowOn && thresholdCrossed(volumeL, lowL, 'at-or-below')) {
         await createAndSendAlert(
           device.id,
           device.tenantId,
           'tank_low',
           `Tank is low (${volumeL.toFixed(1)}L)`,
-          { volume_l: volumeL, threshold: tankLowL }
+          { volume_l: volumeL, threshold: lowL }
         );
       }
     }
   }
 
-  const batteryLowV = effectiveThreshold(config, 'battery_low');
-  if (isAlertRuleEnabled(config, 'battery_low') && batteryV != null && batteryLowV != null && batteryV < batteryLowV) {
+  if (isAlertRuleEnabled(config, 'battery_low') && thresholdCrossed(batteryV, batteryMinV, 'below')) {
     await createAndSendAlert(
       device.id,
       device.tenantId,
       'battery_low',
       `Battery is low (${batteryV.toFixed(2)}V)`,
-      { battery_v: batteryV, threshold: batteryLowV }
+      { battery_v: batteryV, threshold: batteryMinV }
     );
   }
 }

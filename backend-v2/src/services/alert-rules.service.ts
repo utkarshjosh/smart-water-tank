@@ -112,7 +112,7 @@ const CATALOG: AlertRuleDefinition[] = [
       min: 0,
       max: 12,
       comparison: 'below',
-      default: () => DEFAULT_BATTERY_LOW_THRESHOLD_V,
+      default: () => null,
     },
   },
   {

@@ -101,7 +101,8 @@ test('GET returns all five rules, enabled, with catalog defaults', async (t) => 
     comparison: 'below',
   });
   assert.equal(byType.tank_full.threshold?.comparison, 'above');
-  assert.equal(byType.battery_low.threshold?.default, 3.3);
+  // No server default: null means off, the same as every other threshold.
+  assert.equal(byType.battery_low.threshold?.default, null);
   assert.equal(byType.battery_low.threshold?.unit, 'V');
   assert.equal(byType.leak_detected.threshold, null);
   assert.equal(byType.leak_detected.source, 'pattern');
@@ -126,7 +127,7 @@ test('GET reflects stored overrides and switches', () => {
   const byType = Object.fromEntries(rules.map((r) => [r.type, r]));
 
   assert.equal(byType.battery_low.threshold?.value, 3.6);
-  assert.equal(byType.battery_low.threshold?.default, 3.3);
+  assert.equal(byType.battery_low.threshold?.default, null);
   assert.equal(byType.device_offline.threshold?.value, 240);
   assert.equal(byType.leak_detected.enabled, false);
   assert.equal(byType.tank_low.enabled, true);
@@ -135,12 +136,12 @@ test('GET reflects stored overrides and switches', () => {
 // --- PUT --------------------------------------------------------------------
 
 test('PUT disables battery_low, and a reading below threshold then raises nothing', async (t) => {
-  // No config row yet: the upsert creates one from the write.
-  let stored: DeviceConfig | null = null;
+  // A stored 3.3 V threshold, so the rule is armed before it is switched off.
+  let stored: DeviceConfig | null = configRow({ batteryLowThresholdV: new Prisma.Decimal(3.3) });
   stubModel(t, 'deviceConfig', {
     findUnique: async () => stored,
-    upsert: async ({ create }: { create: Partial<DeviceConfig> }) => {
-      stored = configRow(create);
+    upsert: async ({ update }: { update: Partial<DeviceConfig> }) => {
+      stored = configRow({ ...stored, ...update });
       return stored;
     },
   });
@@ -150,7 +151,7 @@ test('PUT disables battery_low, and a reading below threshold then raises nothin
   });
   const sink = stubAlertSink(t);
 
-  // Control: with the rule on, 3.0 V is below the 3.3 V default and fires.
+  // Control: with the rule on, 3.0 V is below the stored 3.3 V and fires.
   await processAlertsForMeasurement(device.id, { levelCm: null, volumeL: null, batteryV: 3.0 });
   assert.deepEqual(sink.created, [{ type: 'battery_low', severity: 'medium' }]);
 
@@ -163,7 +164,7 @@ test('PUT disables battery_low, and a reading below threshold then raises nothin
   assert.deepEqual(sink.created, []);
 });
 
-test('PUT threshold null clears the override back to the default', async (t) => {
+test('PUT threshold null clears the override, which switches the rule off', async (t) => {
   let stored = configRow({ batteryLowThresholdV: new Prisma.Decimal(3.5) });
   let written: Record<string, unknown> | null = null;
   stubModel(t, 'deviceConfig', {
@@ -181,7 +182,7 @@ test('PUT threshold null clears the override back to the default', async (t) => 
   assert.equal(written!.batteryLowThresholdV, null);
   const battery = rules.find((r) => r.type === 'battery_low')!;
   assert.equal(battery.threshold?.value, null);
-  assert.equal(battery.threshold?.default, 3.3);
+  assert.equal(battery.threshold?.default, null);
   // Untouched rules keep their switch.
   assert.ok(rules.every((r) => r.enabled));
 });

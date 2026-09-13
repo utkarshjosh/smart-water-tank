@@ -135,8 +135,8 @@ export default function MeasurementExportDialog({
         <DialogHeader>
           <DialogTitle>Export measurement timeline</DialogTitle>
           <DialogDescription>
-            DownloadSimple a CSV for the selected devices and time range. Times in the file are UTC;
-            the fields below use your local time.
+            Download a CSV for the selected devices and time range. Times in the file are UTC; the
+            fields below use your local time.
           </DialogDescription>
         </DialogHeader>
 
@@ -234,7 +234,7 @@ export default function MeasurementExportDialog({
             onClick={handleExport}
             disabled={exporting || selectedIds.length === 0}
           >
-            {exporting ? 'Preparing CSV…' : 'DownloadSimple CSV'}
+            {exporting ? 'Preparing CSV…' : 'Download CSV'}
           </Button>
         </DialogFooter>
       </DialogContent>

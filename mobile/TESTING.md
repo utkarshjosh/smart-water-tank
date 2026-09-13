@@ -55,17 +55,20 @@ Project `watertank-7c30e`.
 
 ---
 
-## Part 2 — Backend (deploy the push_tokens migration)
+## Part 2 — Backend (deploy the branch's migrations)
 
-The web-UI rework is already on `main` and deployed, so its two migrations are
-applied. This branch adds exactly one:
+The web-UI rework is already on `main` and deployed. This branch adds two:
 
 | Migration | Adds |
 |---|---|
-| `20260912100000_add_push_tokens` | the `push_tokens` table |
+| `20260913130000_add_push_tokens` | the `push_tokens` table |
+| `20260913140000_add_alert_rules` | `alert_rules` and `offline_threshold_min` on `device_configs` |
 
-It only creates a table, so the currently-running backend keeps working
-unchanged while it applies. `deploy.sh` takes a database backup first and runs
+Both are additive (a table, two nullable columns), so the currently-running
+backend keeps working unchanged while they apply. They are numbered after
+`main`'s `20260913120000_normalise_disabled_alert_thresholds`, which must
+land first: it rewrites stored zero thresholds to NULL, and the alert-rules
+code treats NULL as "off". `deploy.sh` takes a database backup first and runs
 migrations *before* restarting PM2, which is the correct order here — the new
 code reads `push_tokens`, so a restart-first deploy would 500 until the
 migration landed.

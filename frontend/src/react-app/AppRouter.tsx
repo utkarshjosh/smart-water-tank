@@ -1,7 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { Link, Navigate, Outlet, Route, Routes } from 'react-router-dom';
-import { useAuth } from '@/lib/auth-context';
-import { AppLoader, RouteFallback } from '@/components/shell';
+import { RouteFallback, ShellLayout } from '@/components/shell';
 import HomePage from '@/app/page';
 
 const WelcomePage = lazy(() => import('@/app/welcome/page'));
@@ -23,58 +22,71 @@ const AdminFirmwarePage = lazy(() => import('@/app/admin/firmware/page'));
 const AdminTenantsPage = lazy(() => import('@/app/admin/tenants/page'));
 const AdminAnalyticsPage = lazy(() => import('@/app/admin/analytics/page'));
 
+/**
+ * Signed-in sections hang off a `ShellLayout` route rather than each page
+ * wrapping itself in the shell. That is what makes navigation inside a section
+ * an SPA transition: the layout element is identical across its children, so
+ * React keeps the sidebar, header and tab bar mounted and only the outlet - and
+ * its own Suspense boundary - changes. The Suspense here is left for the public
+ * pages, which have no chrome to preserve.
+ */
 export default function AppRouter() {
   return (
-    <Suspense fallback={<RouteFallback />}>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
+    <Routes>
+      <Route
+        path="/"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <HomePage />
+          </Suspense>
+        }
+      />
+      <Route element={<PublicRoutes />}>
         <Route path="/welcome" element={<WelcomePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/signup" element={<SignupPage />} />
+      </Route>
 
-        <Route element={<AccessGate access="authenticated" />}>
-          <Route path="/app" element={<Navigate to="/app/devices" replace />} />
-          <Route path="/app/devices" element={<TenantDevicesPage />} />
+      <Route element={<ShellLayout variant="tenant" />}>
+        <Route path="/app" element={<Navigate to="/app/devices" replace />} />
+        <Route path="/app/devices" element={<TenantDevicesPage />} />
 
-          {/* Device detail is four routes, not one long scroll. Each is a
-              screenful on a phone; on desktop DeviceLayout lays them out
-              side by side. Deep links and browser back both work. */}
-          <Route path="/app/devices/:deviceId" element={<DeviceLayout />}>
-            <Route index element={<DeviceOverview />} />
-            <Route path="history" element={<DeviceHistory />} />
-            <Route path="alerts" element={<DeviceAlerts />} />
-            <Route path="settings" element={<DeviceSettings />} />
-          </Route>
-
-          <Route path="/app/onboarding" element={<OnboardingPage />} />
-          <Route path="/app/onboarding/tank-setup/:deviceId" element={<TankSetupPage />} />
+        {/* Device detail is four routes, not one long scroll. Each is a
+            screenful on a phone; on desktop DeviceLayout lays them out
+            side by side. Deep links and browser back both work. */}
+        <Route path="/app/devices/:deviceId" element={<DeviceLayout />}>
+          <Route index element={<DeviceOverview />} />
+          <Route path="history" element={<DeviceHistory />} />
+          <Route path="alerts" element={<DeviceAlerts />} />
+          <Route path="settings" element={<DeviceSettings />} />
         </Route>
 
-        <Route element={<AccessGate access="admin" />}>
-          <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
-          <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
-          <Route path="/admin/devices" element={<AdminDevicesPage />} />
-          <Route path="/admin/devices/:deviceId" element={<AdminDeviceDetailPage />} />
-          <Route path="/admin/firmware" element={<AdminFirmwarePage />} />
-          <Route path="/admin/tenants" element={<AdminTenantsPage />} />
-          <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
-        </Route>
+        <Route path="/app/onboarding" element={<OnboardingPage />} />
+        <Route path="/app/onboarding/tank-setup/:deviceId" element={<TankSetupPage />} />
+      </Route>
 
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </Suspense>
+      <Route element={<ShellLayout variant="admin" />}>
+        <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+        <Route path="/admin/devices" element={<AdminDevicesPage />} />
+        <Route path="/admin/devices/:deviceId" element={<AdminDeviceDetailPage />} />
+        <Route path="/admin/firmware" element={<AdminFirmwarePage />} />
+        <Route path="/admin/tenants" element={<AdminTenantsPage />} />
+        <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
+      </Route>
+
+      <Route path="*" element={<NotFound />} />
+    </Routes>
   );
 }
 
-function AccessGate({ access }: { access: 'authenticated' | 'admin' }) {
-  const { status, isAdmin } = useAuth();
-
-  if (status === 'initializing') return <AppLoader />;
-  if (status === 'unauthenticated') return <Navigate to="/login" replace />;
-  if (access === 'admin' && !isAdmin) return <Navigate to="/app/devices" replace />;
-
-  return <Outlet />;
+function PublicRoutes() {
+  return (
+    <Suspense fallback={<RouteFallback />}>
+      <Outlet />
+    </Suspense>
+  );
 }
 
 function NotFound() {
@@ -93,4 +105,3 @@ function NotFound() {
     </div>
   );
 }
-
