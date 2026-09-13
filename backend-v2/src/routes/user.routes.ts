@@ -8,6 +8,7 @@ import * as userService from '../services/user.service';
 import * as deviceService from '../services/device.service';
 import * as tankProfileService from '../services/tank-profile.service';
 import * as firmwareService from '../services/firmware.service';
+import * as alertRulesService from '../services/alert-rules.service';
 import { registerPushToken, removePushToken, updateUserFCMToken } from '../services/fcm.service';
 import { exportUserMeasurements } from '../services/measurement-export.service';
 import { BUCKETS, getDeviceHistorySeries } from '../services/history.service';
@@ -211,6 +212,18 @@ router.put(
   })
 );
 
+// DELETE /api/v1/user/devices/:deviceId - Unpair. The reverse of the claim
+// flow: the device leaves the account and can be claimed again, while its
+// readings and alerts stay on file. Nothing is sent to the device.
+router.delete(
+  '/devices/:deviceId',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest & AuthRequest, res) => {
+    await userService.unpairDevice(req.device!, req.user!);
+    res.status(204).send();
+  })
+);
+
 const historySeriesQuerySchema = z.object({
   from: z.string().optional(),
   to: z.string().optional(),
@@ -321,19 +334,55 @@ router.get(
   })
 );
 
+// Absent = keep the stored value, null = clear it back to "not set".
 const alertThresholdsSchema = z.object({
-  tank_low_threshold_pct: z.coerce.number().min(0).max(100).optional(),
-  tank_full_threshold_pct: z.coerce.number().min(0).max(100).optional(),
-  battery_low_threshold_v: z.coerce.number().min(0).optional(),
+  tank_low_threshold_pct: z.coerce.number().min(0).max(100).nullable().optional(),
+  tank_full_threshold_pct: z.coerce.number().min(0).max(100).nullable().optional(),
+  battery_low_threshold_v: z.coerce.number().min(0).nullable().optional(),
 });
 
-// PUT /api/v1/user/devices/:deviceId/alert-thresholds - Tenant-editable alert thresholds
+// PUT /api/v1/user/devices/:deviceId/alert-thresholds - Tenant-editable alert
+// thresholds. Predates /alert-rules; kept for the web app, same columns.
 router.put(
   '/devices/:deviceId/alert-thresholds',
   requireDeviceAccess,
   asyncHandler(async (req: DeviceAccessRequest, res) => {
     const validated = alertThresholdsSchema.parse(req.body);
     res.json(await deviceService.updateAlertThresholds(req.device!, validated));
+  })
+);
+
+// GET /api/v1/user/devices/:deviceId/alert-rules - Every alert type this
+// device can raise, with its switch and threshold. The catalog is server-owned
+// so the app renders whatever comes back and a new rule needs no app release.
+router.get(
+  '/devices/:deviceId/alert-rules',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    res.json(await alertRulesService.getAlertRules(req.device!));
+  })
+);
+
+// Keyed by rule type; unknown types and out-of-range thresholds are rejected
+// by the service, which owns the catalog. threshold null clears the override.
+const alertRulesSchema = z.object({
+  rules: z.record(
+    z.string(),
+    z.object({
+      enabled: z.boolean().optional(),
+      threshold: z.number().nullable().optional(),
+    })
+  ),
+});
+
+// PUT /api/v1/user/devices/:deviceId/alert-rules - Partial merge: only the
+// types and fields present change. Responds with the full resolved set.
+router.put(
+  '/devices/:deviceId/alert-rules',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    const { rules } = alertRulesSchema.parse(req.body);
+    res.json(await alertRulesService.updateAlertRules(req.device!, rules));
   })
 );
 

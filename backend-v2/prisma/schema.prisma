@@ -228,6 +228,12 @@ model DeviceConfig {
   levelFullCm           Decimal? @map("level_full_cm") @db.Decimal(10, 2)
   syncMode              SyncMode @default(piggyback) @map("sync_mode")
   configJson            Json?    @map("config_json")
+  // Per-rule on/off switches, `{ [AlertType]: { enabled: boolean } }`. A type
+  // that is absent is enabled - so a device with no row alerts exactly as it
+  // did before this column existed.
+  alertRules            Json?    @map("alert_rules")
+  // Per-device override of ALERT_OFFLINE_THRESHOLD_MINUTES; null = server default.
+  offlineThresholdMin   Int?     @map("offline_threshold_min")
   createdAt             DateTime @default(now()) @map("created_at")
   updatedAt             DateTime @updatedAt @map("updated_at")
 

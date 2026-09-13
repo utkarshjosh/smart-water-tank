@@ -1,8 +1,8 @@
 import { AlertSeverity, AlertType } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { env } from '../config/env';
 import { PushData, sendNotificationToTenant } from './fcm.service';
 import { computeLevelPercent } from './tank-profile.service';
+import { effectiveThreshold, isAlertRuleEnabled, severityFor } from './alert-rules.service';
 
 // Android notification channels are created by the app at first launch and
 // their sound is immutable afterwards, so the id carries a version. The server
@@ -37,83 +37,84 @@ export async function processAlertsForMeasurement(
   const profile = device.tankProfile;
   const { levelCm, volumeL, batteryV } = measurement;
 
+  // Each rule can be switched off per device (issue #13). The thresholds come
+  // from the same catalog the settings screen renders, so what the user sees
+  // is what fires.
+  const tankLowOn = isAlertRuleEnabled(config, 'tank_low');
+  const tankFullOn = isAlertRuleEnabled(config, 'tank_full');
+  const tankLowPct = effectiveThreshold(config, 'tank_low');
+  const tankFullPct = effectiveThreshold(config, 'tank_full');
+
   // A null reading means the sensor couldn't be read this cycle - there's
   // nothing to alert on, and it must not be treated as "tank is empty".
   if (levelCm != null && volumeL != null) {
     // With a tank profile, thresholds are percentage-based (device-agnostic,
     // works for parallel-plumbed tanks). Without one yet, fall back to the
     // legacy liter thresholds so existing devices keep alerting unchanged.
-    if (profile && (config?.tankFullThresholdPct != null || config?.tankLowThresholdPct != null)) {
+    if (profile && (tankFullPct != null || tankLowPct != null)) {
       const levelPercent = computeLevelPercent(levelCm, {
         heightCm: profile.heightCm.toNumber(),
         sensorOffsetCm: profile.sensorOffsetCm.toNumber(),
         deadZoneCm: profile.deadZoneCm.toNumber(),
       });
 
-      if (
-        levelPercent != null &&
-        config?.tankFullThresholdPct != null &&
-        levelPercent >= config.tankFullThresholdPct.toNumber()
-      ) {
+      if (tankFullOn && levelPercent != null && tankFullPct != null && levelPercent >= tankFullPct) {
         await createAndSendAlert(
           device.id,
           device.tenantId,
           'tank_full',
-          'high',
           `Tank is full (${levelPercent.toFixed(0)}%)`,
-          { level_percent: levelPercent, threshold_pct: config.tankFullThresholdPct.toNumber() },
+          { level_percent: levelPercent, threshold_pct: tankFullPct },
           { level_percent: levelPercent.toFixed(1) }
         );
       }
 
-      if (
-        levelPercent != null &&
-        config?.tankLowThresholdPct != null &&
-        levelPercent <= config.tankLowThresholdPct.toNumber()
-      ) {
+      if (tankLowOn && levelPercent != null && tankLowPct != null && levelPercent <= tankLowPct) {
         await createAndSendAlert(
           device.id,
           device.tenantId,
           'tank_low',
-          'critical',
           `Tank is low (${levelPercent.toFixed(0)}%)`,
-          { level_percent: levelPercent, threshold_pct: config.tankLowThresholdPct.toNumber() },
+          { level_percent: levelPercent, threshold_pct: tankLowPct },
           { level_percent: levelPercent.toFixed(1) }
         );
       }
     } else {
-      if (config?.tankFullThresholdL && volumeL >= config.tankFullThresholdL.toNumber()) {
+      // `!= null`, not truthy: a threshold of 0 L is a real setting, and the
+      // only way to switch a rule off is its enabled flag.
+      const tankFullL = config?.tankFullThresholdL?.toNumber() ?? null;
+      const tankLowL = config?.tankLowThresholdL?.toNumber() ?? null;
+
+      if (tankFullOn && tankFullL != null && volumeL >= tankFullL) {
         await createAndSendAlert(
           device.id,
           device.tenantId,
           'tank_full',
-          'high',
           `Tank is full (${volumeL.toFixed(1)}L)`,
-          { volume_l: volumeL, threshold: config.tankFullThresholdL.toNumber() }
+          { volume_l: volumeL, threshold: tankFullL }
         );
       }
 
-      if (config?.tankLowThresholdL && volumeL <= config.tankLowThresholdL.toNumber()) {
+      if (tankLowOn && tankLowL != null && volumeL <= tankLowL) {
         await createAndSendAlert(
           device.id,
           device.tenantId,
           'tank_low',
-          'critical',
           `Tank is low (${volumeL.toFixed(1)}L)`,
-          { volume_l: volumeL, threshold: config.tankLowThresholdL.toNumber() }
+          { volume_l: volumeL, threshold: tankLowL }
         );
       }
     }
   }
 
-  if (batteryV !== null && config?.batteryLowThresholdV && batteryV < config.batteryLowThresholdV.toNumber()) {
+  const batteryLowV = effectiveThreshold(config, 'battery_low');
+  if (isAlertRuleEnabled(config, 'battery_low') && batteryV != null && batteryLowV != null && batteryV < batteryLowV) {
     await createAndSendAlert(
       device.id,
       device.tenantId,
       'battery_low',
-      'medium',
       `Battery is low (${batteryV.toFixed(2)}V)`,
-      { battery_v: batteryV, threshold: config.batteryLowThresholdV.toNumber() }
+      { battery_v: batteryV, threshold: batteryLowV }
     );
   }
 }
@@ -121,36 +122,52 @@ export async function processAlertsForMeasurement(
 export async function checkDeviceOfflineAlerts(): Promise<void> {
   console.log('Checking for offline devices...');
 
-  const thresholdTime = new Date(Date.now() - env.alertOfflineThresholdMinutes * 60 * 1000);
-
-  const offlineDevices = await prisma.device.findMany({
-    where: { status: 'online', lastSeen: { lt: thresholdTime } },
+  // The timeout is per device now (a solar node that sleeps overnight wants
+  // hours, a mains node wants minutes), so the cut-off is decided per row
+  // rather than in the WHERE clause. Only devices currently marked online are
+  // candidates, which keeps this small.
+  const now = Date.now();
+  const candidates = await prisma.device.findMany({
+    where: { status: 'online' },
+    include: { config: true },
   });
 
-  for (const device of offlineDevices) {
+  let flipped = 0;
+  for (const device of candidates) {
+    const thresholdMinutes = effectiveThreshold(device.config, 'device_offline');
+    if (thresholdMinutes == null) continue;
+    // Never-seen devices are skipped, as the old `lastSeen < cutoff` query did.
+    if (!device.lastSeen || device.lastSeen.getTime() >= now - thresholdMinutes * 60 * 1000) continue;
+
+    // Status flips regardless of the rule - it's a fact, not an alert.
     await prisma.device.update({ where: { id: device.id }, data: { status: 'offline' } });
+    flipped += 1;
 
     if (!device.tenantId) continue;
+    if (!isAlertRuleEnabled(device.config, 'device_offline')) continue;
 
     await createAndSendAlert(
       device.id,
       device.tenantId,
       'device_offline',
-      'high',
-      `Device ${device.deviceId} has been offline for ${env.alertOfflineThresholdMinutes} minutes`,
-      { device_id: device.deviceId, last_seen: device.lastSeen }
+      `Device ${device.deviceId} has been offline for ${thresholdMinutes} minutes`,
+      { device_id: device.deviceId, last_seen: device.lastSeen, threshold_min: thresholdMinutes }
     );
   }
 
-  console.log(`Found ${offlineDevices.length} offline devices`);
+  console.log(`Found ${flipped} offline devices`);
 }
 
 export async function createLeakAlert(deviceId: string, tenantId: string, details: unknown): Promise<void> {
+  // Leak detection has no threshold to tune, so the enabled flag is the whole
+  // rule - and it used to be impossible to switch off.
+  const config = await prisma.deviceConfig.findUnique({ where: { deviceId } });
+  if (!isAlertRuleEnabled(config, 'leak_detected')) return;
+
   await createAndSendAlert(
     deviceId,
     tenantId,
     'leak_detected',
-    'critical',
     'Possible leak detected based on unusual consumption pattern',
     details
   );
@@ -160,7 +177,6 @@ async function createAndSendAlert(
   deviceId: string,
   tenantId: string,
   type: AlertType,
-  severity: AlertSeverity,
   message: string,
   payload: unknown,
   // Extras the app reads straight off the push: enough to update the
@@ -178,6 +194,10 @@ async function createAndSendAlert(
     },
   });
   if (existing) return;
+
+  // Severity is owned by the rule catalog, so the alert a user receives and
+  // the rule they see in settings can never disagree.
+  const severity = severityFor(type);
 
   const alert = await prisma.alert.create({
     data: { deviceId, tenantId, type, severity, message, payload: payload as any },

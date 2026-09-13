@@ -1,4 +1,4 @@
-import { Device } from '@prisma/client';
+import { Device, User } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http-error';
 import { isUniqueConstraintError } from '../lib/prisma-errors';
@@ -132,6 +132,38 @@ export async function renameDevice(device: Device, name: string | null) {
     data: { name: trimmed === '' ? null : trimmed },
   });
   return getDeviceInfo(updated);
+}
+
+/**
+ * Unpair a device from the caller's account - the reverse of claimDevice.
+ *
+ * The tenant link and the name are cleared and every explicit share dropped,
+ * so the hardware can be claimed again (by this account or another) and a
+ * re-pair starts from a clean slate rather than resurrecting a stale name.
+ * Measurements, alerts, config and tank profile stay with the hardware ID:
+ * history is valuable and the tank's geometry does not change hands with the
+ * account. The device token is left alone too - it only ever lived on this
+ * physical node, and revoking it would just knock the node offline until
+ * someone re-provisions it.
+ *
+ * Only the tenant's owner (or a platform admin) may do this. A household
+ * member with `user` role, or someone who was merely shared the device, can
+ * look but must not be able to strip the device out from under the owner.
+ */
+export async function unpairDevice(device: Device, actor: Pick<User, 'id' | 'role' | 'tenantId'>): Promise<void> {
+  const isAdmin = actor.role === 'admin' || actor.role === 'super_admin';
+  const isOwner = actor.role === 'tenant_owner' && device.tenantId != null && device.tenantId === actor.tenantId;
+  if (!isAdmin && !isOwner) {
+    throw new HttpError(403, 'Only the account owner can unpair a device');
+  }
+
+  await prisma.$transaction([
+    prisma.userDeviceMapping.deleteMany({ where: { deviceId: device.id } }),
+    prisma.device.update({
+      where: { id: device.id },
+      data: { tenantId: null, name: null },
+    }),
+  ]);
 }
 
 /** Update the caller's own profile. Email and role are deliberately not editable here. */
