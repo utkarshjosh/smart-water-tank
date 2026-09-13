@@ -56,6 +56,12 @@ export function formatAge(when: Date | null, now = Date.now()): string {
   return when.toLocaleDateString();
 }
 
+/**
+ * Fallback labels for the rule types we shipped with. The alert-rules
+ * catalogue carries the server's own label for every rule, and once it has
+ * been seen that label wins — so a renamed or brand-new rule type reads
+ * correctly in the Activity feed without an app update.
+ */
 const ALERT_LABELS: Record<string, string> = {
   tank_full: 'Tank full',
   tank_low: 'Tank low',
@@ -64,6 +70,13 @@ const ALERT_LABELS: Record<string, string> = {
   leak_detected: 'Possible leak',
 };
 
+const serverLabels = new Map<string, string>();
+
+/** Called with each alert-rules response; see useAlertRules. */
+export function learnAlertLabels(rules: { type: string; label: string }[]): void {
+  for (const rule of rules) serverLabels.set(rule.type, rule.label);
+}
+
 export function formatAlertType(type: string): string {
-  return ALERT_LABELS[type] ?? type.replace(/_/g, ' ');
+  return serverLabels.get(type) ?? ALERT_LABELS[type] ?? type.replace(/_/g, ' ');
 }

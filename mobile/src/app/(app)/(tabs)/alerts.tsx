@@ -71,7 +71,6 @@ export default function AlertsScreen() {
     <Screen
       title="Activity"
       subtitle={unacknowledged > 0 ? `${unacknowledged} unacknowledged` : 'All caught up'}
-      onBack={() => router.back()}
       onRefresh={() => void feed.refetch()}
       refreshing={feed.isRefetching}
     >

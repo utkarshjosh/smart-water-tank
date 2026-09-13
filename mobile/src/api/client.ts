@@ -74,11 +74,7 @@ async function readError(response: Response): Promise<ApiError> {
   return new ApiError(response.status, message, body);
 }
 
-/**
- * Request + parse. The schema is not optional: an unvalidated response is how
- * a null reading becomes a crash three screens later.
- */
-export async function request<T>(path: string, schema: ZodType<T>, options: RequestOptions = {}): Promise<T> {
+async function send(path: string, options: RequestOptions): Promise<Response> {
   let response = await rawRequest(path, options, false);
 
   // A 401 on a token we just read means it expired between cache and call.
@@ -88,6 +84,15 @@ export async function request<T>(path: string, schema: ZodType<T>, options: Requ
   }
 
   if (!response.ok) throw await readError(response);
+  return response;
+}
+
+/**
+ * Request + parse. The schema is not optional: an unvalidated response is how
+ * a null reading becomes a crash three screens later.
+ */
+export async function request<T>(path: string, schema: ZodType<T>, options: RequestOptions = {}): Promise<T> {
+  const response = await send(path, options);
 
   const json = await response.json();
   const parsed = schema.safeParse(json);
@@ -102,4 +107,9 @@ export async function request<T>(path: string, schema: ZodType<T>, options: Requ
     );
   }
   return parsed.data;
+}
+
+/** For endpoints that answer 204: same auth and retry, nothing to parse. */
+export async function requestNoContent(path: string, options: RequestOptions = {}): Promise<void> {
+  await send(path, options);
 }

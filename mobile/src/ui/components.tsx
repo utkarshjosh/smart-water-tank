@@ -116,14 +116,14 @@ export const Button = forwardRef<View, PressableProps & {
         if (feedback === 'success') haptics.success();
         onPress?.(event);
       }}
-      style={({ pressed }) => [
+      style={(state) => [
         styles.button,
         {
           backgroundColor: background,
           borderColor: variant === 'ghost' ? 'transparent' : background,
-          opacity: isDisabled ? 0.5 : pressed ? 0.86 : 1,
+          opacity: isDisabled ? 0.5 : state.pressed ? 0.86 : 1,
         },
-        typeof style === 'function' ? style({ pressed }) : style,
+        typeof style === 'function' ? style(state) : style,
       ]}
     >
       <RNText style={[type.heading as TextStyle, { color: label }]}>{loading ? 'Working…' : title}</RNText>

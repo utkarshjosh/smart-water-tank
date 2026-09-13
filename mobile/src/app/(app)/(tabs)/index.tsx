@@ -1,8 +1,9 @@
 import { useRouter } from 'expo-router';
+import { CaretRight } from 'phosphor-react-native';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-import { useAlertFeed, useCurrentReading, useDevices, useTankProfile } from '@/api/queries';
+import { useCurrentReading, useDevices, useTankProfile } from '@/api/queries';
 import type { DeviceSummary } from '@/api/schemas';
 import {
   formatAge,
@@ -37,8 +38,6 @@ export default function TanksScreen() {
 
   const profile = useTankProfile(selected?.id);
   const reading = useCurrentReading(selected?.id);
-  const feed = useAlertFeed();
-  const unacknowledged = feed.data?.pages[0]?.unacknowledged ?? 0;
 
   // Keep the home-screen widget in step with whatever the app just learned.
   useEffect(() => {
@@ -87,18 +86,6 @@ export default function TanksScreen() {
   return (
     <Screen
       title="Tanks"
-      action={
-        <Pressable
-          onPress={() => router.push('/settings')}
-          hitSlop={12}
-          accessibilityRole="button"
-          accessibilityLabel="Settings"
-        >
-          <Text variant="heading" color="mutedForeground">
-            ⚙
-          </Text>
-        </Pressable>
-      }
       onRefresh={refresh}
       refreshing={devices.isFetching || reading.isFetching}
     >
@@ -136,24 +123,6 @@ export default function TanksScreen() {
         </Card>
       )}
 
-      <Pressable onPress={() => router.push('/alerts')} accessibilityRole="button">
-        <Card accent={unacknowledged > 0 ? 'warn' : undefined}>
-          <View style={styles.activityRow}>
-            <View>
-              <Text variant="heading">Activity</Text>
-              <Text variant="caption" color="mutedForeground">
-                {unacknowledged > 0
-                  ? `${unacknowledged} alert${unacknowledged === 1 ? '' : 's'} need attention`
-                  : 'Nothing needs attention'}
-              </Text>
-            </View>
-            <Text variant="heading" color="mutedForeground">
-              ›
-            </Text>
-          </View>
-        </Card>
-      </Pressable>
-
       {reading.data && (
         <Card>
           <Label>Sensor</Label>
@@ -180,6 +149,7 @@ function TankHero({
   capacityL: number | null;
   onOpen: () => void;
 }) {
+  const { colors } = useTheme();
   const offline = device.status !== 'online';
   const asOf = device.level_percent_as_of ?? device.last_measurement;
 
@@ -216,7 +186,12 @@ function TankHero({
         </View>
       </View>
 
-      <Button title="History & details" variant="secondary" onPress={onOpen} />
+      <Pressable onPress={onOpen} hitSlop={8} accessibilityRole="link" style={styles.detailsLink}>
+        <Text variant="heading" color="primary">
+          Details
+        </Text>
+        <CaretRight size={16} color={colors.primary} />
+      </Pressable>
     </Card>
   );
 }
@@ -281,6 +256,6 @@ const styles = StyleSheet.create({
   heroText: { flex: 1, gap: space.xs },
   statusRow: { alignItems: 'center', flexDirection: 'row', gap: space.sm },
   metrics: { flexDirection: 'row', justifyContent: 'space-between' },
-  activityRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+  detailsLink: { alignItems: 'center', alignSelf: 'flex-end', flexDirection: 'row', gap: space.xs },
   metric: { gap: 2 },
 });

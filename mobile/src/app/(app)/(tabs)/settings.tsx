@@ -1,5 +1,6 @@
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
+import { CaretRight } from 'phosphor-react-native';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Switch, View } from 'react-native';
 
@@ -8,7 +9,9 @@ import notifee from '@notifee/react-native';
 import { clearPersistedCache } from '@/api/queryClient';
 import { useAuth } from '@/auth/AuthProvider';
 import { hapticsEnabled, setHapticsEnabled, haptics } from '@/feedback/haptics';
-import { lastRegisteredToken, registerForPush } from '@/push/registration';
+import { summariseRules, useAlertRules } from '@/api/alert-rules';
+import { useDevices } from '@/api/queries';
+import { lastRegisteredToken, registerForPush, unregisterForPush } from '@/push/registration';
 import { Button, Card, Divider, Label, Text } from '@/ui/components';
 import { Screen } from '@/ui/Screen';
 import { radius, space, useTheme, type ThemePreference } from '@/ui/theme';
@@ -26,7 +29,28 @@ export default function SettingsScreen() {
   const [haptic, setHaptic] = useState(hapticsEnabled);
   const [signingOut, setSigningOut] = useState(false);
   const [pushRegistered, setPushRegistered] = useState(() => !!lastRegisteredToken());
-  const [enablingPush, setEnablingPush] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushDenied, setPushDenied] = useState(false);
+  const devices = useDevices();
+
+  async function togglePush(next: boolean) {
+    setPushBusy(true);
+    try {
+      if (next) {
+        const result = await registerForPush();
+        setPushRegistered(result.granted);
+        // Denied twice is permanent from in-app; only system settings can
+        // grant it after that, so point there instead of asking again.
+        setPushDenied(!result.granted);
+        if (result.granted) haptics.success();
+      } else {
+        await unregisterForPush();
+        setPushRegistered(false);
+      }
+    } finally {
+      setPushBusy(false);
+    }
+  }
 
   async function signOut() {
     setSigningOut(true);
@@ -40,7 +64,7 @@ export default function SettingsScreen() {
   }
 
   return (
-    <Screen title="Settings" onBack={() => router.back()}>
+    <Screen title="Settings">
       <Card>
         <Label>Account</Label>
         <Text variant="body">{auth.user?.email ?? 'Signed out'}</Text>
@@ -82,36 +106,51 @@ export default function SettingsScreen() {
         </View>
       </Card>
 
-      <Card accent={pushRegistered ? undefined : 'warn'}>
+      <Card>
         <Label>Alerts</Label>
-        {pushRegistered ? (
-          <Text variant="body" color="mutedForeground">
-            This phone receives tank alerts. Per-alert sounds and importance are yours to tune in
-            Android&rsquo;s notification settings for AquaMind.
-          </Text>
-        ) : (
-          <>
-            <Text variant="body" color="mutedForeground">
-              Notifications are off, so a low tank or a leak will not reach this phone.
+        <View style={styles.row}>
+          <View style={styles.rowText}>
+            <Text variant="body">Notifications on this phone</Text>
+            <Text variant="caption" color="mutedForeground">
+              {pushRegistered
+                ? 'Sound and importance per alert are in Android\u2019s notification settings.'
+                : 'Off — a low tank or a leak will not reach this phone.'}
             </Text>
-            <Button
-              title="Turn on alerts"
-              variant="secondary"
-              loading={enablingPush}
-              onPress={async () => {
-                setEnablingPush(true);
-                try {
-                  const result = await registerForPush();
-                  setPushRegistered(result.granted);
-                  // Permission denied twice is permanent from in-app: Android
-                  // only grants it from system settings after that.
-                  if (!result.granted) await notifee.openNotificationSettings();
-                } finally {
-                  setEnablingPush(false);
-                }
-              }}
-            />
-          </>
+          </View>
+          <Switch
+            value={pushRegistered}
+            disabled={pushBusy}
+            onValueChange={togglePush}
+            trackColor={{ true: colors.primary, false: colors.muted }}
+          />
+        </View>
+        {pushDenied && (
+          <Pressable onPress={() => notifee.openNotificationSettings()} hitSlop={8} accessibilityRole="link">
+            <Text variant="caption" color="primary">
+              Blocked by Android — open notification settings
+            </Text>
+          </Pressable>
+        )}
+        <Divider />
+        <Label>Alert rules</Label>
+        {(devices.data ?? []).map((device) => (
+          <Pressable
+            key={device.id}
+            onPress={() => router.push({ pathname: '/alert-rules', params: { device: device.id } })}
+            accessibilityRole="button"
+            style={styles.row}
+          >
+            <View style={styles.rowText}>
+              <Text variant="body">{device.name}</Text>
+              <RulesSummary deviceId={device.id} />
+            </View>
+            <CaretRight size={18} color={colors.mutedForeground} />
+          </Pressable>
+        ))}
+        {devices.data?.length === 0 && (
+          <Text variant="caption" color="mutedForeground">
+            Pair a tank to choose which alerts it raises.
+          </Text>
         )}
       </Card>
 
@@ -159,6 +198,16 @@ export default function SettingsScreen() {
 
       <Button title="Sign out" variant="secondary" onPress={signOut} loading={signingOut} />
     </Screen>
+  );
+}
+
+/** "4 of 5 on · Low 20% · Full 95%" — the whole rule set in one glance. */
+function RulesSummary({ deviceId }: { deviceId: string }) {
+  const rules = useAlertRules(deviceId);
+  return (
+    <Text variant="caption" color="mutedForeground" numeric>
+      {rules.data ? summariseRules(rules.data) : rules.isError ? 'Rules unavailable' : '…'}
+    </Text>
   );
 }
 

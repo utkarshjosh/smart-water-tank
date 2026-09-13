@@ -15,7 +15,27 @@ const status = {
   dark: { ok: '#3fc397', warn: '#e5a53a', crit: '#f4726f', offline: '#64748b' },
 } as const;
 
-export type Colors = (typeof palette)[SchemeName] & (typeof status)[SchemeName];
+/**
+ * Chart series colours, mirroring `--series-*` in frontend/src/styles/tokens.css
+ * so a level line is the same blue on both clients. The webapp is light-only;
+ * the dark set is the same hues lifted enough to clear the dark card.
+ */
+const series = {
+  light: {
+    seriesLevel: '#2a78d6',
+    seriesVolume: '#1baf7a',
+    seriesTemperature: '#eb6834',
+    seriesBattery: '#4a3aa7',
+  },
+  dark: {
+    seriesLevel: '#6aa6ee',
+    seriesVolume: '#3fcf97',
+    seriesTemperature: '#f58c60',
+    seriesBattery: '#9b8fe0',
+  },
+} as const;
+
+export type Colors = (typeof palette)[SchemeName] & (typeof status)[SchemeName] & (typeof series)[SchemeName];
 
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 36 } as const;
 
@@ -71,7 +91,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     preference === 'system' ? (systemScheme === 'light' ? 'light' : 'dark') : preference;
 
   const value = useMemo<ThemeValue>(
-    () => ({ colors: { ...palette[scheme], ...status[scheme] }, scheme, preference, setPreference }),
+    () => ({
+      colors: { ...palette[scheme], ...status[scheme], ...series[scheme] },
+      scheme,
+      preference,
+      setPreference,
+    }),
     [scheme, preference, setPreference]
   );
 
