@@ -9,7 +9,7 @@
       "distribution": "internal",
       "android": { "buildType": "apk" },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://aquamind.utkarshjoshi.com"
+        "EXPO_PUBLIC_API_URL": "https://aquamind-api.utkarshjoshi.com"
       }
     },
     "preview": {
@@ -17,7 +17,7 @@
       "android": { "buildType": "apk" },
       "channel": "preview",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://aquamind.utkarshjoshi.com"
+        "EXPO_PUBLIC_API_URL": "https://aquamind-api.utkarshjoshi.com"
       }
     },
     "production": {
@@ -25,7 +25,7 @@
       "channel": "production",
       "android": { "buildType": "apk" },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://aquamind.utkarshjoshi.com"
+        "EXPO_PUBLIC_API_URL": "https://aquamind-api.utkarshjoshi.com"
       }
     },
     "production-aab": {

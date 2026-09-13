@@ -20,10 +20,10 @@ function resolveApiUrl(profile: string | undefined): string {
   if (profile === 'production') {
     throw new Error(
       'EXPO_PUBLIC_API_URL must be set for a production build. ' +
-        'Set it in eas.json env or the build environment (e.g. https://aquamind.utkarshjoshi.com).'
+        'Set it in eas.json env or the build environment (e.g. https://aquamind-api.utkarshjoshi.com).'
     );
   }
-  return 'https://aquamind.utkarshjoshi.com';
+  return 'https://aquamind-api.utkarshjoshi.com';
 }
 
 export default ({ config }: ConfigContext): ExpoConfig => {
@@ -49,7 +49,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   return {
     ...config,
     name: 'AquaMind',
-    slug: 'aquamind',
+    slug: 'water-tank-mobile',
     version: '2.0.0',
     scheme: 'aquamind',
     orientation: 'portrait',

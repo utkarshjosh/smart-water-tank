@@ -91,7 +91,7 @@ through the switchover.
 ✅ **Check:**
 ```bash
 cd backend-v2 && npx prisma migrate status   # "Database schema is up to date!"
-curl -s https://aquamind.utkarshjoshi.com/health
+curl -s https://aquamind-api.utkarshjoshi.com/health
 ```
 
 ---
@@ -117,7 +117,7 @@ Add your web client id to the `development` profile in `eas.json`:
 
 ```json
 "env": {
-  "EXPO_PUBLIC_API_URL": "https://aquamind.utkarshjoshi.com",
+  "EXPO_PUBLIC_API_URL": "https://aquamind-api.utkarshjoshi.com",
   "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "…apps.googleusercontent.com"
 }
 ```
@@ -197,7 +197,7 @@ On the server (or anywhere that can reach it):
 ```bash
 cd backend-v2
 export SIMULATOR_DEVICE_TOKEN="<device token>"
-export SIMULATOR_BACKEND_URL="https://aquamind.utkarshjoshi.com"
+export SIMULATOR_BACKEND_URL="https://aquamind-api.utkarshjoshi.com"
 
 # --level is the sensor-to-water DISTANCE in cm, not a percentage.
 # Bigger = emptier. An empty tank reads (sensor_offset + height).
