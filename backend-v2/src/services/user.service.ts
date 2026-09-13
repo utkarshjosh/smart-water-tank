@@ -1,4 +1,4 @@
-import { Device } from '@prisma/client';
+import { Device, User } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http-error';
 import { isUniqueConstraintError } from '../lib/prisma-errors';
@@ -134,6 +134,38 @@ export async function renameDevice(device: Device, name: string | null) {
   return getDeviceInfo(updated);
 }
 
+/**
+ * Unpair a device from the caller's account - the reverse of claimDevice.
+ *
+ * The tenant link and the name are cleared and every explicit share dropped,
+ * so the hardware can be claimed again (by this account or another) and a
+ * re-pair starts from a clean slate rather than resurrecting a stale name.
+ * Measurements, alerts, config and tank profile stay with the hardware ID:
+ * history is valuable and the tank's geometry does not change hands with the
+ * account. The device token is left alone too - it only ever lived on this
+ * physical node, and revoking it would just knock the node offline until
+ * someone re-provisions it.
+ *
+ * Only the tenant's owner (or a platform admin) may do this. A household
+ * member with `user` role, or someone who was merely shared the device, can
+ * look but must not be able to strip the device out from under the owner.
+ */
+export async function unpairDevice(device: Device, actor: Pick<User, 'id' | 'role' | 'tenantId'>): Promise<void> {
+  const isAdmin = actor.role === 'admin' || actor.role === 'super_admin';
+  const isOwner = actor.role === 'tenant_owner' && device.tenantId != null && device.tenantId === actor.tenantId;
+  if (!isAdmin && !isOwner) {
+    throw new HttpError(403, 'Only the account owner can unpair a device');
+  }
+
+  await prisma.$transaction([
+    prisma.userDeviceMapping.deleteMany({ where: { deviceId: device.id } }),
+    prisma.device.update({
+      where: { id: device.id },
+      data: { tenantId: null, name: null },
+    }),
+  ]);
+}
+
 /** Update the caller's own profile. Email and role are deliberately not editable here. */
 export async function updateMe(userId: string, input: { name?: string }) {
   const data: { name?: string } = {};
@@ -157,7 +189,19 @@ export async function updateMe(userId: string, input: { name?: string }) {
  * this account's alerts until some other login overwrites the token.
  */
 export async function clearFCMToken(userId: string): Promise<void> {
+  // Read the token BEFORE nulling it: fan-out reads push_tokens now, so
+  // clearing only the legacy column would leave a signed-out phone still
+  // receiving alerts. Delete just that one row - this route carries no body,
+  // and wiping every row would sign push out on the user's other installs,
+  // which is the multi-device regression push_tokens exists to prevent.
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { fcmToken: true } });
+  if (!user) throw new HttpError(404, 'User not found');
+
   await prisma.user.update({ where: { id: userId }, data: { fcmToken: null } });
+
+  if (user.fcmToken) {
+    await prisma.pushToken.deleteMany({ where: { userId, token: user.fcmToken } });
+  }
 }
 
 /** Expire a live claim code early, so a code read aloud by mistake can be killed. */
@@ -343,10 +387,10 @@ async function accessibleDeviceIds(user: { id: string; tenantId: string | null }
  */
 export async function getUserAlerts(
   user: { id: string; tenantId: string | null },
-  opts: { limit: number; includeDismissed: boolean; onlyUnacknowledged: boolean }
+  opts: { limit: number; includeDismissed: boolean; onlyUnacknowledged: boolean; cursor?: string }
 ) {
   const deviceIds = await accessibleDeviceIds(user);
-  if (deviceIds.length === 0) return { alerts: [], unacknowledged: 0 };
+  if (deviceIds.length === 0) return { alerts: [], unacknowledged: 0, next_cursor: null };
 
   const where = {
     deviceId: { in: deviceIds },
@@ -354,11 +398,16 @@ export async function getUserAlerts(
     ...(opts.onlyUnacknowledged ? { acknowledged: false } : {}),
   };
 
-  const [alerts, unacknowledged] = await Promise.all([
+  const [rows, unacknowledged] = await Promise.all([
     prisma.alert.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
-      take: opts.limit,
+      // id breaks ties so paging can never skip or repeat alerts sharing a
+      // timestamp - two thresholds crossing on one measurement does that.
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      // One extra row is how we know whether a next page exists without a
+      // second count query.
+      take: opts.limit + 1,
+      ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
       include: { device: { select: { deviceId: true, name: true } } },
     }),
     prisma.alert.count({
@@ -366,7 +415,15 @@ export async function getUserAlerts(
     }),
   ]);
 
-  return { alerts: alerts.map(toAlertDto), unacknowledged };
+  const alerts = rows.slice(0, opts.limit);
+
+  return {
+    alerts: alerts.map(toAlertDto),
+    unacknowledged,
+    // Null rather than absent, so a client has one thing to check. Callers
+    // that ignore it (the web UI) behave exactly as before.
+    next_cursor: rows.length > opts.limit ? alerts[alerts.length - 1].id : null,
+  };
 }
 
 /**
@@ -393,6 +450,31 @@ export async function acknowledgeAlert(device: Device, alertId: string, userId: 
   await prisma.alert.update({
     where: { id: alertId },
     data: { acknowledged: true, acknowledgedBy: userId, acknowledgedAt: new Date() },
+  });
+}
+
+/**
+ * Acknowledge by alert id alone, scoped to what the caller can see.
+ *
+ * A notification action carries the alert id and nothing else, so requiring the
+ * device id (as the route above does) would mean a lookup before the user's tap
+ * could do anything. Access is checked against the same device set as the
+ * inbox, so a shared device's alerts can be acknowledged too.
+ */
+export async function acknowledgeAlertById(
+  user: { id: string; tenantId: string | null },
+  alertId: string
+): Promise<void> {
+  const deviceIds = await accessibleDeviceIds(user);
+  const alert = await prisma.alert.findFirst({
+    where: { id: alertId, deviceId: { in: deviceIds } },
+  });
+  if (!alert) throw new HttpError(404, 'Alert not found');
+  if (alert.acknowledged) return; // Idempotent: a double-tap is not an error.
+
+  await prisma.alert.update({
+    where: { id: alertId },
+    data: { acknowledged: true, acknowledgedBy: user.id, acknowledgedAt: new Date() },
   });
 }
 

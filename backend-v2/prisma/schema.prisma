@@ -72,6 +72,7 @@ model Tenant {
   alerts     Alert[]
   claimCodes DeviceClaimCode[]
 
+  @@index([archivedAt])
   @@map("tenants")
 }
 
@@ -82,6 +83,9 @@ model User {
   name        String?   @db.VarChar(255)
   tenantId    String?   @map("tenant_id") @db.Char(36)
   role        Role      @default(user)
+  // Superseded by PushToken (a user has several devices). Kept written in
+  // parallel for one release so a v1 mobile build keeps receiving alerts;
+  // drop once those are gone.
   fcmToken    String?   @map("fcm_token") @db.Text
   // Soft delete, so acknowledged-by references on historic alerts survive.
   archivedAt  DateTime? @map("archived_at")
@@ -90,10 +94,12 @@ model User {
 
   tenant             Tenant?             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   deviceMappings     UserDeviceMapping[]
+  pushTokens         PushToken[]
   acknowledgedAlerts Alert[]             @relation("AlertAcknowledgedBy")
   claimCodesCreated  DeviceClaimCode[]
 
   @@index([tenantId])
+  @@index([archivedAt])
   @@map("users")
 }
 
@@ -126,6 +132,7 @@ model Device {
   claimCodes          DeviceClaimCode[]
 
   @@index([tenantId])
+  @@index([archivedAt])
   @@map("devices")
 }
 
@@ -221,6 +228,12 @@ model DeviceConfig {
   levelFullCm           Decimal? @map("level_full_cm") @db.Decimal(10, 2)
   syncMode              SyncMode @default(piggyback) @map("sync_mode")
   configJson            Json?    @map("config_json")
+  // Per-rule on/off switches, `{ [AlertType]: { enabled: boolean } }`. A type
+  // that is absent is enabled - so a device with no row alerts exactly as it
+  // did before this column existed.
+  alertRules            Json?    @map("alert_rules")
+  // Per-device override of ALERT_OFFLINE_THRESHOLD_MINUTES; null = server default.
+  offlineThresholdMin   Int?     @map("offline_threshold_min")
   createdAt             DateTime @default(now()) @map("created_at")
   updatedAt             DateTime @updatedAt @map("updated_at")
 
@@ -291,6 +304,25 @@ model UserDeviceMapping {
 
   @@unique([userId, deviceId])
   @@map("user_device_mappings")
+}
+
+// One row per signed-in app install. A single column on User meant signing in
+// on a second device silently stopped alerts on the first, and signing out left
+// the backend pushing to a phone nobody was holding.
+model PushToken {
+  id         String   @id @default(uuid()) @db.Char(36)
+  userId     String   @map("user_id") @db.Char(36)
+  // FCM registration tokens are long; hash-indexed via a prefix so MySQL can
+  // keep the uniqueness constraint on a TEXT column.
+  token      String   @unique(length: 255) @db.Text
+  platform   String   @default("android") @db.VarChar(16)
+  lastSeenAt DateTime @updatedAt @map("last_seen_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_tokens")
 }
 
 model DeviceClaimCode {

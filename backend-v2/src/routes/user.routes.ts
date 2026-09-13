@@ -9,7 +9,8 @@ import * as userService from '../services/user.service';
 import * as deviceService from '../services/device.service';
 import * as tankProfileService from '../services/tank-profile.service';
 import * as firmwareService from '../services/firmware.service';
-import { updateUserFCMToken } from '../services/fcm.service';
+import * as alertRulesService from '../services/alert-rules.service';
+import { registerPushToken, removePushToken, updateUserFCMToken } from '../services/fcm.service';
 import { exportUserMeasurements } from '../services/measurement-export.service';
 import { BUCKETS, getDeviceHistorySeries } from '../services/history.service';
 import { getDeviceUsage } from '../services/usage.service';
@@ -124,6 +125,8 @@ const userAlertsQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(200).default(50),
   include_dismissed: z.coerce.boolean().default(false),
   unacknowledged: z.coerce.boolean().default(false),
+  // Optional: omitting it returns the first page exactly as before.
+  cursor: z.string().uuid().optional(),
 });
 
 // GET /api/v1/user/alerts - One inbox across every device the caller can see.
@@ -131,11 +134,11 @@ const userAlertsQuerySchema = z.object({
 router.get(
   '/alerts',
   asyncHandler(async (req: AuthRequest, res) => {
-    const { limit, include_dismissed, unacknowledged } = userAlertsQuerySchema.parse(req.query);
+    const { limit, include_dismissed, unacknowledged, cursor } = userAlertsQuerySchema.parse(req.query);
     res.json(
       await userService.getUserAlerts(
         { id: req.user!.id, tenantId: req.user!.tenantId },
-        { limit, includeDismissed: include_dismissed, onlyUnacknowledged: unacknowledged }
+        { limit, includeDismissed: include_dismissed, onlyUnacknowledged: unacknowledged, cursor }
       )
     );
   })
@@ -207,6 +210,18 @@ router.put(
   asyncHandler(async (req: DeviceAccessRequest, res) => {
     const { name } = renameDeviceSchema.parse(req.body);
     res.json(await userService.renameDevice(req.device!, name));
+  })
+);
+
+// DELETE /api/v1/user/devices/:deviceId - Unpair. The reverse of the claim
+// flow: the device leaves the account and can be claimed again, while its
+// readings and alerts stay on file. Nothing is sent to the device.
+router.delete(
+  '/devices/:deviceId',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest & AuthRequest, res) => {
+    await userService.unpairDevice(req.device!, req.user!);
+    res.status(204).send();
   })
 );
 
@@ -322,13 +337,48 @@ router.get(
 
 // PUT /api/v1/user/devices/:deviceId/alert-thresholds - Tenant-editable alert
 // thresholds. Omitting a field keeps it; sending null clears it, which turns
-// that alert off for this device.
+// that alert off for this device. Predates /alert-rules; kept for the web app,
+// same columns.
 router.put(
   '/devices/:deviceId/alert-thresholds',
   requireDeviceAccess,
   asyncHandler(async (req: DeviceAccessRequest, res) => {
     const validated = alertThresholdsSchema.parse(req.body);
     res.json(await deviceService.updateAlertThresholds(req.device!, validated));
+  })
+);
+
+// GET /api/v1/user/devices/:deviceId/alert-rules - Every alert type this
+// device can raise, with its switch and threshold. The catalog is server-owned
+// so the app renders whatever comes back and a new rule needs no app release.
+router.get(
+  '/devices/:deviceId/alert-rules',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    res.json(await alertRulesService.getAlertRules(req.device!));
+  })
+);
+
+// Keyed by rule type; unknown types and out-of-range thresholds are rejected
+// by the service, which owns the catalog. threshold null clears the override.
+const alertRulesSchema = z.object({
+  rules: z.record(
+    z.string(),
+    z.object({
+      enabled: z.boolean().optional(),
+      threshold: z.number().nullable().optional(),
+    })
+  ),
+});
+
+// PUT /api/v1/user/devices/:deviceId/alert-rules - Partial merge: only the
+// types and fields present change. Responds with the full resolved set.
+router.put(
+  '/devices/:deviceId/alert-rules',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    const { rules } = alertRulesSchema.parse(req.body);
+    res.json(await alertRulesService.updateAlertRules(req.device!, rules));
   })
 );
 
@@ -404,11 +454,49 @@ router.post(
   })
 );
 
+// POST /api/v1/user/alerts/:alertId/acknowledge - Acknowledge by alert id
+// alone, which is all a notification action carries.
+router.post(
+  '/alerts/:alertId/acknowledge',
+  asyncHandler(async (req: AuthRequest, res) => {
+    await userService.acknowledgeAlertById({ id: req.user!.id, tenantId: req.user!.tenantId }, req.params.alertId);
+    res.json({ success: true });
+  })
+);
+
+const pushTokenSchema = z.object({
+  token: z.string().min(1).max(4096),
+  platform: z.enum(['android', 'ios', 'web']).default('android'),
+});
+
+// POST /api/v1/user/push-tokens - Register this install for push.
+// One row per install, so a phone and a tablet both ring.
+router.post(
+  '/push-tokens',
+  asyncHandler(async (req: AuthRequest, res) => {
+    const { token, platform } = pushTokenSchema.parse(req.body);
+    await registerPushToken(req.user!.id, token, platform);
+    res.status(201).json({ success: true });
+  })
+);
+
+// DELETE /api/v1/user/push-tokens - Revoke on sign-out, so the backend stops
+// pushing this tenant's alerts to a phone nobody is signed in on.
+router.delete(
+  '/push-tokens',
+  asyncHandler(async (req: AuthRequest, res) => {
+    const { token } = pushTokenSchema.pick({ token: true }).parse(req.body);
+    await removePushToken(req.user!.id, token);
+    res.json({ success: true });
+  })
+);
+
 const fcmTokenSchema = z.object({
   fcm_token: z.string().min(1),
 });
 
-// POST /api/v1/user/fcm-token - Update FCM token
+// POST /api/v1/user/fcm-token - Deprecated alias of POST /push-tokens, kept
+// while v1 app builds are still installed.
 router.post(
   '/fcm-token',
   asyncHandler(async (req: AuthRequest, res) => {

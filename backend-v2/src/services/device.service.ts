@@ -6,6 +6,7 @@ import { createDeviceToken } from '../lib/device-token';
 import { computeTotalCapacityL, computeVolumeL, getTankProfileRaw } from './tank-profile.service';
 import { bumpConfigVersion } from '../lib/config-version';
 import { pushConfigToDevice } from '../gateway/registry';
+import { DEFAULT_BATTERY_LOW_THRESHOLD_V } from './alert-rules.service';
 
 export { bumpConfigVersion };
 
@@ -93,7 +94,9 @@ const DEFAULT_OPERATIONAL: OperationalConfig = {
   tank_low_threshold_l: 100.0,
   tank_full_threshold_pct: null,
   tank_low_threshold_pct: null,
-  battery_low_threshold_v: 3.3,
+  // Shared with the alert-rules catalog, so the number the device is told
+  // and the number the battery_low rule falls back to can never drift apart.
+  battery_low_threshold_v: DEFAULT_BATTERY_LOW_THRESHOLD_V,
   sync_mode: 'piggyback',
 };
 
@@ -272,8 +275,16 @@ export async function claimDevice(claimCode: string, hardwareId: string): Promis
 
     let device = await tx.device.findUnique({ where: { deviceId: hardwareId } });
     if (device) {
-      if (device.tenantId !== claim.tenantId) {
+      if (device.tenantId && device.tenantId !== claim.tenantId) {
         throw new HttpError(409, 'Device already claimed by a different account');
+      }
+      // A device the user unpaired (tenantId cleared) is re-attached here. Its
+      // history and config rows stay with the hardware ID; only ownership moves.
+      if (!device.tenantId) {
+        device = await tx.device.update({
+          where: { id: device.id },
+          data: { tenantId: claim.tenantId },
+        });
       }
     } else {
       device = await tx.device.create({
