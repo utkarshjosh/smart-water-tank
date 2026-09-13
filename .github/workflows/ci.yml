@@ -9,57 +9,61 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# One npm workspace: a single root `npm ci` installs every package, runs
+# backend-v2's `prisma generate` and builds packages/contracts (its `prepare`
+# script), so every job starts from the same install.
+
 jobs:
-  backend:
-    name: backend-v2
+  contracts:
+    name: contracts
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend-v2
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: backend-v2/package-lock.json
-      # postinstall runs `prisma generate`, which only needs the schema.
       - run: npm ci
-      - run: npm run typecheck
-      - run: npm test
+      - run: npm run typecheck --workspace=packages/contracts
+      - run: npm test --workspace=packages/contracts
+
+  backend:
+    name: backend-v2
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck --workspace=backend-v2
+      - run: npm test --workspace=backend-v2
 
   frontend:
     name: frontend
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
       - run: npm ci
-      - run: npm run lint
+      - run: npm run lint --workspace=frontend
       # `build` runs tsc --noEmit first, then vite. Runtime env is read lazily,
       # so no VITE_* secrets are needed to compile.
-      - run: npm run build
+      - run: npm run build --workspace=frontend
 
   mobile:
     name: mobile
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: mobile
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: mobile/package-lock.json
       - run: npm ci
-      - run: npm run typecheck
-      - run: npm run lint -- --max-warnings=0
+      - run: npm run typecheck --workspace=mobile
+      - run: npm run lint --workspace=mobile -- --max-warnings=0

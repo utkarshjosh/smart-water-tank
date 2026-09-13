@@ -29,11 +29,26 @@ WATER_TANK/
 - Firebase project with Auth and Cloud Messaging enabled
 - ESP8266 device with firmware flashed
 
+### 0. Install everything once
+
+The repo is a single npm workspace (`backend-v2`, `frontend`, `mobile`,
+`packages/contracts`). One install at the root wires them together:
+
+```bash
+npm install          # also generates the Prisma client and builds packages/contracts
+npm test             # every package's tests
+npm run typecheck    # every package
+```
+
+`packages/contracts` holds the zod schema for every API response. The backend
+validates what it sends against it (in dev and test), and the web and mobile
+apps parse what they receive with the same schemas — one definition of the
+API, three consumers. Rebuild it after editing with `npm run build:contracts`.
+
 ### 1. Backend Setup
 
 ```bash
-cd backend
-npm install
+cd backend-v2
 
 # Create .env file (copy from .env.example)
 # Set DATABASE_URL, Firebase credentials, etc.
@@ -52,7 +67,6 @@ Backend will run on `http://localhost:3000`
 
 ```bash
 cd frontend
-npm install
 
 # Create .env file with:
 # NEXT_PUBLIC_API_URL=http://localhost:3000

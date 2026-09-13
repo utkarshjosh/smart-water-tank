@@ -203,12 +203,12 @@ export async function checkOtaUpdate(device: Device, headerVersion?: string) {
   });
 
   if (!assignment || assignment.firmware.version === currentVersion) {
-    return { update_available: false, current_version: currentVersion };
+    return { update_available: false as const, current_version: currentVersion };
   }
 
   const firmware = assignment.firmware;
   return {
-    update_available: true,
+    update_available: true as const,
     current_version: currentVersion,
     latest_version: firmware.version,
     download_url: `${env.apiBaseUrl}/api/v1/devices/${device.deviceId}/ota/download/${firmware.id}`,

@@ -129,8 +129,14 @@ cd aquamind-backend
 
 ### 3.2 Install Dependencies
 
+The repository is one npm workspace, so the install runs from the repo root
+and names the app. This also builds `packages/contracts`, which the backend
+imports, and generates the Prisma client.
+
 ```bash
-npm install
+cd /home/aquamind/apps/aquamind          # repo root
+npm ci --workspace=backend-v2
+cd backend-v2
 npm run build
 ```
 
@@ -222,7 +228,9 @@ cd frontend
 ### 4.2 Install Dependencies
 
 ```bash
-npm install
+cd /home/aquamind/apps/aquamind          # repo root
+npm ci --workspace=frontend
+cd frontend
 ```
 
 ### 4.3 Environment Variables
@@ -552,20 +560,19 @@ set -e
 
 echo "🚀 Starting deployment..."
 
+cd /home/aquamind/apps/aquamind          # repo root: one workspace, one lockfile
+git pull origin main  # or your branch
+
 # Backend deployment
 echo "📦 Deploying backend..."
-cd /home/aquamind/apps/aquamind-backend
-git pull origin main  # or your branch
-npm install
-npm run build
+npm ci --workspace=backend-v2
+(cd backend-v2 && npm run build)
 pm2 restart aquamind-api
 
 # Frontend deployment
 echo "📦 Deploying frontend..."
-cd /home/aquamind/apps/frontend
-git pull origin main  # or your branch
-npm install
-npm run build
+npm ci --workspace=frontend
+(cd frontend && npm run build)
 pm2 restart aquamind-admin
 
 echo "✅ Deployment complete!"

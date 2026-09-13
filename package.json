@@ -1,0 +1,20 @@
+{
+  "name": "aquamind",
+  "private": true,
+  "description": "AquaMind water-tank monitoring: backend API, web console, Android app, shared API contracts",
+  "workspaces": [
+    "packages/*",
+    "backend-v2",
+    "frontend",
+    "mobile"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build:contracts": "npm run build --workspace=packages/contracts",
+    "test": "npm test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  }
+}

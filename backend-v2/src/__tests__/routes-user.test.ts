@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as userService from '../services/user.service';
 import * as tankProfileService from '../services/tank-profile.service';
 import * as historyService from '../services/history.service';
-import { callArgs, deviceLookupReturns, deviceRow, http, signInAs, userRow } from './helpers/http';
+import { callArgs, claimCodeDto, deviceInfoDto, deviceLookupReturns, deviceRow, deviceSummaryDto, historySeriesDto, http, signInAs, userRow } from './helpers/http';
 
 // Tenant routes: request validation, what each handler passes to its service,
 // and the envelope it wraps the result in. Services are mocked; their own
@@ -11,23 +11,25 @@ import { callArgs, deviceLookupReturns, deviceRow, http, signInAs, userRow } fro
 
 test('GET /devices wraps the list in { devices } and scopes it to the caller', async (t) => {
   const headers = signInAs(t, userRow({ id: 'user-9', tenantId: 'tenant-9' }));
-  const list = t.mock.method(userService, 'listDevicesForTenant', async () => [{ id: 'AQM-1' }]);
+  const row = deviceSummaryDto({ id: 'AQM-1' });
+  const list = t.mock.method(userService, 'listDevicesForTenant', async () => [row]);
 
   const res = await http().get('/api/v1/user/devices').set(headers);
 
   assert.equal(res.status, 200);
-  assert.deepEqual(res.body, { devices: [{ id: 'AQM-1' }] });
+  assert.deepEqual(res.body, { devices: [row] });
   assert.deepEqual(callArgs(list), ['tenant-9', 'user-9']);
 });
 
 test('POST /devices/claim-code -> 201 minted for the caller', async (t) => {
   const headers = signInAs(t, userRow({ id: 'user-9', tenantId: 'tenant-9' }));
-  const mint = t.mock.method(userService, 'mintClaimCode', async () => ({ claim_code: 'ABCD-1234' }));
+  const minted = claimCodeDto();
+  const mint = t.mock.method(userService, 'mintClaimCode', async () => minted);
 
   const res = await http().post('/api/v1/user/devices/claim-code').set(headers);
 
   assert.equal(res.status, 201);
-  assert.deepEqual(res.body, { claim_code: 'ABCD-1234' });
+  assert.deepEqual(res.body, minted);
   assert.deepEqual(callArgs(mint), ['tenant-9', 'user-9']);
 });
 
@@ -41,12 +43,13 @@ test('PUT /devices/:id rejects a non-string name', async (t) => {
 test('PUT /devices/:id passes the device row and the new name through', async (t) => {
   const headers = signInAs(t, userRow());
   deviceLookupReturns(t, deviceRow());
-  const rename = t.mock.method(userService, 'renameDevice', async () => ({ id: 'AQM-0042', name: 'Garden' }));
+  const renamed = deviceInfoDto({ name: 'Garden' });
+  const rename = t.mock.method(userService, 'renameDevice', async () => renamed);
 
   const res = await http().put('/api/v1/user/devices/AQM-0042').set(headers).send({ name: 'Garden' });
 
   assert.equal(res.status, 200);
-  assert.deepEqual(res.body, { id: 'AQM-0042', name: 'Garden' });
+  assert.deepEqual(res.body, renamed);
   assert.equal(callArgs<typeof userService.renameDevice>(rename)[0].id, 'dev-uuid');
   assert.equal(callArgs(rename)[1], 'Garden');
 });
@@ -86,7 +89,7 @@ test('GET /devices/:id/history/series rejects an unknown bucket', async (t) => {
 test('GET /devices/:id/history/series defaults bucket to auto and forwards the range', async (t) => {
   const headers = signInAs(t, userRow());
   deviceLookupReturns(t, deviceRow());
-  const series = t.mock.method(historyService, 'getDeviceHistorySeries', async () => ({ device_id: 'AQM-0042', series: {} }));
+  const series = t.mock.method(historyService, 'getDeviceHistorySeries', async () => historySeriesDto());
 
   const res = await http()
     .get('/api/v1/user/devices/AQM-0042/history/series?from=2026-01-01T00:00:00Z&to=2026-01-02T00:00:00Z')

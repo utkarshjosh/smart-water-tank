@@ -73,14 +73,14 @@ export const telemetryMessageSchema = z.object({
 export const configMessageSchema = z.object({
   type: z.literal('config'),
   id: z.string().min(1),
-  config: z.record(z.unknown()),
+  config: z.record(z.string(), z.unknown()),
 });
 
 export const cmdMessageSchema = z.object({
   type: z.literal('cmd'),
   id: z.string().min(1).optional(),
   cmd: z.string().min(1),
-  args: z.record(z.unknown()).optional(),
+  args: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const ackMessageSchema = z.object({
@@ -101,7 +101,7 @@ export const getConfigMessageSchema = z.object({
 export const setConfigMessageSchema = z.object({
   type: z.literal('setConfig'),
   id: z.string().min(1).optional(),
-  config: z.record(z.unknown()),
+  config: z.record(z.string(), z.unknown()),
 });
 
 export const pingMessageSchema = z.object({
@@ -155,7 +155,7 @@ export function parseDeviceMessage(input: unknown): ParseResult {
 
   const result = deviceMessageSchema.safeParse(candidate);
   if (!result.success) {
-    return { ok: false, error: result.error.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join('; ') };
+    return { ok: false, error: result.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join('; ') };
   }
   return { ok: true, message: result.data };
 }

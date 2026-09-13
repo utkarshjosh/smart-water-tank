@@ -14,7 +14,7 @@ import { z } from 'zod';
  * stored 0%, and a 0% full threshold matches every reading at or above 0% -
  * which is every reading. Trying to turn that alert off armed it permanently.
  */
-export const clearableThreshold = (inner: z.ZodTypeAny) =>
+export const clearableThreshold = <T extends z.ZodType>(inner: T) =>
   z.preprocess(
     (value) => (value === '' || value === null ? null : value),
     inner.nullable().optional()

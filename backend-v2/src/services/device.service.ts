@@ -28,6 +28,7 @@ export function toMeasurementDto(m: {
   };
 }
 import { processAlertsForMeasurement } from './alert.service';
+import type { TankShape } from '@prisma/client';
 
 export interface ConfigDto {
   measurement_interval_ms: number;
@@ -117,7 +118,7 @@ export function toOperationalConfig(config: DeviceConfig): OperationalConfig {
 // Plain-number geometry, decoupled from Prisma Decimals so the merge logic is
 // unit-testable without a live DB.
 export interface GeometrySource {
-  shape: string;
+  shape: TankShape;
   parallelUnitCount: number;
   heightCm: number;
   diameterCm: number | null;
@@ -143,7 +144,7 @@ export function profileToGeometry(profile: TankProfile): GeometrySource {
 }
 
 export interface GeometryBlock {
-  shape: string;
+  shape: TankShape;
   diameter_cm: number | null;
   length_cm: number | null;
   width_cm: number | null;
