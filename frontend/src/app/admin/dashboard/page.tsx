@@ -1,4 +1,4 @@
-import { AppShell } from '@/components/shell';
+import { usePageHeading } from '@/components/shell';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageHeader } from '@/components/ui/page-header';
@@ -46,6 +46,7 @@ function Meter({
 }
 
 export default function DashboardPage() {
+  usePageHeading('Dashboard');
   const summary = useAdminSummary();
   const data = summary.data;
 
@@ -57,112 +58,108 @@ export default function DashboardPage() {
   const alertLoad = total > 0 ? Math.min(100, Math.round((alerts / total) * 100)) : 0;
 
   return (
-    <AppShell variant="admin" title="Dashboard">
-      <div className="space-y-4">
-        <PageHeader
-          title="Dashboard"
-          description="Fleet health, tenant coverage and ingestion activity."
-          actions={
-            data && (
-              <Badge
-                variant={onlineRate >= 90 ? 'good' : onlineRate >= 60 ? 'warning' : 'critical'}
-              >
-                <WifiHigh size={13} weight="fill" aria-hidden />
-                {onlineRate}% online
-              </Badge>
-            )
-          }
-        />
+    <div className="space-y-4">
+      <PageHeader
+        title="Dashboard"
+        description="Fleet health, tenant coverage and ingestion activity."
+        actions={
+          data && (
+            <Badge variant={onlineRate >= 90 ? 'good' : onlineRate >= 60 ? 'warning' : 'critical'}>
+              <WifiHigh size={13} weight="fill" aria-hidden />
+              {onlineRate}% online
+            </Badge>
+          )
+        }
+      />
 
-        {summary.isError && (
-          <Alert variant="critical">
-            <AlertTitle>Couldn&apos;t load the summary</AlertTitle>
-            <AlertDescription>{errorMessage(summary.error, 'Please try again.')}</AlertDescription>
-          </Alert>
-        )}
+      {summary.isError && (
+        <Alert variant="critical">
+          <AlertTitle>Couldn&apos;t load the summary</AlertTitle>
+          <AlertDescription>{errorMessage(summary.error, 'Please try again.')}</AlertDescription>
+        </Alert>
+      )}
 
-        <div className="grid gap-3 xl:grid-cols-[1.15fr_0.85fr]">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-label text-ink-2">Operations snapshot</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              {summary.isLoading ? (
-                <Skeleton className="h-28 w-full" />
-              ) : (
-                <>
-                  <Meter
-                    label="Fleet connectivity"
-                    value={`${online} / ${total}`}
-                    detail={`${offline} device${offline === 1 ? '' : 's'} not reporting`}
-                    percent={onlineRate}
-                    tone="good"
-                  />
-                  <Meter
-                    label="Alert pressure"
-                    value={`${alerts} in 24h`}
-                    detail="Alerts raised across the fleet in the last day"
-                    percent={alertLoad}
-                    tone="warning"
-                  />
-                </>
-              )}
-            </CardContent>
-          </Card>
+      <div className="grid gap-3 xl:grid-cols-[1.15fr_0.85fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-label text-ink-2">Operations snapshot</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {summary.isLoading ? (
+              <Skeleton className="h-28 w-full" />
+            ) : (
+              <>
+                <Meter
+                  label="Fleet connectivity"
+                  value={`${online} / ${total}`}
+                  detail={`${offline} device${offline === 1 ? '' : 's'} not reporting`}
+                  percent={onlineRate}
+                  tone="good"
+                />
+                <Meter
+                  label="Alert pressure"
+                  value={`${alerts} in 24h`}
+                  detail="Alerts raised across the fleet in the last day"
+                  percent={alertLoad}
+                  tone="warning"
+                />
+              </>
+            )}
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-label text-ink-2">Needs attention</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {summary.isLoading ? (
-                <Skeleton className="h-20 w-full" />
-              ) : (
-                <>
-                  <AttentionRow
-                    icon={<Warning size={18} weight="fill" aria-hidden />}
-                    tone="warning"
-                    title="Recent alerts"
-                    detail="Raised in the last 24 hours"
-                    value={alerts}
-                  />
-                  <AttentionRow
-                    icon={<WifiSlash size={18} weight="fill" aria-hidden />}
-                    tone="critical"
-                    title="Disconnected"
-                    detail="Devices not reporting"
-                    value={offline}
-                  />
-                </>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
-          <StatTile label="Devices" value={total} loading={summary.isLoading} />
-          <StatTile label="Online" value={online} tone="good" loading={summary.isLoading} />
-          <StatTile
-            label="Offline"
-            value={offline}
-            tone={offline > 0 ? 'critical' : 'default'}
-            loading={summary.isLoading}
-          />
-          <StatTile label="Tenants" value={data?.total_tenants ?? 0} loading={summary.isLoading} />
-          <StatTile
-            label="Alerts 24h"
-            value={alerts}
-            tone={alerts > 0 ? 'warning' : 'default'}
-            loading={summary.isLoading}
-          />
-          <StatTile
-            label="Readings today"
-            value={data?.measurements_today ?? 0}
-            loading={summary.isLoading}
-          />
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-label text-ink-2">Needs attention</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {summary.isLoading ? (
+              <Skeleton className="h-20 w-full" />
+            ) : (
+              <>
+                <AttentionRow
+                  icon={<Warning size={18} weight="fill" aria-hidden />}
+                  tone="warning"
+                  title="Recent alerts"
+                  detail="Raised in the last 24 hours"
+                  value={alerts}
+                />
+                <AttentionRow
+                  icon={<WifiSlash size={18} weight="fill" aria-hidden />}
+                  tone="critical"
+                  title="Disconnected"
+                  detail="Devices not reporting"
+                  value={offline}
+                />
+              </>
+            )}
+          </CardContent>
+        </Card>
       </div>
-    </AppShell>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+        <StatTile label="Devices" value={total} loading={summary.isLoading} />
+        <StatTile label="Online" value={online} tone="good" loading={summary.isLoading} />
+        <StatTile
+          label="Offline"
+          value={offline}
+          tone={offline > 0 ? 'critical' : 'default'}
+          loading={summary.isLoading}
+        />
+        <StatTile label="Tenants" value={data?.total_tenants ?? 0} loading={summary.isLoading} />
+        <StatTile
+          label="Alerts 24h"
+          value={alerts}
+          tone={alerts > 0 ? 'warning' : 'default'}
+          loading={summary.isLoading}
+        />
+        <StatTile
+          label="Readings today"
+          value={data?.measurements_today ?? 0}
+          loading={summary.isLoading}
+        />
+      </div>
+    </div>
   );
 }
 

@@ -5,16 +5,20 @@ import { errorMessage } from '../_shared/useAdminData';
 import type { DatabaseUser, FirebaseUser, UserRole } from './types';
 
 const userKeys = {
-  database: ['admin', 'users'] as const,
+  database: (includeArchived: boolean) => ['admin', 'users', { includeArchived }] as const,
   firebase: (search: string) => ['admin', 'users', 'firebase', search] as const,
 };
 
-export const useDatabaseUsers = (enabled: boolean) =>
+export const useDatabaseUsers = (enabled: boolean, includeArchived = false) =>
   useQuery({
-    queryKey: userKeys.database,
+    queryKey: userKeys.database(includeArchived),
     enabled,
     queryFn: () =>
-      api.get<{ users: DatabaseUser[] }>('/api/v1/admin/users').then((r) => r.data.users),
+      api
+        .get<{ users: DatabaseUser[] }>(
+          `/api/v1/admin/users${includeArchived ? '?include_archived=true' : ''}`
+        )
+        .then((r) => r.data.users),
   });
 
 export const useFirebaseUsers = (search: string, enabled: boolean) =>
@@ -75,6 +79,23 @@ export const useUpdateUserTenant = () =>
       api.put(`/api/v1/admin/users/${vars.userId}/tenant`, { tenant_id: vars.tenantId }),
     { success: 'Tenant updated', failure: "Couldn't move that user" }
   );
+
+/**
+ * Deactivating blocks sign-in without deleting the account, so alerts the user
+ * acknowledged keep their attribution. The endpoints have always been there;
+ * until now nothing in the console called them.
+ */
+export const useDeactivateUser = () =>
+  useUserMutation((userId: string) => api.delete(`/api/v1/admin/users/${userId}`), {
+    success: 'User deactivated',
+    failure: "Couldn't deactivate that user",
+  });
+
+export const useRestoreUser = () =>
+  useUserMutation((userId: string) => api.post(`/api/v1/admin/users/${userId}/restore`), {
+    success: 'User reactivated',
+    failure: "Couldn't reactivate that user",
+  });
 
 export const useCreateTenant = () => {
   const queryClient = useQueryClient();

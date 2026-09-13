@@ -1,9 +1,17 @@
 import { useState } from 'react';
-import { ArrowCounterClockwise, Buildings, Eye, Plus, Trash } from '@phosphor-icons/react';
+import {
+  Archive,
+  ArrowCounterClockwise,
+  Buildings,
+  Eye,
+  EyeSlash,
+  Plus,
+} from '@phosphor-icons/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -38,8 +46,12 @@ export function TenantsTab() {
   });
 
   const list = tenants.data ?? [];
-  const totalDevices = list.reduce((sum, t) => sum + t.device_count, 0);
-  const totalUsers = list.reduce((sum, t) => sum + t.user_count, 0);
+  // The tiles count the live fleet, so they ignore archived rows even while
+  // those rows are on screen - otherwise turning on "show archived" appears to
+  // create tenants out of nowhere.
+  const active = list.filter((t) => !t.archived_at);
+  const totalDevices = active.reduce((sum, t) => sum + t.device_count, 0);
+  const totalUsers = active.reduce((sum, t) => sum + t.user_count, 0);
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -58,7 +70,17 @@ export function TenantsTab() {
       header: 'Tenant',
       primary: true,
       sortValue: (t) => t.name,
-      cell: (t) => <span className="truncate text-label text-ink-1">{t.name}</span>,
+      cell: (t) => (
+        <span className="flex items-center gap-2">
+          <span className="truncate text-label text-ink-1">{t.name}</span>
+          {t.archived_at && (
+            <Badge variant="neutral">
+              <Archive size={11} weight="bold" aria-hidden />
+              Archived
+            </Badge>
+          )}
+        </span>
+      ),
     },
     {
       key: 'devices',
@@ -87,6 +109,8 @@ export function TenantsTab() {
       key: 'actions',
       header: '',
       align: 'right',
+      actions: true,
+      hug: true,
       cell: (t) =>
         t.archived_at ? (
           <Button
@@ -99,14 +123,9 @@ export function TenantsTab() {
             Restore
           </Button>
         ) : (
-          <Button
-            size="icon"
-            variant="ghost"
-            aria-label={`Archive ${t.name}`}
-            onClick={() => setArchiving(t)}
-            className="h-9 w-9"
-          >
-            <Trash size={16} />
+          <Button size="sm" variant="ghost" onClick={() => setArchiving(t)}>
+            <Archive size={14} />
+            Archive
           </Button>
         ),
     },
@@ -115,7 +134,7 @@ export function TenantsTab() {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-2">
-        <StatTile label="Tenants" value={list.length} loading={tenants.isLoading} />
+        <StatTile label="Tenants" value={active.length} loading={tenants.isLoading} />
         <StatTile label="Devices" value={totalDevices} loading={tenants.isLoading} />
         <StatTile label="Users" value={totalUsers} loading={tenants.isLoading} />
       </div>
@@ -129,7 +148,7 @@ export function TenantsTab() {
 
       <div className="flex flex-wrap justify-end gap-2">
         <Button size="sm" variant="ghost" onClick={() => setShowArchived(!showArchived)}>
-          <Eye size={15} />
+          {showArchived ? <EyeSlash size={15} /> : <Eye size={15} />}
           {showArchived ? 'Hide archived' : 'Show archived'}
         </Button>
         <Button
@@ -177,6 +196,7 @@ export function TenantsTab() {
         getRowKey={(t) => t.id}
         loading={tenants.isLoading}
         initialSort={{ key: 'devices', direction: 'desc' }}
+        rowClassName={(t) => (t.archived_at ? 'opacity-60' : undefined)}
         caption="Tenants"
         empty={
           <EmptyState

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AppShell } from '@/components/shell';
+import { usePageHeading } from '@/components/shell';
 import { PageHeader } from '@/components/ui/page-header';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { TenantsTab } from './TenantsTab';
@@ -15,26 +15,26 @@ type Tab = 'tenants' | 'users';
 export default function TenantsPage() {
   const [tab, setTab] = useState<Tab>('tenants');
 
+  usePageHeading('Tenants & users');
+
   return (
-    <AppShell variant="admin" title="Tenants">
-      <div className="space-y-4">
-        <PageHeader
-          title="Tenants & users"
-          description="Organisations that own devices, and the accounts attached to them."
-        />
+    <div className="space-y-4">
+      <PageHeader
+        title="Tenants & users"
+        description="Organisations that own devices, and the accounts attached to them."
+      />
 
-        <SegmentedControl
-          aria-label="Section"
-          value={tab}
-          onChange={setTab}
-          options={[
-            { value: 'tenants', label: 'Tenants' },
-            { value: 'users', label: 'Users' },
-          ]}
-        />
+      <SegmentedControl
+        aria-label="Section"
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: 'tenants', label: 'Tenants' },
+          { value: 'users', label: 'Users' },
+        ]}
+      />
 
-        <div className="animate-fade-rise">{tab === 'tenants' ? <TenantsTab /> : <UsersTab />}</div>
-      </div>
-    </AppShell>
+      <div className="animate-fade-rise">{tab === 'tenants' ? <TenantsTab /> : <UsersTab />}</div>
+    </div>
   );
 }

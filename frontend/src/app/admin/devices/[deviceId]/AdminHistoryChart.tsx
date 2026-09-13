@@ -17,7 +17,7 @@ export default function AdminHistoryChart({ deviceId }: { deviceId?: string }) {
 
   if (isLoading) return <Skeleton className="h-[280px] w-full" />;
 
-  const series = data?.series.volume_l;
+  const series = data?.series?.volume_l;
   const points = series?.points ?? [];
   if (points.filter((p) => p[2] != null).length < 2) {
     return <EmptyState icon={ChartLine} title="No volume data yet" />;

@@ -14,8 +14,18 @@ export interface Column<T> {
   primary?: boolean;
   /** Dropped from the mobile card - noise on a phone. */
   desktopOnly?: boolean;
+  /**
+   * Row controls. On a phone these move to a footer strip below the card
+   * instead of into the card body, because the body is itself a button when
+   * the row is clickable and a button inside a button is neither valid nor
+   * tappable.
+   */
+  actions?: boolean;
   align?: 'left' | 'right';
+  /** Column width hint, e.g. '26%'. Percentages let long cells truncate. */
   width?: string;
+  /** Shrink-to-fit and never wrap - for a column of row controls. */
+  hug?: boolean;
 }
 
 type Direction = 'asc' | 'desc';
@@ -35,6 +45,7 @@ export function DataTable<T>({
   initialSort,
   caption,
   className,
+  rowClassName,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -45,6 +56,8 @@ export function DataTable<T>({
   initialSort?: { key: string; direction?: Direction };
   caption?: string;
   className?: string;
+  /** Per-row styling, e.g. dimming a row that has been archived. */
+  rowClassName?: (row: T) => string | undefined;
 }) {
   const [sort, setSort] = useState<{ key: string; direction: Direction } | null>(
     initialSort ? { key: initialSort.key, direction: initialSort.direction ?? 'asc' } : null
@@ -89,7 +102,10 @@ export function DataTable<T>({
   if (rows.length === 0) return <div className={className}>{empty}</div>;
 
   const primary = columns.find((c) => c.primary) ?? columns[0];
-  const secondary = columns.filter((c) => c !== primary && !c.desktopOnly);
+  const actionsColumn = columns.find((c) => c.actions);
+  const secondary = columns.filter(
+    (c) => c !== primary && c !== actionsColumn && !c.desktopOnly
+  );
   const sortable = columns.filter((c) => c.sortValue);
 
   return (
@@ -117,8 +133,9 @@ export function DataTable<T>({
                         active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : undefined
                       }
                       className={cn(
-                        'whitespace-nowrap border-b border-hairline px-4 py-2.5 text-label text-ink-2',
-                        column.align === 'right' && 'text-right'
+                        'whitespace-nowrap border-b border-hairline px-3 py-2.5 text-label text-ink-2',
+                        column.align === 'right' && 'text-right',
+                        column.hug && 'w-px'
                       )}
                     >
                       {column.sortValue ? (
@@ -149,15 +166,17 @@ export function DataTable<T>({
                   className={cn(
                     'border-b border-hairline last:border-0',
                     onRowClick &&
-                      'cursor-pointer transition-colors duration-instant hover:bg-surface-hover'
+                      'cursor-pointer transition-colors duration-instant hover:bg-surface-hover',
+                    rowClassName?.(row)
                   )}
                 >
                   {columns.map((column) => (
                     <td
                       key={column.key}
                       className={cn(
-                        'px-4 py-3 align-middle text-body text-ink-1',
-                        column.align === 'right' && 'text-right'
+                        'px-3 py-3 align-middle text-body text-ink-1',
+                        column.align === 'right' && 'text-right',
+                        column.hug && 'w-px whitespace-nowrap'
                       )}
                     >
                       {column.cell(row)}
@@ -221,17 +240,28 @@ export function DataTable<T>({
           );
 
           return (
-            <li key={getRowKey(row)}>
+            <li
+              key={getRowKey(row)}
+              className={cn(
+                'overflow-hidden rounded-lg border border-hairline bg-surface',
+                rowClassName?.(row)
+              )}
+            >
               {onRowClick ? (
                 <button
                   type="button"
                   onClick={() => onRowClick(row)}
-                  className="w-full rounded-lg border border-hairline bg-surface p-4 text-left transition-[border-color,transform] duration-instant ease-out hover:border-line-strong active:scale-[0.99]"
+                  className="w-full p-4 text-left transition-colors duration-instant ease-out hover:bg-surface-hover"
                 >
                   {content}
                 </button>
               ) : (
-                <div className="rounded-lg border border-hairline bg-surface p-4">{content}</div>
+                <div className="p-4">{content}</div>
+              )}
+              {actionsColumn && (
+                <div className="flex items-center justify-end gap-2 border-t border-hairline bg-surface-sunk px-3 py-2">
+                  {actionsColumn.cell(row)}
+                </div>
               )}
             </li>
           );

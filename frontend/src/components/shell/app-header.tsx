@@ -5,17 +5,18 @@ const UserMenu = lazy(() =>
 );
 
 /**
- * One header for both shells. `title` and `action` let a route own the bar on
- * mobile, where there is no room for a page heading and a toolbar both.
+ * One header for both shells. The title and the action slot are filled by
+ * whichever route is currently mounted - see `usePageHeading` and `ShellAction`
+ * - so the bar itself never remounts as the user moves around.
  */
 export function AppHeader({
   title,
   subtitle,
-  action,
+  actionSlotRef,
 }: {
   title?: ReactNode;
   subtitle?: ReactNode;
-  action?: ReactNode;
+  actionSlotRef?: (node: HTMLDivElement | null) => void;
 }) {
   return (
     <header className="safe-top sticky top-0 z-30 border-b border-hairline bg-surface/90 backdrop-blur">
@@ -25,7 +26,7 @@ export function AppHeader({
           {title && <div className="truncate text-label text-ink-1">{title}</div>}
           {subtitle && <div className="truncate text-caption text-ink-3">{subtitle}</div>}
         </div>
-        {action}
+        <div ref={actionSlotRef} className="flex shrink-0 items-center gap-1" />
         <Suspense fallback={<div className="h-8 w-8 rounded-full bg-surface-sunk" aria-hidden />}>
           <UserMenu />
         </Suspense>

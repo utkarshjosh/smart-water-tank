@@ -38,6 +38,11 @@ export default function OverviewTab() {
     reading?.level_percent_stale || (device.data && device.data.status !== 'online')
   );
 
+  // The usage card reads `days` and `totals` together, so narrow once here.
+  // api.get's generic is a compile-time assertion rather than a runtime check,
+  // so an unexpected response shape should collapse this card, not the page.
+  const usageSummary = usage.data?.days?.length && usage.data.totals ? usage.data : null;
+
   return (
     <div className="space-y-4">
       {active && (
@@ -134,19 +139,19 @@ export default function OverviewTab() {
       </Card>
 
       {/* Usage history, from the nightly aggregation the app never surfaced. */}
-      {usage.data && usage.data.days.length > 0 && (
+      {usageSummary && (
         <Card>
           <CardHeader className="flex-row items-start justify-between gap-3">
             <div>
               <CardTitle className="text-label text-ink-2">Daily usage</CardTitle>
               <p className="mt-0.5 text-caption text-ink-3">
-                Last {usage.data.totals.days_with_data} days with readings
+                Last {usageSummary.totals.days_with_data} days with readings
               </p>
             </div>
-            {usage.data.totals.daily_average_l != null && (
+            {usageSummary.totals.daily_average_l != null && (
               <div className="text-right">
                 <p className="text-metric-sm tnum text-ink-1">
-                  {Math.round(usage.data.totals.daily_average_l)}
+                  {Math.round(usageSummary.totals.daily_average_l)}
                   <span className="text-label text-ink-3"> L</span>
                 </p>
                 <p className="text-caption text-ink-3">per day</p>
@@ -154,7 +159,7 @@ export default function OverviewTab() {
             )}
           </CardHeader>
           <CardContent className="space-y-3">
-            <UsageBars days={usage.data.days} />
+            <UsageBars days={usageSummary.days} />
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-caption text-ink-3">
               <span className="inline-flex items-center gap-1.5">
                 <span aria-hidden className="h-2 w-2 rounded-sm bg-series-volume" />
@@ -162,20 +167,20 @@ export default function OverviewTab() {
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-brand" />
-                {usage.data.totals.refill_events} refill
-                {usage.data.totals.refill_events === 1 ? '' : 's'}
+                {usageSummary.totals.refill_events} refill
+                {usageSummary.totals.refill_events === 1 ? '' : 's'}
               </span>
-              {usage.data.totals.leak_days > 0 && (
+              {usageSummary.totals.leak_days > 0 && (
                 <span className="inline-flex items-center gap-1.5 text-critical-text">
                   <span aria-hidden className="h-2 w-2 rounded-sm bg-critical" />
-                  {usage.data.totals.leak_days} day
-                  {usage.data.totals.leak_days === 1 ? '' : 's'} flagged
+                  {usageSummary.totals.leak_days} day
+                  {usageSummary.totals.leak_days === 1 ? '' : 's'} flagged
                 </span>
               )}
-              {usage.data.totals.days_aggregated < usage.data.totals.days_with_data && (
+              {usageSummary.totals.days_aggregated < usageSummary.totals.days_with_data && (
                 <span>
-                  {usage.data.totals.days_with_data - usage.data.totals.days_aggregated} day
-                  {usage.data.totals.days_with_data - usage.data.totals.days_aggregated === 1
+                  {usageSummary.totals.days_with_data - usageSummary.totals.days_aggregated} day
+                  {usageSummary.totals.days_with_data - usageSummary.totals.days_aggregated === 1
                     ? ''
                     : 's'}{' '}
                   pending overnight totals
