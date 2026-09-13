@@ -9,7 +9,8 @@ import {
   ShieldCheck,
   WarningCircle,
 } from '@phosphor-icons/react';
-import TankLevel, { type TankAlert } from '@/components/TankLevel';
+import type { TankAlert } from '@/components/TankLevel';
+import LandingTank from '@/components/LandingTank';
 import { Sparkline } from '@/components/charts/Sparkline';
 import { Button } from '@/components/ui/button';
 import type { SeriesPoint } from '@/lib/metrics';
@@ -147,8 +148,8 @@ export default function LandingPage() {
                 </span>
               </div>
 
-              <div className="mx-auto my-5 w-36 sm:w-40">
-                <TankLevel level={level} alert={alert} />
+              <div className="mx-auto mb-5 mt-1 w-full">
+                <LandingTank level={level} alert={alert} />
               </div>
 
               <div className="grid grid-cols-2 gap-2">

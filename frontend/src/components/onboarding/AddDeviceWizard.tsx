@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import TankLevel from '@/components/TankLevel';
 import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
@@ -38,11 +38,6 @@ export function AddDeviceWizard() {
   const [claimedDevice, setClaimedDevice] = useState<ClaimedDevice | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const tankFallback = (
-    <div className="mx-auto flex h-60 w-48 items-center justify-center rounded-[2rem] border border-slate-700 bg-slate-900/40">
-      <div className="h-20 w-20 rounded-full border-4 border-cyan-500/20 border-t-cyan-400 animate-spin" />
-    </div>
-  );
 
   const clearTimers = () => {
     if (pollRef.current) clearInterval(pollRef.current);
@@ -109,9 +104,7 @@ export function AddDeviceWizard() {
               <CheckCircle className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold tracking-tight text-slate-950">
-                Device paired
-              </h2>
+              <h2 className="text-lg font-semibold tracking-tight text-slate-950">Device paired</h2>
               <p className="text-sm text-slate-500">
                 {claimedDevice?.name || claimedDevice?.id} is connected to your account.
               </p>
@@ -119,11 +112,9 @@ export function AddDeviceWizard() {
           </div>
         </div>
         <div className="grid gap-4 p-4 md:grid-cols-[0.95fr_1.05fr]">
-          <div className="flex items-center justify-center rounded-lg bg-slate-950 px-4 py-5 text-slate-100">
-            <div className="scale-[0.68] origin-center">
-              <Suspense fallback={tankFallback}>
-                <TankLevel level={70} alert={null} />
-              </Suspense>
+          <div className="flex items-center justify-center rounded-lg border border-hairline bg-surface px-4 py-5 text-ink-1">
+            <div className="w-56 max-w-full">
+              <TankLevel level={null} showLabel={false} animated={false} />
             </div>
           </div>
           <div className="flex flex-col justify-between gap-4">
@@ -137,9 +128,7 @@ export function AddDeviceWizard() {
                 </p>
               </div>
               <div className="rounded-lg border border-slate-200 px-3 py-2">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                  Status
-                </p>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Status</p>
                 <p className="mt-1 text-sm font-medium text-emerald-700">Ready for setup</p>
               </div>
             </div>
