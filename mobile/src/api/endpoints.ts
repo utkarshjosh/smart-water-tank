@@ -10,7 +10,6 @@ import {
   deviceAlertsSchema,
   deviceInfoSchema,
   devicesSchema,
-  historySchema,
   meSchema,
   tankProfileResponseSchema,
   type HistoryMetric,

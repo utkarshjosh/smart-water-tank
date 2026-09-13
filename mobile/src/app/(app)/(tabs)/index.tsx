@@ -30,7 +30,8 @@ export default function TanksScreen() {
   const devices = useDevices();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const list = devices.data ?? [];
+  // `?? []` would mint a new array every render and defeat the memo below.
+  const list = useMemo(() => devices.data ?? [], [devices.data]);
   const selected = useMemo(
     () => list.find((device) => device.id === selectedId) ?? list[0] ?? null,
     [list, selectedId]
