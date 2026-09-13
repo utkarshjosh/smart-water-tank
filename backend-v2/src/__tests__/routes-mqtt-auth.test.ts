@@ -5,13 +5,75 @@ import { deviceRow, http, stubModel } from './helpers/http';
 
 // The Mosquitto auth hook. Response contract is 200 allow / 403 deny.
 //
-// Every supertest request arrives from loopback, which the hook currently
-// trusts without the shared secret; the secret path is exercised once the
-// loopback bypass is removed (see the security phase).
+// Every supertest request arrives on loopback with no proxy headers, exactly
+// how the broker connects, so the hook lets it through without the secret.
+// Adding X-Forwarded-For makes a request look nginx-proxied, i.e. from the
+// internet; those must present X-Broker-Auth.
 
 function tokenBelongsTo(t: import('node:test').TestContext, device: ReturnType<typeof deviceRow> | null): void {
   stubModel(t, 'deviceToken', { findFirst: async () => (device ? { device } : null) });
 }
+
+// --- hook secret / proxy detection -----------------------------------------
+
+function withHookSecret(t: import('node:test').TestContext, secret: string | undefined): void {
+  const original = env.mqttAuthHookSecret;
+  env.mqttAuthHookSecret = secret;
+  t.after(() => {
+    env.mqttAuthHookSecret = original;
+  });
+}
+
+const PROXIED = { 'X-Forwarded-For': '203.0.113.9' };
+
+test('a proxied request with no secret configured is refused, even from loopback', async (t) => {
+  withHookSecret(t, undefined);
+  const res = await http().post('/api/v1/mqtt-auth/acl').set(PROXIED).send({ username: 'AQM-0042', topic: 'devices/AQM-0042/telemetry', acc: 2 });
+  assert.equal(res.status, 403);
+  assert.deepEqual(res.body, { Ok: false, Error: 'forbidden' });
+});
+
+test('a proxied request without the secret header is refused', async (t) => {
+  withHookSecret(t, 'broker-secret');
+  const res = await http().post('/api/v1/mqtt-auth/acl').set(PROXIED).send({ username: 'AQM-0042', topic: 'devices/AQM-0042/telemetry', acc: 2 });
+  assert.equal(res.status, 403);
+  assert.deepEqual(res.body, { Ok: false, Error: 'forbidden' });
+});
+
+test('a proxied request with the wrong secret is refused', async (t) => {
+  withHookSecret(t, 'broker-secret');
+  const res = await http()
+    .post('/api/v1/mqtt-auth/acl')
+    .set(PROXIED)
+    .set('X-Broker-Auth', 'guess')
+    .send({ username: 'AQM-0042', topic: 'devices/AQM-0042/telemetry', acc: 2 });
+  assert.equal(res.status, 403);
+});
+
+test('a proxied request with the right secret reaches the handler', async (t) => {
+  withHookSecret(t, 'broker-secret');
+  const res = await http()
+    .post('/api/v1/mqtt-auth/acl')
+    .set(PROXIED)
+    .set('X-Broker-Auth', 'broker-secret')
+    .send({ username: 'AQM-0042', topic: 'devices/AQM-0042/telemetry', acc: 2 });
+  assert.equal(res.status, 200);
+});
+
+test('X-Real-IP alone also marks a request as proxied', async (t) => {
+  withHookSecret(t, undefined);
+  const res = await http()
+    .post('/api/v1/mqtt-auth/acl')
+    .set('X-Real-IP', '203.0.113.9')
+    .send({ username: 'AQM-0042', topic: 'devices/AQM-0042/telemetry', acc: 2 });
+  assert.equal(res.status, 403);
+});
+
+test('a direct loopback request (how the broker connects) needs no secret', async (t) => {
+  withHookSecret(t, 'broker-secret');
+  const res = await http().post('/api/v1/mqtt-auth/acl').send({ username: 'AQM-0042', topic: 'devices/AQM-0042/telemetry', acc: 2 });
+  assert.equal(res.status, 200);
+});
 
 // --- /user -----------------------------------------------------------------
 
@@ -107,4 +169,15 @@ test("the backend's own broker account is a superuser; devices never are", async
 
   assert.equal((await http().post('/api/v1/mqtt-auth/superuser').send({ username: 'aquamind-api' })).status, 200);
   assert.equal((await http().post('/api/v1/mqtt-auth/superuser').send({ username: 'AQM-0042' })).status, 403);
+});
+
+test('with MQTT_USERNAME unset nobody is a superuser, not even an empty body', async (t) => {
+  const original = env.mqttUsername;
+  env.mqttUsername = undefined;
+  t.after(() => {
+    env.mqttUsername = original;
+  });
+
+  assert.equal((await http().post('/api/v1/mqtt-auth/superuser').send({})).status, 403);
+  assert.equal((await http().post('/api/v1/mqtt-auth/superuser').send({ username: undefined })).status, 403);
 });

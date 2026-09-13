@@ -633,9 +633,16 @@ sudo journalctl -u mosquitto -n 50 --no-pager
   `/etc/mosquitto/auth/passwords`. Its ACL is the server-local
   `/etc/mosquitto/auth/backend.acl`.
 - **Auth hook**: the production API binds to `127.0.0.1:3011`; go-auth calls it
-  directly. Nginx must return `404` for public `/api/v1/mqtt-auth/*` routes.
-  `MQTT_AUTH_HOOK_SECRET` remains available as defence in depth for any future
-  non-loopback deployment, but go-auth has no arbitrary-header option.
+  directly. Two layers keep the hook off the internet: `aquamind.nginx.conf`
+  returns `404` for `/api/v1/mqtt-auth/*`, and the backend only waives the
+  secret for a *direct* loopback connection — a request carrying
+  `X-Forwarded-For` or `X-Real-IP` (which Nginx stamps on everything it
+  proxies) must present `X-Broker-Auth: $MQTT_AUTH_HOOK_SECRET` or is refused.
+  go-auth has no arbitrary-header option, which is why the loopback path
+  exists at all.
+- **`TRUST_PROXY`**: defaults to `loopback`, so behind Nginx `req.ip` and the
+  per-IP rate limiters (device claim, claim-code minting) see the real client
+  address instead of `127.0.0.1`. Leave it unset on this deployment.
 
 ### 11.4 Backend `.env`
 

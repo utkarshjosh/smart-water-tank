@@ -2,6 +2,18 @@ import * as dotenv from 'dotenv';
 
 dotenv.config();
 
+// Express `trust proxy` setting. Default trusts only proxies on loopback, which
+// is nginx on the same host: req.ip and every per-IP rate limit then see the
+// real client address instead of 127.0.0.1. A direct client on loopback could
+// spoof X-Forwarded-For, but that is the operator's own machine.
+function parseTrustProxy(value: string | undefined): boolean | number | string {
+  if (value === undefined || value === '') return 'loopback';
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  if (/^\d+$/.test(value)) return parseInt(value, 10);
+  return value;
+}
+
 export const env = {
   port: parseInt(process.env.PORT || '3000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
@@ -11,6 +23,7 @@ export const env = {
   // bind unless API_BIND_HOST is set explicitly.
   apiBindHost: process.env.API_BIND_HOST || (process.env.NODE_ENV === 'production' ? '127.0.0.1' : undefined),
   corsOrigin: process.env.CORS_ORIGIN,
+  trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
   apiBaseUrl: process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3000}`,
   firmwareStoragePath: process.env.FIRMWARE_STORAGE_PATH || './storage/firmware',
   alertOfflineThresholdMinutes: parseInt(process.env.ALERT_OFFLINE_THRESHOLD_MINUTES || '15', 10),
