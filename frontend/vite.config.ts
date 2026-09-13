@@ -23,14 +23,14 @@ function buildInfoPlugin(buildId: string): Plugin {
       const outDir = options.dir ?? 'dist';
       fs.writeFileSync(
         path.join(outDir, 'version.json'),
-        JSON.stringify({ buildId, builtAt: new Date().toISOString() }),
+        JSON.stringify({ buildId, builtAt: new Date().toISOString() })
       );
     },
   };
 }
 
 export default defineConfig(({ mode }) => {
-  loadEnv(mode, process.cwd(), '');
+  const env = loadEnv(mode, process.cwd(), '');
   const buildId = getBuildId();
 
   return {
@@ -46,6 +46,10 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: 3001,
+      // Optional local proxy keeps production API CORS settings unchanged.
+      proxy: env.DEV_API_PROXY_TARGET
+        ? { '/api': { target: env.DEV_API_PROXY_TARGET, changeOrigin: true } }
+        : undefined,
     },
     preview: {
       port: 4173,

@@ -297,7 +297,7 @@ function Preview() {
       <Section title="Device card (mobile width)">
         <div className="max-w-sm">
           <a className="group flex items-center gap-4 rounded-lg border border-hairline bg-surface p-4 transition-[border-color,transform] duration-instant ease-out hover:border-line-strong">
-            <div className="w-14 shrink-0">
+            <div className="w-24 shrink-0">
               <TankLevel level={42} showLabel={false} />
             </div>
             <div className="min-w-0 flex-1">
