@@ -8,9 +8,9 @@ export const CLAIM_CODE_TTL_MS = 10 * 60 * 1000;
 
 export function generateClaimCode(): string {
   let code = '';
-  const bytes = crypto.randomBytes(CLAIM_CODE_LENGTH);
   for (let i = 0; i < CLAIM_CODE_LENGTH; i++) {
-    code += CLAIM_CODE_ALPHABET[bytes[i] % CLAIM_CODE_ALPHABET.length];
+    // randomInt is uniform; `byte % 31` would favour the first 8 characters.
+    code += CLAIM_CODE_ALPHABET[crypto.randomInt(CLAIM_CODE_ALPHABET.length)];
   }
   return code;
 }

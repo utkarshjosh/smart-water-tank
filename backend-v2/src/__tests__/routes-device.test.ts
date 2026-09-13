@@ -6,8 +6,9 @@ import { callArgs, deviceRow, deviceTokenResolvesTo, http } from './helpers/http
 // Device-facing routes: the unauthenticated claim exchange and the
 // bearer-token routes a provisioned device calls from firmware.
 //
-// Note: /devices/claim sits behind a per-IP limiter of 10 per 10 minutes and
-// every supertest call comes from loopback, so keep the claim tests few.
+// Note: /devices/claim sits behind a per-IP limiter of 10 per 10 minutes.
+// Bare supertest calls share the loopback bucket, so keep those few; the
+// limiter tests below use X-Forwarded-For to get buckets of their own.
 
 test('POST /devices/claim rejects a body missing claim_code or hardware_id', async () => {
   const res = await http().post('/api/v1/devices/claim').send({ claim_code: 'ABCD' });
@@ -94,4 +95,45 @@ test('GET /devices/:id/config returns the config for the token holder, ignoring 
   assert.deepEqual(res.body, { config_version: 3 });
   // Identity comes from the bearer, not the path.
   assert.equal(callArgs<typeof deviceService.getDeviceConfig>(config)[0].deviceId, 'AQM-0042');
+});
+
+// --- per-IP rate limiting behind the proxy ---------------------------------
+//
+// nginx forwards every client from 127.0.0.1. With `trust proxy` set, req.ip
+// is taken from X-Forwarded-For, so each client gets its own bucket instead
+// of the whole internet sharing one.
+
+const claimFrom = (ip: string) =>
+  http().post('/api/v1/devices/claim').set('X-Forwarded-For', ip).send({});
+
+test('claim limiter counts per forwarded client address', async () => {
+  const first = await claimFrom('203.0.113.10');
+  assert.equal(first.status, 400);
+  assert.equal(first.headers['ratelimit-remaining'], '9');
+
+  const second = await claimFrom('203.0.113.10');
+  assert.equal(second.headers['ratelimit-remaining'], '8');
+
+  const other = await claimFrom('203.0.113.11');
+  assert.equal(other.headers['ratelimit-remaining'], '9');
+});
+
+test('the 11th claim attempt from one address in the window -> 429; others unaffected', async () => {
+  for (let i = 0; i < 10; i++) {
+    assert.equal((await claimFrom('203.0.113.20')).status, 400);
+  }
+  assert.equal((await claimFrom('203.0.113.20')).status, 429);
+  assert.equal((await claimFrom('203.0.113.21')).status, 400);
+});
+
+test('a spoofed loopback hop in X-Forwarded-For does not hide the real client', async () => {
+  // nginx appends the real address: "spoofed, real". Only proxies on loopback
+  // are trusted, so req.ip resolves to the first address that is not one —
+  // the attacker's — and the limiter keys on that.
+  const res = await claimFrom('127.0.0.1, 203.0.113.30');
+  assert.equal(res.headers['ratelimit-remaining'], '9');
+  const again = await claimFrom('127.0.0.1, 203.0.113.30');
+  assert.equal(again.headers['ratelimit-remaining'], '8');
+  const direct = await claimFrom('203.0.113.30');
+  assert.equal(direct.headers['ratelimit-remaining'], '7');
 });

@@ -21,6 +21,10 @@ function getCorsOrigins(): string | string[] {
 export function createApp(): express.Express {
   const app = express();
 
+  // Without this, behind nginx every request has req.ip === 127.0.0.1 and the
+  // per-IP rate limiters collapse into one bucket shared by every client.
+  app.set('trust proxy', env.trustProxy);
+
   app.use(helmet());
   app.use(cors({ origin: getCorsOrigins(), credentials: true }));
   app.use(express.json());

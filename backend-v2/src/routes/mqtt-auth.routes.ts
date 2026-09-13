@@ -20,17 +20,26 @@ import { verifyDeviceCredentials } from '../lib/device-token';
 
 const router = express.Router();
 
-function isLoopbackRequest(req: Request): boolean {
-  const address = req.socket.remoteAddress;
-  return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+
+// Mosquitto-go-auth's HTTP backend cannot send a static header, so the broker
+// is recognised by how it connects: straight to Node on loopback. Anything
+// nginx forwards also arrives on loopback, but nginx stamps X-Forwarded-For /
+// X-Real-IP on every proxied request and the broker never does, so the
+// presence of either header means "came from the internet", whatever the
+// socket says. req.ip is checked as well: with `trust proxy` set it already
+// resolves to the real client for proxied traffic.
+function isDirectLoopbackRequest(req: Request): boolean {
+  if (req.headers['x-forwarded-for'] || req.headers['x-real-ip']) return false;
+  const socketAddress = req.socket.remoteAddress ?? '';
+  return LOOPBACK.has(socketAddress) && LOOPBACK.has(req.ip ?? '');
 }
 
-// Mosquitto-go-auth's HTTP backend does not support arbitrary static request
-// headers. A local broker is therefore trusted by its loopback connection;
-// production binds Node to loopback and Nginx must not proxy this route. The
-// shared secret remains useful for any non-loopback deployment or test setup.
+// The shared secret covers any deployment where the broker is not on the same
+// host. Nginx additionally refuses this path (aquamind.nginx.conf), so this
+// check is the second layer, not the only one.
 function requireHookSecret(req: Request, res: Response, next: NextFunction): void {
-  if (isLoopbackRequest(req)) {
+  if (isDirectLoopbackRequest(req)) {
     next();
     return;
   }
@@ -117,7 +126,9 @@ router.post(
 // itself connects with static broker credentials, not through this hook.
 router.post('/superuser', (req: Request, res: Response) => {
   logAuthEvent('superuser', req.body);
-  if (req.body?.username === env.mqttUsername) {
+  // Guard the env value: with MQTT_USERNAME unset, `undefined === undefined`
+  // would grant superuser to a request with no username at all.
+  if (env.mqttUsername && req.body?.username === env.mqttUsername) {
     res.status(200).json({ Ok: true });
     return;
   }
