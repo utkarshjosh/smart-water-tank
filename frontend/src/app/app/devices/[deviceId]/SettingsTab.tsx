@@ -65,14 +65,25 @@ export default function SettingsTab() {
   const save = useMutation({
     mutationFn: () =>
       api
+        // null, not an omitted key: an empty field means "turn this alert
+        // off". Omitting it told the API to keep whatever was stored, which
+        // is why a threshold could be set but never unset.
         .put<ConfigDto>(`/api/v1/user/devices/${deviceId}/alert-thresholds`, {
-          ...(low !== '' ? { tank_low_threshold_pct: Number(low) } : {}),
-          ...(full !== '' ? { tank_full_threshold_pct: Number(full) } : {}),
+          tank_low_threshold_pct: low === '' ? null : Number(low),
+          tank_full_threshold_pct: full === '' ? null : Number(full),
         })
         .then((r) => r.data),
     onSuccess: (data) => {
       queryClient.setQueryData(deviceKeys.config(deviceId), data);
-      toast.success('Thresholds saved');
+      const off = [low === '' && 'low', full === '' && 'full'].filter(Boolean).length;
+      toast.success('Thresholds saved', {
+        description:
+          off === 2
+            ? 'Both level alerts are off for this tank.'
+            : off === 1
+              ? 'The cleared alert is off for this tank.'
+              : undefined,
+      });
     },
     onError: () => toast.error("Couldn't save thresholds", { description: 'Please try again.' }),
   });
@@ -114,7 +125,10 @@ export default function SettingsTab() {
       <Card>
         <CardHeader>
           <CardTitle>Alert thresholds</CardTitle>
-          <CardDescription>Get notified when the level crosses these bounds.</CardDescription>
+          <CardDescription>
+            Get notified when the level crosses these bounds. Leave one empty to turn that alert
+            off.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
@@ -126,6 +140,7 @@ export default function SettingsTab() {
                 inputMode="numeric"
                 min={0}
                 max={100}
+                placeholder="Off"
                 value={low}
                 onChange={(e) => setLow(e.target.value)}
               />
@@ -138,6 +153,7 @@ export default function SettingsTab() {
                 inputMode="numeric"
                 min={0}
                 max={100}
+                placeholder="Off"
                 value={full}
                 onChange={(e) => setFull(e.target.value)}
               />

@@ -4,6 +4,30 @@ import { getMessaging } from '../config/firebase';
 import { env } from '../config/env';
 import { computeLevelPercent } from './tank-profile.service';
 
+/**
+ * Whether a reading crosses a configured threshold.
+ *
+ * Null is the only way an alert is off, and that is deliberate. The legacy
+ * litre and battery rules used a truthy check, which made a stored 0 an
+ * accidental disable switch on those rules but not on the percentage ones -
+ * the same value meaning two different things depending on which branch ran.
+ * Here 0 is always a real threshold and null is always off.
+ */
+export function thresholdCrossed(
+  reading: number | null | undefined,
+  threshold: number | null | undefined,
+  direction: 'at-or-above' | 'at-or-below' | 'below'
+): reading is number {
+  if (reading == null || threshold == null) return false;
+  if (direction === 'at-or-above') return reading >= threshold;
+  if (direction === 'at-or-below') return reading <= threshold;
+  return reading < threshold;
+}
+
+/** Decimal columns arrive as Prisma Decimal; null stays null. */
+const num = (value: { toNumber(): number } | null | undefined): number | null =>
+  value == null ? null : value.toNumber();
+
 export async function processAlertsForMeasurement(
   deviceId: string,
   measurement: { levelCm: number | null; volumeL: number | null; batteryV: number | null }
@@ -18,81 +42,80 @@ export async function processAlertsForMeasurement(
   const profile = device.tankProfile;
   const { levelCm, volumeL, batteryV } = measurement;
 
+  // Read once, as plain numbers. null means that alert is off for this device.
+  const fullPct = num(config?.tankFullThresholdPct);
+  const lowPct = num(config?.tankLowThresholdPct);
+  const fullL = num(config?.tankFullThresholdL);
+  const lowL = num(config?.tankLowThresholdL);
+  const batteryMinV = num(config?.batteryLowThresholdV);
+
   // A null reading means the sensor couldn't be read this cycle - there's
   // nothing to alert on, and it must not be treated as "tank is empty".
   if (levelCm != null && volumeL != null) {
     // With a tank profile, thresholds are percentage-based (device-agnostic,
     // works for parallel-plumbed tanks). Without one yet, fall back to the
     // legacy liter thresholds so existing devices keep alerting unchanged.
-    if (profile && (config?.tankFullThresholdPct != null || config?.tankLowThresholdPct != null)) {
+    if (profile && (fullPct != null || lowPct != null)) {
       const levelPercent = computeLevelPercent(levelCm, {
         heightCm: profile.heightCm.toNumber(),
         sensorOffsetCm: profile.sensorOffsetCm.toNumber(),
         deadZoneCm: profile.deadZoneCm.toNumber(),
       });
 
-      if (
-        levelPercent != null &&
-        config?.tankFullThresholdPct != null &&
-        levelPercent >= config.tankFullThresholdPct.toNumber()
-      ) {
+      if (thresholdCrossed(levelPercent, fullPct, 'at-or-above')) {
         await createAndSendAlert(
           device.id,
           device.tenantId,
           'tank_full',
           'high',
           `Tank is full (${levelPercent.toFixed(0)}%)`,
-          { level_percent: levelPercent, threshold_pct: config.tankFullThresholdPct.toNumber() }
+          { level_percent: levelPercent, threshold_pct: fullPct }
         );
       }
 
-      if (
-        levelPercent != null &&
-        config?.tankLowThresholdPct != null &&
-        levelPercent <= config.tankLowThresholdPct.toNumber()
-      ) {
+      if (thresholdCrossed(levelPercent, lowPct, 'at-or-below')) {
         await createAndSendAlert(
           device.id,
           device.tenantId,
           'tank_low',
           'critical',
           `Tank is low (${levelPercent.toFixed(0)}%)`,
-          { level_percent: levelPercent, threshold_pct: config.tankLowThresholdPct.toNumber() }
+          { level_percent: levelPercent, threshold_pct: lowPct }
         );
       }
     } else {
-      if (config?.tankFullThresholdL && volumeL >= config.tankFullThresholdL.toNumber()) {
+      if (thresholdCrossed(volumeL, fullL, 'at-or-above')) {
         await createAndSendAlert(
           device.id,
           device.tenantId,
           'tank_full',
           'high',
           `Tank is full (${volumeL.toFixed(1)}L)`,
-          { volume_l: volumeL, threshold: config.tankFullThresholdL.toNumber() }
+          { volume_l: volumeL, threshold: fullL }
         );
       }
 
-      if (config?.tankLowThresholdL && volumeL <= config.tankLowThresholdL.toNumber()) {
+      if (thresholdCrossed(volumeL, lowL, 'at-or-below')) {
         await createAndSendAlert(
           device.id,
           device.tenantId,
           'tank_low',
           'critical',
           `Tank is low (${volumeL.toFixed(1)}L)`,
-          { volume_l: volumeL, threshold: config.tankLowThresholdL.toNumber() }
+          { volume_l: volumeL, threshold: lowL }
         );
       }
     }
   }
 
-  if (batteryV !== null && config?.batteryLowThresholdV && batteryV < config.batteryLowThresholdV.toNumber()) {
+  if (thresholdCrossed(batteryV, batteryMinV, 'below')) {
     await createAndSendAlert(
       device.id,
       device.tenantId,
       'battery_low',
       'medium',
       `Battery is low (${batteryV.toFixed(2)}V)`,
-      { battery_v: batteryV, threshold: config.batteryLowThresholdV.toNumber() }
+      { battery_v: batteryV, threshold: batteryMinV }
     );
   }
 }
