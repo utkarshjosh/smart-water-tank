@@ -1,3 +1,4 @@
+import { ArrowUpRight, Drop, Waves } from '@phosphor-icons/react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { navFor, type ShellVariant } from './nav-config';
@@ -19,22 +20,23 @@ export function SideNav({
   const home = items[0]?.href ?? '/';
 
   return (
-    <nav className="flex h-full flex-col border-r border-hairline bg-surface">
+    <nav className="workspace-nav flex h-full flex-col" aria-label={variant === 'admin' ? 'Administration' : 'Your workspace'}>
       <Link
         to={home}
         onClick={onNavigate}
-        className="flex h-header items-center gap-2.5 px-4"
+        className="workspace-wordmark"
       >
-        <img src="/logo.png" alt="" className="h-7 w-7 object-contain" />
+        <Drop size={28} weight="fill" />
         <span className="text-title">AquaMind</span>
         {variant === 'admin' && (
-          <span className="rounded-sm bg-surface-sunk px-1.5 py-0.5 text-caption font-medium text-ink-2">
+          <span className="workspace-admin-badge">
             Admin
           </span>
         )}
       </Link>
 
-      <div className="flex-1 space-y-0.5 px-2 py-2">
+      <div className="workspace-nav-section"><span className="workspace-eyebrow">{variant === 'admin' ? 'Control center' : 'Personal workspace'}</span></div>
+      <div className="flex-1 space-y-1 px-4 py-2">
         {items.map((item) => {
           const active = pathname.startsWith(item.href);
           const Icon = item.icon;
@@ -45,10 +47,10 @@ export function SideNav({
               onClick={onNavigate}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'flex h-10 items-center gap-3 rounded-md px-3 text-label transition-colors duration-instant ease-out',
+                'workspace-nav-link flex items-center gap-3 text-label transition-colors duration-instant ease-out',
                 active
-                  ? 'bg-brand-wash text-brand'
-                  : 'text-ink-2 hover:bg-surface-hover hover:text-ink-1'
+                  ? 'is-active'
+                  : ''
               )}
             >
               <Icon size={20} weight={active ? 'fill' : 'regular'} />
@@ -57,6 +59,8 @@ export function SideNav({
           );
         })}
       </div>
+      <div className="workspace-nav-note"><Waves size={26} /><p>A clearer view<br />of your water.</p><span>Every tank. Every day.</span></div>
+      <Link to="/welcome" className="workspace-nav-home" onClick={onNavigate}>Explore AquaMind <ArrowUpRight size={16} /></Link>
     </nav>
   );
 }

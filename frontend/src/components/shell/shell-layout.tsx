@@ -1,3 +1,4 @@
+import './workspace.css';
 import { Suspense, useContext, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Navigate, Outlet } from 'react-router-dom';
@@ -37,7 +38,7 @@ export function ShellLayout({ variant }: { variant: ShellVariant }) {
 
   return (
     <ShellContext.Provider value={shell}>
-      <div className="min-h-screen bg-canvas">
+      <div className="workspace min-h-screen bg-canvas">
         <div className="fixed inset-y-0 left-0 z-40 hidden w-sidebar md:block">
           <SideNav variant={variant} />
         </div>
@@ -48,7 +49,7 @@ export function ShellLayout({ variant }: { variant: ShellVariant }) {
             subtitle={heading.subtitle}
             actionSlotRef={setActionSlot}
           />
-          <main className="mx-auto max-w-content px-4 pb-[calc(var(--tabbar-h)+env(safe-area-inset-bottom,0px)+16px)] pt-4 sm:px-6 md:pb-10">
+          <main className="workspace-content mx-auto max-w-content px-4 pb-[calc(var(--tabbar-h)+env(safe-area-inset-bottom,0px)+16px)] pt-4 sm:px-6 md:pb-10">
             <Suspense fallback={<RouteSkeleton />}>
               <Outlet />
             </Suspense>

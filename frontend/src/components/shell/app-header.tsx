@@ -19,10 +19,11 @@ export function AppHeader({
   actionSlotRef?: (node: HTMLDivElement | null) => void;
 }) {
   return (
-    <header className="safe-top sticky top-0 z-30 border-b border-hairline bg-surface/90 backdrop-blur">
+    <header className="workspace-header safe-top sticky top-0 z-30 border-b border-hairline bg-surface/90 backdrop-blur">
       <div className="flex h-header items-center gap-3 px-4 sm:px-6">
         <img src="/logo.png" alt="" className="h-7 w-7 shrink-0 object-contain md:hidden" />
         <div className="min-w-0 flex-1">
+          <span className="workspace-header-label">Workspace <span aria-hidden="true">/</span></span>
           {title && <div className="truncate text-label text-ink-1">{title}</div>}
           {subtitle && <div className="truncate text-caption text-ink-3">{subtitle}</div>}
         </div>
