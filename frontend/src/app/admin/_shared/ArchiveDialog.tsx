@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Warning } from '@phosphor-icons/react';
-import api from '@/lib/api';
+import { archiveSummarySchema } from '@aquamind/contracts';
+import api, { get } from '@/lib/api';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,12 +16,6 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { errorMessage } from './useAdminData';
 
-interface ArchivePreview {
-  tenants: number;
-  devices: number;
-  users: number;
-  measurements: number;
-}
 
 /**
  * Confirmation for archiving a tenant. Fetches the real blast radius first, so
@@ -44,10 +39,7 @@ export function ArchiveTenantDialog({
   const preview = useQuery({
     queryKey: ['admin', 'tenant-archive-preview', tenantId],
     enabled: open && Boolean(tenantId),
-    queryFn: () =>
-      api
-        .get<ArchivePreview>(`/api/v1/admin/tenants/${tenantId}/archive-preview`)
-        .then((r) => r.data),
+    queryFn: () => get(`/api/v1/admin/tenants/${tenantId}/archive-preview`, archiveSummarySchema),
   });
 
   const archive = useMutation({

@@ -1,4 +1,6 @@
-export type UserRole = 'user' | 'tenant_owner' | 'admin' | 'super_admin';
+import type { Role } from '@aquamind/contracts';
+
+export type UserRole = Role;
 
 export const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: 'user', label: 'User' },
@@ -15,31 +17,6 @@ export const ROLE_LABEL = Object.fromEntries(ROLE_OPTIONS.map((r) => [r.value, r
 /** Super admins are tenantless by design; everyone else needs a tenant. */
 export const isTenantless = (role: UserRole | string | null | undefined) => role === 'super_admin';
 
-export interface DatabaseUser {
-  id: string;
-  firebase_uid: string;
-  email: string;
-  name: string | null;
-  tenant_id: string | null;
-  tenant_name: string | null;
-  role: string;
-  created_at: string;
-  archived_at?: string | null;
-}
-
-export interface FirebaseUser {
-  uid: string;
-  email: string | null;
-  displayName: string | null;
-  photoURL: string | null;
-  emailVerified: boolean;
-  disabled: boolean;
-  metadata: {
-    creationTime: string;
-    lastSignInTime: string | null;
-  };
-  tenant_id: string | null;
-  tenant_name: string | null;
-  is_linked: boolean;
-  role: UserRole | null;
-}
+// Both shapes come from the contract; the names below are what this folder
+// has always called them.
+export type { AdminUser as DatabaseUser, FirebaseUser } from '@aquamind/contracts';

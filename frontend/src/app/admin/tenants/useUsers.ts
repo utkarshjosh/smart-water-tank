@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import api from '@/lib/api';
+import { adminUsersResponseSchema, firebaseUsersResponseSchema } from '@aquamind/contracts';
+import api, { get } from '@/lib/api';
 import { errorMessage } from '../_shared/useAdminData';
-import type { DatabaseUser, FirebaseUser, UserRole } from './types';
+import type { FirebaseUser, UserRole } from './types';
 
 const userKeys = {
   database: (includeArchived: boolean) => ['admin', 'users', { includeArchived }] as const,
@@ -14,11 +15,9 @@ export const useDatabaseUsers = (enabled: boolean, includeArchived = false) =>
     queryKey: userKeys.database(includeArchived),
     enabled,
     queryFn: () =>
-      api
-        .get<{ users: DatabaseUser[] }>(
-          `/api/v1/admin/users${includeArchived ? '?include_archived=true' : ''}`
-        )
-        .then((r) => r.data.users),
+      get(`/api/v1/admin/users${includeArchived ? '?include_archived=true' : ''}`, adminUsersResponseSchema).then(
+        (r) => r.users
+      ),
   });
 
 export const useFirebaseUsers = (search: string, enabled: boolean) =>
@@ -30,9 +29,7 @@ export const useFirebaseUsers = (search: string, enabled: boolean) =>
       const params = new URLSearchParams();
       if (search.trim()) params.append('search', search.trim());
       params.append('limit', '50');
-      return api
-        .get<{ users: FirebaseUser[] }>(`/api/v1/admin/users/firebase?${params}`)
-        .then((r) => r.data.users);
+      return get(`/api/v1/admin/users/firebase?${params}`, firebaseUsersResponseSchema).then((r) => r.users);
     },
   });
 

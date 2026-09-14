@@ -1,24 +1,24 @@
 import { useQuery } from '@tanstack/react-query';
-import api from '@/lib/api';
+import { historySeriesSchema, type HistorySeries } from '@aquamind/contracts';
+import type * as contracts from '@aquamind/contracts';
+import { get } from '@/lib/api';
 import type { Bucket, Metric, RequestedBucket, SeriesPoint } from '@/lib/metrics';
 
 export * from '@/lib/metrics';
 
-export interface HistorySeriesResponse {
-  device_id: string;
-  from: string;
-  to: string;
-  requested_from: string;
-  bucket: Bucket;
-  requested_bucket: RequestedBucket;
-  bucket_seconds: number | null;
-  point_count: number;
-  truncated: boolean;
-  has_tank_profile: boolean;
-  columns: ['t', 'min', 'avg', 'max'];
-  series: Record<string, { unit: string; points: SeriesPoint[] }>;
-  samples: [number, number][];
-}
+/** The response of /history/series, straight from the contract. */
+export type HistorySeriesResponse = HistorySeries;
+
+// lib/metrics keeps its own copies of the chart vocabulary so the chart chunk
+// never imports this module (see its header). These assignments make the
+// compiler prove the copies still match the contract in both directions.
+type Equal<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+const _bucketsMatch: Equal<Bucket, contracts.Bucket> = true;
+const _requestedBucketsMatch: Equal<RequestedBucket, contracts.RequestedBucket> = true;
+const _pointsMatch: Equal<SeriesPoint, contracts.SeriesPoint> = true;
+void _bucketsMatch;
+void _requestedBucketsMatch;
+void _pointsMatch;
 
 export function useHistorySeries({
   deviceId,
@@ -41,12 +41,9 @@ export function useHistorySeries({
     // The chart dims and keeps the old shape while a wider range loads rather
     // than blanking, so zooming out never flashes an empty plot.
     placeholderData: (previous) => previous,
-    queryFn: async () => {
-      const { data } = await api.get<HistorySeriesResponse>(
-        `/api/v1/user/devices/${deviceId}/history/series`,
-        { params: { from, to, bucket, ...(metrics ? { metrics: metrics.join(',') } : {}) } }
-      );
-      return data;
-    },
+    queryFn: () =>
+      get(`/api/v1/user/devices/${deviceId}/history/series`, historySeriesSchema, {
+        params: { from, to, bucket, ...(metrics ? { metrics: metrics.join(',') } : {}) },
+      }),
   });
 }

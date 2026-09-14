@@ -1,16 +1,10 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { onIdTokenChanged, signOut as firebaseSignOut, type User } from 'firebase/auth';
-import api from '@/lib/api';
+import { meSchema, type Me } from '@aquamind/contracts';
+import api, { get } from '@/lib/api';
 import { auth } from '@/lib/firebase';
 
-export interface UserProfile {
-  id: string;
-  email: string;
-  name: string | null;
-  role: 'user' | 'admin' | 'super_admin' | string;
-  tenant_id: string | null;
-  tenant_name: string | null;
-}
+export type UserProfile = Me;
 
 export type AuthStatus =
   /** Firebase is still restoring the persisted session, or the profile of a
@@ -63,7 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setStatus('initializing');
 
       try {
-        const { data } = await api.get<UserProfile>('/api/v1/user/me');
+        const data = await get('/api/v1/user/me', meSchema);
         if (activeUid !== nextUser.uid) return;
         setProfile(data);
       } catch (error) {

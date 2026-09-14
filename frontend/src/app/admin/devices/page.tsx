@@ -228,7 +228,7 @@ export default function AdminDevicesPage() {
               devices={list.map((device) => ({
                 id: device.device_id,
                 name: device.name || device.device_id,
-                context: device.tenant_name,
+                context: device.tenant_name ?? undefined,
               }))}
               endpoint="/api/v1/admin/measurements/export"
             />
