@@ -19,7 +19,13 @@ export function clampToBounds([lo, hi]: Range, bounds: Range): Range {
 }
 
 /** Zoom by `factor` about `anchor` (a data-space x), then clamp. */
-export function zoomAbout(view: Range, anchor: number, factor: number, bounds: Range, minSpan: number): Range {
+export function zoomAbout(
+  view: Range,
+  anchor: number,
+  factor: number,
+  bounds: Range,
+  minSpan: number
+): Range {
   const span = view[1] - view[0];
   const next = clampSpan(span * factor, bounds[1] - bounds[0], minSpan);
   const ratio = span === 0 ? 0.5 : (anchor - view[0]) / span;
@@ -40,7 +46,7 @@ export interface GestureOptions {
 }
 
 /**
- * Drag to pan, wheel to zoom, two fingers to pinch, double-tap to reset.
+ * Drag to pan, Ctrl/Meta + wheel to zoom, two fingers to pinch, double-tap to reset.
  *
  * `touch-action: pan-y` is deliberate: a vertical swipe still scrolls the page
  * (the chart is not a scroll trap on a phone), while horizontal drags and
@@ -77,10 +83,14 @@ export function attachGestures(over: HTMLElement, plot: uPlot, options: GestureO
   };
 
   const onWheel = (event: WheelEvent) => {
+    // Page scrolling must not silently change a chart's date range.
+    if (!event.ctrlKey && !event.metaKey) return;
     event.preventDefault();
     const wasFull = atFullExtent();
     const factor = event.deltaY > 0 ? 1.25 : 0.8;
-    options.setView(zoomAbout(options.getView(), xAt(event.clientX), factor, options.getBounds(), options.minSpan));
+    options.setView(
+      zoomAbout(options.getView(), xAt(event.clientX), factor, options.getBounds(), options.minSpan)
+    );
     if (wasFull && factor > 1) options.onZoomBeyond?.();
   };
 

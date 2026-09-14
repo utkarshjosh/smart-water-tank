@@ -1,3 +1,4 @@
+import './device.css';
 import { Suspense, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, SlidersHorizontal } from '@phosphor-icons/react';
@@ -37,7 +38,7 @@ export default function DeviceLayout() {
   usePageHeading(device.data?.name, device.data ? `Last seen ${lastSeen}` : undefined);
 
   return (
-    <div className="space-y-4">
+    <div className="device-page space-y-4">
       <ShellAction>
         <Button
           variant="ghost"
@@ -68,7 +69,7 @@ export default function DeviceLayout() {
       </div>
 
       <nav
-        className="-mx-4 flex gap-0.5 overflow-x-auto border-b border-hairline px-4 [scrollbar-width:none] sm:-mx-6 sm:px-6 [&::-webkit-scrollbar]:hidden"
+        className="device-tabs -mx-4 flex gap-0.5 overflow-x-auto border-b border-hairline px-4 [scrollbar-width:none] sm:-mx-6 sm:px-6 [&::-webkit-scrollbar]:hidden"
         aria-label="Device sections"
       >
         {TABS.map((tab) => (

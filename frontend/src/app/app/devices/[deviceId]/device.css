@@ -1,0 +1,304 @@
+.workspace-content:has(.device-page) {
+  padding-top: 16px;
+}
+.device-page > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 12px !important;
+}
+.device-overview {
+  display: grid;
+  gap: 14px;
+}
+.device-reading-grid {
+  display: grid;
+  grid-template-columns: 1.3fr repeat(3, 1fr);
+  gap: 12px;
+}
+.device-tank-summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+}
+.device-tank-mini {
+  width: 82px;
+  flex-shrink: 0;
+}
+.device-level-value {
+  margin: 5px 0;
+  font-size: 34px;
+  line-height: 1.05;
+  letter-spacing: -1px;
+}
+.device-level-value small {
+  font-size: 15px;
+  margin-left: 3px;
+  color: hsl(var(--ink-3));
+}
+.device-reading-grid .workspace-stat {
+  padding: 16px;
+}
+.device-reading-grid .workspace-stat-value {
+  font-size: 30px;
+  margin-top: 9px;
+}
+.device-reading-grid .workspace-stat > p:last-child {
+  white-space: normal;
+}
+.device-chart-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.device-chart-grid h3 {
+  font-size: 14px;
+}
+.device-secondary-readings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  align-items: center;
+  padding: 12px 4px;
+  font-size: 12px;
+  color: hsl(var(--ink-3));
+}
+.device-secondary-readings strong {
+  color: hsl(var(--ink-1));
+  font-weight: 550;
+  margin-left: 8px;
+}
+.device-secondary-readings a {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;
+  color: hsl(var(--brand));
+}
+.history-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+}
+.history-date-range {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+}
+.history-date-range label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 10px;
+  color: hsl(var(--ink-3));
+}
+.history-date-range input {
+  min-width: 0;
+  max-width: 100%;
+  padding: 7px 10px;
+  border: 1px solid hsl(var(--hairline));
+  border-radius: 8px;
+  color: hsl(var(--ink-1));
+  font-size: 12px;
+}
+.alerts-inbox {
+  display: grid;
+  gap: 16px;
+}
+.alerts-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+.alerts-toolbar h2 {
+  font-size: 20px;
+  letter-spacing: -0.5px;
+}
+.alerts-toolbar h2 > span {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 11px;
+  color: hsl(var(--brand));
+  letter-spacing: 0;
+}
+.alerts-toolbar p {
+  margin-top: 5px;
+  font-size: 12px;
+  color: hsl(var(--ink-3));
+}
+.alerts-feed {
+  overflow: hidden;
+  border: 1px solid hsl(var(--hairline));
+  border-radius: 16px;
+  background: white;
+}
+.alert-message {
+  display: flex;
+  gap: 14px;
+  padding: 18px;
+  border-bottom: 1px solid hsl(var(--hairline));
+}
+.alert-message:last-child {
+  border-bottom: 0;
+}
+.alert-message.is-unread {
+  background: #f4f8ff;
+}
+.alert-message-icon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  align-self: flex-start;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: hsl(var(--brand-wash));
+  color: hsl(var(--brand));
+}
+.is-read .alert-message-icon {
+  color: hsl(var(--ink-3));
+  background: hsl(var(--surface-sunk));
+}
+.alert-message-body {
+  min-width: 0;
+  flex: 1;
+}
+.alert-message-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.alert-message-meta time {
+  font-size: 11px;
+  color: hsl(var(--ink-3));
+}
+.alert-message-body > p {
+  margin-top: 9px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.alert-unread-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: hsl(var(--brand));
+}
+.alert-message-actions {
+  margin-top: 8px;
+}
+.alert-message-actions > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: hsl(var(--ink-3));
+}
+.alert-message-actions button {
+  margin-left: -10px;
+  color: hsl(var(--brand));
+}
+@media (max-width: 1100px) {
+  .device-reading-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 767px) {
+  .workspace-content:has(.device-page) {
+    padding-top: 6px;
+  }
+  .device-reading-grid,
+  .device-chart-grid {
+    gap: 8px;
+  }
+  .device-tank-summary {
+    padding: 12px;
+    gap: 8px;
+  }
+  .device-tank-mini {
+    width: 48px;
+  }
+  .device-tank-summary .workspace-eyebrow {
+    font-size: 8px;
+    letter-spacing: 0.06em;
+  }
+  .device-tank-summary .text-caption {
+    font-size: 9px;
+  }
+  .device-level-value {
+    font-size: 28px;
+  }
+  .device-reading-grid .workspace-stat {
+    padding: 12px;
+  }
+  .device-reading-grid .workspace-stat-value {
+    font-size: 25px;
+  }
+  .device-chart-grid {
+    grid-template-columns: 1fr;
+  }
+  .device-chart-grid > div > div:first-child {
+    padding-top: 10px;
+    padding-bottom: 7px;
+  }
+  .history-date-range label {
+    flex: 1 1 135px;
+  }
+  .alert-message {
+    padding: 14px 10px;
+    gap: 10px;
+  }
+  .alert-message-icon {
+    width: 30px;
+    height: 30px;
+  }
+}
+@media (max-width: 767px) {
+  .workspace .device-reading-grid .workspace-stat {
+    padding: 12px;
+  }
+  .workspace .device-reading-grid .workspace-stat-value {
+    font-size: 25px;
+    margin-top: 7px;
+  }
+  .workspace .device-reading-grid .workspace-stat > p:last-child:not(.workspace-stat-value) {
+    font-size: 10px;
+    line-height: 1.4;
+  }
+  .device-chart-grid svg[viewBox='0 0 300 100'],
+  .device-chart-grid [role='list'] {
+    height: 85px !important;
+  }
+  .device-chart-grid .text-caption {
+    font-size: 10px;
+    line-height: 1.4;
+  }
+}
+.device-alert-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+.device-alert-strip svg {
+  flex-shrink: 0;
+}
+@media (max-width: 767px) {
+  .history-date-range {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .history-date-range button {
+    grid-column: span 2;
+    justify-self: end;
+  }
+  .history-date-range input {
+    font-size: 11px;
+    padding-inline: 6px;
+    width: 100%;
+  }
+}

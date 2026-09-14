@@ -1,148 +1,200 @@
+import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { BellRinging, CheckCircle, X } from '@phosphor-icons/react';
+import { BellRinging, CheckCircle, Check, X } from '@phosphor-icons/react';
 import api from '@/lib/api';
+import { markAlertsRead } from '@/lib/alert-actions';
+import { relativeTime } from '@/lib/time';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SegmentedControl } from '@/components/ui/segmented-control';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { deviceKeys, useAlerts, type AlertItem } from './useDevice';
 
-const SEVERITY: Record<
-  AlertItem['severity'],
-  { variant: 'critical' | 'serious' | 'warning' | 'brand'; label: string }
-> = {
-  critical: { variant: 'critical', label: 'Critical' },
-  high: { variant: 'serious', label: 'High' },
-  medium: { variant: 'warning', label: 'Medium' },
-  low: { variant: 'brand', label: 'Low' },
+const SEVERITY: Record<AlertItem['severity'], 'critical' | 'serious' | 'warning' | 'brand'> = {
+  critical: 'critical',
+  high: 'serious',
+  medium: 'warning',
+  low: 'brand',
 };
 
 export default function AlertsTab() {
   const { deviceId } = useParams<{ deviceId: string }>();
   const queryClient = useQueryClient();
   const alerts = useAlerts(deviceId);
-
-  /**
-   * Optimistic: the row commits instantly and rolls back on failure. The old
-   * code also updated local state eagerly but swallowed the error into
-   * console.error, so a failed acknowledge looked like a success forever.
-   */
-  const acknowledge = useMutation({
-    mutationFn: (alertId: string) =>
-      api.post(`/api/v1/user/devices/${deviceId}/alerts/${alertId}/acknowledge`),
-    onMutate: async (alertId) => {
-      const key = deviceKeys.alerts(deviceId);
-      await queryClient.cancelQueries({ queryKey: key });
-      const previous = queryClient.getQueryData<AlertItem[]>(key);
+  const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const key = deviceKeys.alerts(deviceId);
+  const unread = alerts.data?.filter((a) => !a.acknowledged) ?? [];
+  const refresh = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: key }),
+      queryClient.invalidateQueries({ queryKey: ['devices'] }),
+    ]);
+  };
+  const read = useMutation({
+    mutationFn: (ids: string[]) =>
+      markAlertsRead(ids, (id) =>
+        api.post(`/api/v1/user/devices/${deviceId}/alerts/${id}/acknowledge`)
+      ),
+    onSuccess: ({ succeeded, failed }) => {
       queryClient.setQueryData<AlertItem[]>(key, (old) =>
-        old?.map((a) => (a.id === alertId ? { ...a, acknowledged: true } : a))
+        old?.map((a) => (succeeded.includes(a.id) ? { ...a, acknowledged: true } : a))
       );
-      return { previous };
+      if (failed.length)
+        toast.error(
+          `${failed.length} alert${failed.length === 1 ? '' : 's'} couldn’t be marked as read`,
+          { description: 'Please try again. Successfully updated alerts have been kept.' }
+        );
+      else
+        toast.success(
+          succeeded.length === 1 ? 'Marked as read' : `${succeeded.length} alerts marked as read`
+        );
     },
-    onError: (_err, _alertId, context) => {
-      queryClient.setQueryData(deviceKeys.alerts(deviceId), context?.previous);
-      toast.error("Couldn't acknowledge that alert", {
-        description: 'Check your connection and try again.',
-      });
-    },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: deviceKeys.alerts(deviceId) }),
+    onError: () => toast.error('Couldn’t mark alerts as read. Please try again.'),
+    onSettled: refresh,
   });
-
-  /**
-   * Dismiss hides the alert from the feed; the row is kept server-side, so an
-   * operational record of a leak survives the user clearing it off screen.
-   */
   const dismiss = useMutation({
-    mutationFn: (alertId: string) =>
-      api.delete(`/api/v1/user/devices/${deviceId}/alerts/${alertId}`),
-    onMutate: async (alertId) => {
-      const key = deviceKeys.alerts(deviceId);
-      await queryClient.cancelQueries({ queryKey: key });
-      const previous = queryClient.getQueryData<AlertItem[]>(key);
-      queryClient.setQueryData<AlertItem[]>(key, (old) => old?.filter((a) => a.id !== alertId));
-      return { previous };
-    },
-    onError: (_err, _id, context) => {
-      queryClient.setQueryData(deviceKeys.alerts(deviceId), context?.previous);
-      toast.error("Couldn't dismiss that alert");
-    },
-    onSuccess: (_data, alertId) => {
+    mutationFn: (id: string) => api.delete(`/api/v1/user/devices/${deviceId}/alerts/${id}`),
+    onSuccess: (_data, id) => {
+      queryClient.setQueryData<AlertItem[]>(key, (old) => old?.filter((a) => a.id !== id));
       toast.success('Alert dismissed', {
         action: {
           label: 'Undo',
           onClick: () =>
             api
-              .post(`/api/v1/user/devices/${deviceId}/alerts/${alertId}/restore`)
-              .then(() => queryClient.invalidateQueries({ queryKey: deviceKeys.alerts(deviceId) }))
-              .catch(() => toast.error("Couldn't restore that alert")),
+              .post(`/api/v1/user/devices/${deviceId}/alerts/${id}/restore`)
+              .then(refresh)
+              .catch(() => toast.error('Couldn’t restore that alert')),
         },
       });
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: deviceKeys.alerts(deviceId) }),
+    onError: () => toast.error('Couldn’t dismiss that alert. Please try again.'),
+    onSettled: refresh,
   });
+  const busy = read.isPending || dismiss.isPending;
+  const list = filter === 'unread' ? unread : (alerts.data ?? []);
 
-  if (alerts.isLoading) {
+  if (alerts.isLoading)
     return (
       <div className="space-y-2">
         {[0, 1, 2].map((i) => (
-          <Skeleton key={i} className="h-16 w-full" />
+          <Skeleton key={i} className="h-20 w-full" />
         ))}
       </div>
     );
-  }
-
-  if (!alerts.data?.length) {
+  if (alerts.isError)
     return (
-      <EmptyState
-        icon={BellRinging}
-        title="No alerts"
-        description="You will see leak, low-level and battery warnings here."
-      />
+      <Alert variant="critical">
+        <AlertDescription>
+          Couldn’t load alerts.{' '}
+          <button type="button" className="underline" onClick={() => alerts.refetch()}>
+            Try again
+          </button>
+        </AlertDescription>
+      </Alert>
     );
-  }
 
   return (
-    <Card className="divide-y divide-hairline">
-      {alerts.data.map((alert) => {
-        const severity = SEVERITY[alert.severity];
-        return (
-          <div key={alert.id} className="flex items-start justify-between gap-3 p-4">
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={severity.variant}>{severity.label}</Badge>
-                <span className="text-caption text-ink-3">
-                  {new Date(alert.created_at).toLocaleString()}
-                </span>
+    <section className="alerts-inbox">
+      <div className="alerts-toolbar">
+        <div>
+          <h2>
+            Notifications <span>{unread.length} unread</span>
+          </h2>
+          <p>Tank activity and the updates that need your attention.</p>
+        </div>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={!unread.length || busy}
+          loading={read.isPending && (read.variables?.length ?? 0) > 1}
+          onClick={() => read.mutate(unread.map((a) => a.id))}
+        >
+          <CheckCircle size={18} />
+          Mark all as read
+        </Button>
+      </div>
+      <SegmentedControl
+        aria-label="Notification filter"
+        value={filter}
+        onChange={setFilter}
+        options={[
+          { value: 'all', label: 'All activity' },
+          { value: 'unread', label: `Unread (${unread.length})` },
+        ]}
+      />
+      {!list.length ? (
+        <EmptyState
+          icon={BellRinging}
+          title={filter === 'unread' ? 'You’re all caught up' : 'No notifications yet'}
+          description={
+            filter === 'unread'
+              ? 'Read notifications are still in All activity.'
+              : 'Level, leak and battery updates will appear here.'
+          }
+        />
+      ) : (
+        <div className="alerts-feed">
+          {list.map((alert) => (
+            <article
+              key={alert.id}
+              className={`alert-message ${alert.acknowledged ? 'is-read' : 'is-unread'}`}
+            >
+              <div className="alert-message-icon">
+                <BellRinging
+                  size={21}
+                  weight={alert.acknowledged ? 'regular' : 'duotone'}
+                  aria-hidden
+                />
               </div>
-              <p className="mt-1.5 text-body text-ink-1">{alert.message ?? alert.type}</p>
-            </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              {alert.acknowledged ? (
-                <span className="flex items-center gap-1 text-caption text-good-text">
-                  <CheckCircle size={16} weight="fill" aria-hidden />
-                  Acknowledged
-                </span>
-              ) : (
-                <Button size="sm" variant="secondary" onClick={() => acknowledge.mutate(alert.id)}>
-                  Acknowledge
-                </Button>
-              )}
+              <div className="alert-message-body">
+                <div className="alert-message-meta">
+                  <Badge variant={SEVERITY[alert.severity]}>{alert.severity}</Badge>
+                  <time
+                    dateTime={alert.created_at}
+                    title={new Date(alert.created_at).toLocaleString()}
+                  >
+                    {relativeTime(alert.created_at)}
+                  </time>
+                  {!alert.acknowledged && <span className="alert-unread-dot" aria-label="Unread" />}
+                </div>
+                <p>{alert.message ?? alert.type.replaceAll('_', ' ')}</p>
+                <div className="alert-message-actions">
+                  {alert.acknowledged ? (
+                    <span>
+                      <Check size={14} />
+                      Read
+                    </span>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() => read.mutate([alert.id])}
+                    >
+                      <Check size={15} />
+                      Mark as read
+                    </Button>
+                  )}
+                </div>
+              </div>
               <Button
                 size="icon"
                 variant="ghost"
-                aria-label="Dismiss alert"
+                aria-label={`Dismiss ${alert.message ?? alert.type}`}
+                disabled={busy}
                 onClick={() => dismiss.mutate(alert.id)}
                 className="h-9 w-9"
               >
                 <X size={16} />
               </Button>
-            </div>
-          </div>
-        );
-      })}
-    </Card>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

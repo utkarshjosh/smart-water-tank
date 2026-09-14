@@ -1,0 +1,28 @@
+.chart-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 10px 10px;
+}
+.chart-navigation-buttons {
+  display: inline-flex;
+  gap: 4px;
+}
+.chart-navigation button {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 5px 10px;
+  border: 1px solid hsl(var(--hairline));
+  border-radius: 7px;
+  background: hsl(var(--surface));
+  font-size: 12px;
+}
+.chart-navigation button:hover {
+  background: hsl(var(--brand-wash));
+}
+.chart-navigation > span {
+  font-size: 10px;
+  color: hsl(var(--ink-3));
+}

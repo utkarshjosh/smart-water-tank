@@ -59,7 +59,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
               aria-hidden
             />
             <span className="sr-only">Working</span>
-            <span aria-hidden className="opacity-60">
+            <span aria-hidden className="inline-flex items-center justify-center gap-2 whitespace-nowrap opacity-60">
               {children}
             </span>
           </>

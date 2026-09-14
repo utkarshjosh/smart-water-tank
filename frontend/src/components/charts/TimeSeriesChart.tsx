@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
+import './chart-controls.css';
 import { METRIC_BY_VALUE, METRIC_SLUG, type Metric, type SeriesPoint } from '@/lib/metrics';
 import { BrushOverview } from './BrushOverview';
-import { attachGestures, clampToBounds, type Range } from './gestures';
+import { attachGestures, clampToBounds, zoomAbout, panBy, type Range } from './gestures';
 
 // uPlot rather than ECharts: measured, ECharts' floor is 125KB gzip before a
 // single chart is registered (172KB with line+grid+tooltip, 188KB as we used
@@ -29,6 +30,11 @@ export interface TimeSeriesChartProps {
   /** Fires when the user keeps zooming out past the loaded window. */
   onZoomBeyond?: () => void;
   dimmed?: boolean;
+  /** Stable navigation extent; independent of the currently fetched resolution. Seconds. */
+  timeBounds?: Range;
+  overviewPoints?: SeriesPoint[];
+  onViewChange?: (range: Range) => void;
+  minViewSpan?: number;
 }
 
 /** Resolve a CSS custom property - canvas cannot use var(). */
@@ -59,6 +65,10 @@ export default function TimeSeriesChart({
   showBrush = true,
   onZoomBeyond,
   dimmed = false,
+  timeBounds,
+  overviewPoints,
+  onViewChange,
+  minViewSpan,
 }: TimeSeriesChartProps) {
   const holder = useRef<HTMLDivElement>(null);
   const tooltip = useRef<HTMLDivElement>(null);
@@ -80,14 +90,18 @@ export default function TimeSeriesChart({
   }, [points]);
 
   const bounds = useMemo<Range>(() => {
+    if (timeBounds) return timeBounds;
     if (points.length === 0) return [0, 1];
-    return [points[0][0] / 1000, points[points.length - 1][0] / 1000];
-  }, [points]);
+    return [
+      points[0][0] / 1000,
+      Math.max(points[0][0] / 1000 + 60, points[points.length - 1][0] / 1000),
+    ];
+  }, [points, timeBounds]);
 
   const [view, setViewState] = useState<Range>(bounds);
   const [viewOf, setViewOf] = useState<Range>(bounds);
 
-  // A refetch replaces the series, so the window snaps to the new extent.
+  // Only a changed navigation extent resets the view; finer data keeps the same window.
   // Adjusted during render rather than in an effect: an effect's setState
   // would not have landed by the time the chart effect below builds the plot,
   // leaving the plot on the new extent while the brush still showed the old
@@ -104,14 +118,22 @@ export default function TimeSeriesChart({
   const zoomBeyond = useRef(onZoomBeyond);
   zoomBeyond.current = onZoomBeyond;
 
+  const viewChanged = useRef(onViewChange);
+  viewChanged.current = onViewChange;
+  const minimumSpan =
+    minViewSpan ?? Math.max(60, ((bounds[1] - bounds[0]) / Math.max(1, points.length)) * 4);
+
   const setView = useCallback((next: Range) => {
     const clamped = clampToBounds(next, boundsRef.current);
+    viewRef.current = clamped;
     setViewState(clamped);
+    viewChanged.current?.(clamped);
     plot.current?.setScale('x', { min: clamped[0], max: clamped[1] });
   }, []);
 
   const hasBand =
-    showBand && points.some((p) => p[1] != null && p[3] != null && (p[3] as number) - (p[1] as number) > 0);
+    showBand &&
+    points.some((p) => p[1] != null && p[3] != null && (p[3] as number) - (p[1] as number) > 0);
 
   useEffect(() => {
     if (!holder.current) return;
@@ -123,7 +145,11 @@ export default function TimeSeriesChart({
     const surface = hsl(cssVar('--surface', '0 0% 100%'));
     const label = METRIC_BY_VALUE[metric].label;
 
-    const invisible: uPlot.Series = { stroke: 'transparent', points: { show: false }, spanGaps: false };
+    const invisible: uPlot.Series = {
+      stroke: 'transparent',
+      points: { show: false },
+      spanGaps: false,
+    };
 
     const options: uPlot.Options = {
       width: holder.current.clientWidth || 600,
@@ -170,9 +196,10 @@ export default function TimeSeriesChart({
               const d = new Date(v * 1000);
               return d.getHours() === 0 && d.getMinutes() === 0
                 ? d.toLocaleString(undefined, { day: 'numeric', month: 'short' })
-                : d.toLocaleString(undefined, gap >= 3600
-                    ? { hour: 'numeric' }
-                    : { hour: 'numeric', minute: '2-digit' });
+                : d.toLocaleString(
+                    undefined,
+                    gap >= 3600 ? { hour: 'numeric' } : { hour: 'numeric', minute: '2-digit' }
+                  );
             });
           },
         },
@@ -224,7 +251,12 @@ export default function TimeSeriesChart({
               const pad = 4 * devicePixelRatio;
               const textW = ctx.measureText(t.label).width;
               ctx.fillStyle = surface;
-              ctx.fillRect(u.bbox.left + pad, y - 13 * devicePixelRatio, textW + pad * 2, 12 * devicePixelRatio);
+              ctx.fillRect(
+                u.bbox.left + pad,
+                y - 13 * devicePixelRatio,
+                textW + pad * 2,
+                12 * devicePixelRatio
+              );
               ctx.fillStyle = ink3;
               ctx.fillText(t.label, u.bbox.left + pad * 2, y - 2 * devicePixelRatio);
               ctx.setLineDash([4, 4]);
@@ -265,7 +297,8 @@ export default function TimeSeriesChart({
             // never escape the viewport on a phone.
             const width = node.offsetWidth;
             const host = u.over.clientWidth;
-            const left = u.cursor.left + 14 + width > host ? u.cursor.left - width - 14 : u.cursor.left + 14;
+            const left =
+              u.cursor.left + 14 + width > host ? u.cursor.left - width - 14 : u.cursor.left + 14;
             node.style.transform = `translate(${Math.max(4, left)}px, 8px)`;
           },
         ],
@@ -274,13 +307,14 @@ export default function TimeSeriesChart({
 
     const instance = new uPlot(options, data, holder.current);
     plot.current = instance;
+    instance.setScale('x', { min: viewRef.current[0], max: viewRef.current[1] });
 
     const detach = attachGestures(instance.over, instance, {
       getView: () => viewRef.current,
       setView,
       getBounds: () => boundsRef.current,
-      // Never zoom past roughly four buckets, or the plot becomes meaningless.
-      minSpan: Math.max(60, ((boundsRef.current[1] - boundsRef.current[0]) / Math.max(1, points.length)) * 4),
+      // Dynamic history reloads finer buckets down to its configured minimum.
+      minSpan: minimumSpan,
       onZoomBeyond: () => zoomBeyond.current?.(),
     });
 
@@ -298,12 +332,99 @@ export default function TimeSeriesChart({
     // The instance is rebuilt when the series identity or its styling changes;
     // panning and zooming go through setScale, not through this effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, metric, unit, height, hasBand, thresholds, setView]);
+  }, [data, metric, unit, height, hasBand, thresholds, setView, minimumSpan]);
 
   return (
     <div
       className={`w-full transition-opacity duration-quick ease-out ${dimmed ? 'opacity-50' : 'opacity-100'}`}
     >
+      <div className="chart-navigation">
+        <div className="chart-navigation-buttons" role="group" aria-label="Chart navigation">
+          <button
+            type="button"
+            aria-label="Previous time window"
+            onClick={() =>
+              setView(
+                panBy(
+                  viewRef.current,
+                  -(viewRef.current[1] - viewRef.current[0]) / 2,
+                  boundsRef.current
+                )
+              )
+            }
+          >
+            ←
+          </button>
+          <button
+            type="button"
+            aria-label="Zoom in"
+            onClick={() =>
+              setView(
+                zoomAbout(
+                  viewRef.current,
+                  (viewRef.current[0] + viewRef.current[1]) / 2,
+                  0.5,
+                  boundsRef.current,
+                  minimumSpan
+                )
+              )
+            }
+          >
+            +
+          </button>
+          <button
+            type="button"
+            aria-label="Zoom out"
+            onClick={() =>
+              setView(
+                zoomAbout(
+                  viewRef.current,
+                  (viewRef.current[0] + viewRef.current[1]) / 2,
+                  2,
+                  boundsRef.current,
+                  minimumSpan
+                )
+              )
+            }
+          >
+            −
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const readings = (overviewPoints ?? points).filter((p) => p[2] != null);
+              if (!readings.length) return;
+              const lo = readings[0][0] / 1000;
+              const hi = readings[readings.length - 1][0] / 1000;
+              const span = Math.max(minimumSpan, hi - lo);
+              setView([lo - (span - (hi - lo)) / 2, hi + (span - (hi - lo)) / 2]);
+            }}
+          >
+            Fit data
+          </button>
+          <button type="button" onClick={() => setView(boundsRef.current)}>
+            Reset view
+          </button>
+          <button
+            type="button"
+            aria-label="Next time window"
+            onClick={() =>
+              setView(
+                panBy(
+                  viewRef.current,
+                  (viewRef.current[1] - viewRef.current[0]) / 2,
+                  boundsRef.current
+                )
+              )
+            }
+          >
+            →
+          </button>
+        </div>
+        <span>
+          {new Date(view[0] * 1000).toLocaleString()} – {new Date(view[1] * 1000).toLocaleString()}
+        </span>
+      </div>
       <div className="relative">
         <div ref={holder} role="img" aria-label={`${METRIC_BY_VALUE[metric].label} over time`} />
         <div
@@ -312,15 +433,15 @@ export default function TimeSeriesChart({
         />
       </div>
 
-      {showBrush && points.length > 1 && (
+      {showBrush && (overviewPoints ?? points).length > 1 && (
         <div className="px-2 pb-1 pt-2">
           <BrushOverview
-            points={points}
+            points={overviewPoints ?? points}
             view={view}
             bounds={bounds}
             color={cssVar(`--series-${METRIC_SLUG[metric]}`, '#2a78d6')}
             onChange={setView}
-            minSpan={Math.max(60, ((bounds[1] - bounds[0]) / Math.max(1, points.length)) * 4)}
+            minSpan={minimumSpan}
           />
         </div>
       )}
