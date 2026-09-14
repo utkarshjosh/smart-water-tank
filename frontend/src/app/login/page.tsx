@@ -73,19 +73,20 @@ export default function LoginPage() {
 
   return (
     <AuthLayout
-      title="Log in"
-      subtitle="Pick up where you left off."
+      title="Welcome back."
+      subtitle="A clear view of your water starts here. Sign in to your workspace."
       aside={
         <>
           <span className="inline-flex items-center gap-2 rounded-full bg-brand-wash px-3 py-1 text-caption font-medium text-brand">
             <Drop size={14} weight="fill" aria-hidden />
-            Live tank levels
+            Connected to what matters
           </span>
           <h2 className="mt-5 text-[2rem] leading-tight tracking-tight">
-            Every tank, every reading, on one screen.
+            Less wondering.
+            More peace of mind.
           </h2>
           <p className="mt-4 text-body text-ink-2">
-            Levels, alerts and history for each device you have paired.
+            Know what’s in your tanks. Catch what needs attention. Get on with your day.
           </p>
         </>
       }

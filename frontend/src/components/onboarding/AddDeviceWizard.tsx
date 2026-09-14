@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import TankLevel from '@/components/TankLevel';
 import { useNavigate } from 'react-router-dom';
-import api from '@/lib/api';
+import { claimCodeSchema, claimStatusSchema, type ClaimStatus as ClaimStatusResponse } from '@aquamind/contracts';
+import { get, post } from '@/lib/api';
 import {
   ArrowRight,
   ArrowsClockwise,
@@ -12,13 +13,7 @@ import {
   WifiHigh,
 } from '@phosphor-icons/react';
 
-type ClaimCodeResponse = {
-  claim_code: string;
-  expires_at: string;
-  expires_in_seconds: number;
-};
-
-type ClaimStatus = 'pending' | 'claimed' | 'expired';
+type ClaimStatus = ClaimStatusResponse['status'];
 
 type ClaimedDevice = {
   id: string;
@@ -48,7 +43,7 @@ export function AddDeviceWizard() {
     setError('');
     clearTimers();
     try {
-      const { data } = await api.post<ClaimCodeResponse>('/api/v1/user/devices/claim-code', {});
+      const data = await post('/api/v1/user/devices/claim-code', claimCodeSchema, {});
       setClaimCode(data.claim_code);
       const expires = new Date(data.expires_at);
       setExpiresAt(expires);
@@ -72,7 +67,7 @@ export function AddDeviceWizard() {
 
     pollRef.current = setInterval(async () => {
       try {
-        const { data } = await api.get(`/api/v1/user/devices/claim-code/${claimCode}/status`);
+        const data = await get(`/api/v1/user/devices/claim-code/${claimCode}/status`, claimStatusSchema);
         const status: ClaimStatus = data.status;
         if (status === 'claimed') {
           clearTimers();

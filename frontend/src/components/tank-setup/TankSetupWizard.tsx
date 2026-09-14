@@ -6,19 +6,9 @@ import { Label } from '@/components/ui/label';
 import { CaretDown, CaretUp, FloppyDisk, Gauge, Ruler, WarningCircle } from '@phosphor-icons/react';
 import TankDiagram from './TankDiagram';
 
-export interface TankProfileDto {
-  shape: 'cylindrical' | 'cuboidal';
-  parallel_unit_count: number;
-  height_cm: number;
-  diameter_cm: number | null;
-  length_cm: number | null;
-  width_cm: number | null;
-  nominal_unit_volume_l: number | null;
-  sensor_offset_cm: number;
-  dead_zone_cm: number;
-  unit_capacity_l: number;
-  total_capacity_l: number;
-}
+import type { TankProfile } from '@aquamind/contracts';
+
+export type TankProfileDto = TankProfile;
 
 type Step = 'shape' | 'parallel' | 'dimensions' | 'summary';
 

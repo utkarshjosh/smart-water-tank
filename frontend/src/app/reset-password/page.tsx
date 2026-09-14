@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, EnvelopeSimple, Key, WarningCircle } from '@phosphor-icons/react';
+import { WarningCircle } from '@phosphor-icons/react';
 import { FirebaseError } from 'firebase/app';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import { AuthLayout } from '@/components/shell';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,23 +43,13 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-canvas px-4 py-10 sm:px-6">
-      <main className="w-full max-w-md rounded-xl border border-hairline bg-surface p-6 sm:p-8">
-        <Link
-          to="/login"
-          className="inline-flex items-center gap-1.5 text-label text-ink-2 transition-colors duration-instant hover:text-ink-1"
-        >
-          <ArrowLeft size={16} />
-          Back to log in
-        </Link>
-
-        <span className="mt-7 flex h-11 w-11 items-center justify-center rounded-lg bg-brand-wash text-brand">
-          {sent ? <EnvelopeSimple size={20} weight="fill" /> : <Key size={20} weight="fill" />}
-        </span>
-
+    <AuthLayout
+      title={sent ? 'Check your inbox.' : 'Forgot your password?'}
+      subtitle={sent ? undefined : 'It happens. We’ll help you get back to your water.'}
+      footer={<Link to="/login" className="font-medium text-brand hover:underline">Back to log in</Link>}
+    >
         {sent ? (
           <>
-            <h1 className="mt-5 text-[1.5rem] leading-tight tracking-tight">Check your inbox</h1>
             <p className="mt-2 text-body text-ink-2">
               If an account exists for <span className="text-ink-1">{email.trim()}</span>, a reset
               link is on its way. It expires in an hour.
@@ -69,7 +60,6 @@ export default function ResetPasswordPage() {
           </>
         ) : (
           <>
-            <h1 className="mt-5 text-[1.5rem] leading-tight tracking-tight">Reset your password</h1>
             <p className="mt-2 text-body text-ink-2">
               Enter the email you signed up with and we&apos;ll send you a reset link.
             </p>
@@ -108,7 +98,6 @@ export default function ResetPasswordPage() {
             </form>
           </>
         )}
-      </main>
-    </div>
+    </AuthLayout>
   );
 }

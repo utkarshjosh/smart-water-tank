@@ -35,6 +35,8 @@ export default defineConfig(({ mode }) => {
 
   return {
     envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
+    // Workspace contracts compile to CommonJS outside node_modules.
+    build: { commonjsOptions: { include: [/node_modules/, /packages[\\/]contracts[\\/]dist/] } },
     plugins: [react(), buildInfoPlugin(buildId)],
     define: {
       __APP_BUILD_ID__: JSON.stringify(buildId),

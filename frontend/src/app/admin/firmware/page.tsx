@@ -5,7 +5,15 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { StatTile } from '@/components/ui/stat-tile';
 import { relativeTime } from '@/lib/time';
 import { errorMessage } from '../_shared/useAdminData';
-import api from '@/lib/api';
+import {
+  adminDevicesResponseSchema,
+  adminTenantsResponseSchema,
+  firmwareListResponseSchema,
+  type AdminDevice,
+  type AdminTenant,
+  type Firmware,
+} from '@aquamind/contracts';
+import api, { get } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -35,29 +43,8 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
-interface Firmware {
-  id: string;
-  version: string;
-  file_size: number;
-  checksum: string;
-  description: string;
-  is_active: boolean;
-  rollout_percentage: number;
-  created_at: string;
-}
-
-interface Device {
-  id: string;
-  device_id: string;
-  name: string;
-  tenant_name: string;
-  firmware_version: string;
-}
-
-interface Tenant {
-  id: string;
-  name: string;
-}
+type Device = AdminDevice;
+type Tenant = AdminTenant;
 
 type FirmwareAction = {
   type: 'unroll' | 'delete';
@@ -95,8 +82,8 @@ export default function FirmwarePage() {
 
   const fetchFirmware = async () => {
     try {
-      const response = await api.get('/api/v1/admin/firmware');
-      setFirmware(response.data.firmware);
+      const response = await get('/api/v1/admin/firmware', firmwareListResponseSchema);
+      setFirmware(response.firmware);
     } catch (err) {
       setError(errorMessage(err, 'Failed to fetch firmware'));
     } finally {
@@ -106,8 +93,8 @@ export default function FirmwarePage() {
 
   const fetchDevices = async () => {
     try {
-      const response = await api.get('/api/v1/admin/devices');
-      setDevices(response.data.devices);
+      const response = await get('/api/v1/admin/devices', adminDevicesResponseSchema);
+      setDevices(response.devices);
     } catch (err) {
       console.error('Failed to fetch devices:', err);
     }
@@ -115,8 +102,8 @@ export default function FirmwarePage() {
 
   const fetchTenants = async () => {
     try {
-      const response = await api.get('/api/v1/admin/tenants');
-      setTenants(response.data.tenants);
+      const response = await get('/api/v1/admin/tenants', adminTenantsResponseSchema);
+      setTenants(response.tenants);
     } catch (err) {
       console.error('Failed to fetch tenants:', err);
     }
@@ -375,7 +362,8 @@ export default function FirmwarePage() {
 
   const activeFirmware = firmware.find((fw) => fw.is_active);
   const latestFirmware = firmware[0];
-  const totalFirmwareBytes = firmware.reduce((total, fw) => total + fw.file_size, 0);
+  // file_size is null for a release whose upload record predates size tracking.
+  const totalFirmwareBytes = firmware.reduce((total, fw) => total + (fw.file_size ?? 0), 0);
   const averageRollout =
     firmware.length > 0
       ? Math.round(
@@ -556,7 +544,7 @@ export default function FirmwarePage() {
                       <p className="text-title text-ink-1">v{fw.version}</p>
                       {fw.is_active && <Badge variant="brand">Active</Badge>}
                       <span className="ml-auto whitespace-nowrap text-caption tnum text-ink-3">
-                        {(fw.file_size / 1024).toFixed(1)} KB · {relativeTime(fw.created_at)}
+                        {fw.file_size == null ? 'size unknown' : `${(fw.file_size / 1024).toFixed(1)} KB`} · {relativeTime(fw.created_at)}
                       </span>
                     </div>
 

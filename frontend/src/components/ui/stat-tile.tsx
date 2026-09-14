@@ -31,12 +31,12 @@ export function StatTile({
   }[tone ?? 'default'];
 
   return (
-    <div className={cn('rounded-lg border border-hairline bg-surface px-3 py-2.5', className)}>
+    <div className={cn('workspace-stat rounded-lg border border-hairline bg-surface px-3 py-2.5', className)}>
       <p className="text-caption font-medium uppercase tracking-wide text-ink-3">{label}</p>
       {loading ? (
         <Skeleton className="mt-1.5 h-6 w-16" />
       ) : (
-        <p className={cn('mt-1 flex items-baseline gap-0.5 text-metric-sm tnum', toneClass)}>
+        <p className={cn('workspace-stat-value mt-1 flex items-baseline gap-0.5 text-metric-sm tnum', toneClass)}>
           {/* Grouped, because a bare 3412 reads as a version string at a
               glance and the tiles are meant to be scanned, not parsed. */}
           {value == null ? (

@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+import { ArrowUpRight, Waves } from '@phosphor-icons/react';
 import { usePageHeading } from '@/components/shell';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -60,8 +62,8 @@ export default function DashboardPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Dashboard"
-        description="Fleet health, tenant coverage and ingestion activity."
+        title="The big picture."
+        description="Your entire water network. One clear view."
         actions={
           data && (
             <Badge variant={onlineRate >= 90 ? 'good' : onlineRate >= 60 ? 'warning' : 'critical'}>
@@ -71,6 +73,11 @@ export default function DashboardPage() {
           )
         }
       />
+
+      <section className="workspace-overview-banner">
+        <div><p className="workspace-eyebrow">Operations overview</p><h2>Stay ahead of<br />every drop.</h2><p>Monitor connectivity, spot alerts and keep your fleet moving.</p><Link to="/admin/devices">Explore your devices <ArrowUpRight size={17} /></Link></div>
+        <div className="workspace-fleet-reading"><Waves size={38} weight="light" /><span className="tnum">{summary.isLoading || !data ? '—' : `${onlineRate}%`}</span><p>Fleet connectivity</p><small>{data ? `${online} of ${total} devices online` : 'Waiting for fleet data'}</small></div>
+      </section>
 
       {summary.isError && (
         <Alert variant="critical">

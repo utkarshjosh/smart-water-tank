@@ -2,7 +2,8 @@ import { Suspense, lazy } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Buildings } from '@phosphor-icons/react';
-import api from '@/lib/api';
+import { adminDeviceDetailSchema, type AdminDeviceDetail } from '@aquamind/contracts';
+import { get } from '@/lib/api';
 import { usePageHeading } from '@/components/shell';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -16,35 +17,7 @@ import { errorMessage } from '../../_shared/useAdminData';
 
 const AdminHistoryChart = lazy(() => import('./AdminHistoryChart'));
 
-interface AdminAlert {
-  id: string;
-  type: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  message: string | null;
-  created_at: string;
-}
-
-interface DeviceDetail {
-  id: string;
-  device_id: string;
-  name: string;
-  tenant_id: string;
-  tenant_name: string;
-  status: string;
-  firmware_version: string;
-  last_seen: string;
-  created_at: string;
-  config: Record<string, unknown> | null;
-  latest_measurement: {
-    volume_l: number | null;
-    level_cm: number | null;
-    temperature_c?: number | null;
-    battery_v?: number | null;
-    rssi?: number | null;
-    timestamp: string;
-  } | null;
-  recent_alerts: AdminAlert[];
-}
+type AdminAlert = AdminDeviceDetail['recent_alerts'][number];
 
 const SEVERITY: Record<AdminAlert['severity'], 'critical' | 'serious' | 'warning' | 'brand'> = {
   critical: 'critical',
@@ -65,7 +38,7 @@ export default function DeviceDetailClient() {
   const device = useQuery({
     queryKey: ['admin', 'device', deviceId],
     enabled: Boolean(deviceId),
-    queryFn: () => api.get<DeviceDetail>(`/api/v1/admin/devices/${deviceId}`).then((r) => r.data),
+    queryFn: () => get(`/api/v1/admin/devices/${deviceId}`, adminDeviceDetailSchema),
   });
 
   const data = device.data;

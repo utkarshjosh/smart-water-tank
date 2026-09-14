@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { CaretRight, Drop, Plus, Warning } from '@phosphor-icons/react';
-import api from '@/lib/api';
+import { devicesResponseSchema, type DeviceSummary } from '@aquamind/contracts';
+import { get } from '@/lib/api';
+import { SingleTankHome } from './SingleTankHome';
 import { ShellAction, usePageHeading } from '@/components/shell';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -12,33 +14,23 @@ import { StatusDot } from '@/components/ui/status-dot';
 import TankLevel from '@/components/TankLevel';
 import MeasurementExportDialog from '@/components/MeasurementExportDialog';
 
-interface Device {
-  id: string;
-  name: string;
-  status: string;
-  firmware_version: string;
-  last_seen: string;
-  current_volume: number | null;
-  level_percent: number | null;
-  level_percent_stale: boolean;
-  has_tank_profile: boolean;
-  last_measurement: string | null;
-  active_alert: 'leak' | 'low' | null;
-}
+type Device = DeviceSummary;
 
 export default function TenantDevicesPage() {
   const navigate = useNavigate();
   const devices = useQuery({
     queryKey: ['devices'],
-    queryFn: () =>
-      api.get<{ devices: Device[] }>('/api/v1/user/devices').then((r) => r.data.devices),
+    queryFn: () => get('/api/v1/user/devices', devicesResponseSchema).then((r) => r.devices),
+    refetchInterval: (query) => query.state.data?.length === 1 && document.visibilityState === 'visible' ? 15_000 : false,
+    refetchIntervalInBackground: false,
   });
 
   const list = devices.data ?? [];
   const online = list.filter((d) => d.status === 'online').length;
   const needsAttention = list.filter((d) => d.active_alert).length;
 
-  usePageHeading('My tanks');
+  const singleDevice = list.length === 1 ? list[0] : null;
+  usePageHeading(singleDevice ? 'My tank' : 'My tanks');
 
   return (
     <div className="space-y-4">
@@ -53,10 +45,11 @@ export default function TenantDevicesPage() {
         </Button>
       </ShellAction>
 
-      <div className="flex items-end justify-between gap-3">
+      <div className="workspace-page-intro flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-display">My tanks</h1>
-          <p className="mt-1 text-body text-ink-2">Live levels, alerts and setup state.</p>
+          <p className="workspace-eyebrow">Your water, at a glance</p>
+          <h1 className="text-display">{singleDevice ? singleDevice.name : 'My tanks'}<span className="workspace-title-dot">.</span></h1>
+          <p className="mt-1 text-body text-ink-2">{singleDevice ? 'Your water, without the guesswork.' : 'A little clarity for every tank. Levels, connections and anything that needs you.'}</p>
         </div>
         {list.length > 0 && (
           <MeasurementExportDialog
@@ -75,7 +68,7 @@ export default function TenantDevicesPage() {
         </Alert>
       )}
 
-      {list.length > 0 && (
+      {list.length > 1 && (
         <div className="grid grid-cols-3 gap-2">
           <StatTile label="Tanks" value={list.length} />
           <StatTile
@@ -97,7 +90,9 @@ export default function TenantDevicesPage() {
             <Skeleton key={i} className="h-32 w-full" />
           ))}
         </div>
-      ) : list.length === 0 ? (
+      ) : singleDevice ? (
+        <SingleTankHome device={singleDevice} />
+      ) : devices.isError && list.length === 0 ? null : list.length === 0 ? (
         <EmptyState
           icon={Drop}
           title="No devices yet"
@@ -110,14 +105,14 @@ export default function TenantDevicesPage() {
           }
         />
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <ul className="tank-collection grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {list.map((device) => (
             <li key={device.id}>
               <Link
                 to={`/app/devices/${device.id}`}
-                className="group flex h-full items-center gap-4 rounded-lg border border-hairline bg-surface p-4 transition-[border-color,transform] duration-instant ease-out hover:border-line-strong active:scale-[0.99]"
+                className="workspace-tank-card group"
               >
-                <div className="w-24 shrink-0">
+                <div className="workspace-tank-visual">
                   <TankLevel
                     level={device.has_tank_profile ? device.level_percent : null}
                     alert={device.active_alert}
@@ -127,7 +122,7 @@ export default function TenantDevicesPage() {
                   />
                 </div>
 
-                <div className="min-w-0 flex-1">
+                <div className="workspace-tank-details min-w-0 flex-1">
                   <p className="truncate text-label text-ink-1">{device.name}</p>
                   <StatusDot
                     className="mt-1"
@@ -164,7 +159,7 @@ export default function TenantDevicesPage() {
 
                 <CaretRight
                   size={16}
-                  className="shrink-0 text-ink-3 transition-transform duration-instant ease-out group-hover:translate-x-0.5"
+                  className="workspace-tank-arrow shrink-0 text-ink-3"
                   aria-hidden
                 />
               </Link>

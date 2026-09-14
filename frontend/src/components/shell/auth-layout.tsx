@@ -1,18 +1,10 @@
 import { Link } from 'react-router-dom';
+import { ArrowLeft, Drop, ShieldCheck, Waves } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
+import './workspace.css';
 
-/**
- * Shared frame for log in / sign up / reset. One column on a phone; the
- * supporting panel appears only when there is room for it, so nothing is
- * rendered off-screen and hidden with overflow.
- */
-export function AuthLayout({
-  title,
-  subtitle,
-  aside,
-  children,
-  footer,
-}: {
+/** Shared responsive entry experience for login, signup and password recovery. */
+export function AuthLayout({ title, subtitle, aside, children, footer }: {
   title: string;
   subtitle?: string;
   aside?: ReactNode;
@@ -20,34 +12,29 @@ export function AuthLayout({
   footer?: ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-canvas">
-      <div className="mx-auto grid min-h-screen max-w-6xl grid-cols-1 lg:grid-cols-[minmax(0,1fr)_440px]">
-        {aside && (
-          <section className="hidden flex-col justify-between border-r border-hairline bg-surface px-8 py-8 lg:flex">
-            <Link to="/welcome" className="flex items-center gap-2.5">
-              <img src="/logo.png" alt="" className="h-8 w-8 object-contain" />
-              <span className="text-title">AquaMind</span>
-            </Link>
-            <div className="max-w-md pb-6">{aside}</div>
-            <span className="text-caption text-ink-3">© {new Date().getFullYear()} AquaMind</span>
-          </section>
-        )}
-
-        <main className="flex items-center px-4 py-10 sm:px-6 lg:px-10">
-          <div className="mx-auto w-full max-w-sm">
-            <Link to="/welcome" className="mb-8 flex items-center gap-2.5 lg:hidden">
-              <img src="/logo.png" alt="" className="h-8 w-8 object-contain" />
-              <span className="text-title">AquaMind</span>
-            </Link>
-
-            <h1 className="text-[1.75rem] leading-tight tracking-tight">{title}</h1>
-            {subtitle && <p className="mt-2 text-body text-ink-2">{subtitle}</p>}
-
-            <div className="mt-7">{children}</div>
-            {footer && <div className="mt-6 text-center text-body text-ink-2">{footer}</div>}
-          </div>
-        </main>
-      </div>
+    <div className="auth-experience">
+      <section className="auth-story">
+        <Link to="/welcome" className="workspace-wordmark"><Drop size={30} weight="fill" /> AquaMind</Link>
+        <div className="auth-story-copy">{aside || <><span className="workspace-eyebrow">A little more peace of mind</span><h2>Your water.<br />In good hands.</h2></>}</div>
+        <div className="auth-art" aria-hidden="true">
+          <div className="auth-orbit auth-orbit-one" /><div className="auth-orbit auth-orbit-two" />
+          <img src="/images/landing-tank.webp" alt="" width={960} height={960} />
+          <span className="auth-art-caption"><Waves size={20} /> Clarity, down to the last litre.</span>
+        </div>
+        <div className="auth-story-footer"><span>Intelligent water monitoring</span><span>© {new Date().getFullYear()} AquaMind</span></div>
+      </section>
+      <main className="auth-main">
+        <Link to="/welcome" className="auth-back"><ArrowLeft size={16} /> Back to AquaMind</Link>
+        <div className="auth-form-panel">
+          <div className="auth-form-icon"><Drop size={27} weight="duotone" /></div>
+          <p className="workspace-eyebrow">Your AquaMind workspace</p>
+          <h1>{title}</h1>
+          {subtitle && <p className="auth-subtitle">{subtitle}</p>}
+          <div className="auth-fields">{children}</div>
+          {footer && <div className="auth-form-footer">{footer}</div>}
+        </div>
+        <p className="auth-security"><ShieldCheck size={16} /> One secure login for tank owners and administrators</p>
+      </main>
     </div>
   );
 }

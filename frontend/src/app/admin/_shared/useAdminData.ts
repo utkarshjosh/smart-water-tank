@@ -1,64 +1,33 @@
 import { useQuery } from '@tanstack/react-query';
-import api from '@/lib/api';
+import { adminDevicesResponseSchema, adminSummarySchema, adminTenantsResponseSchema } from '@aquamind/contracts';
+import { get } from '@/lib/api';
 
-export interface AdminSummary {
-  total_devices: number;
-  online_devices: number;
-  offline_devices: number;
-  total_tenants: number;
-  recent_alerts_24h: number;
-  measurements_today: number;
-}
-
-export interface AdminDevice {
-  id: string;
-  device_id: string;
-  name: string;
-  tenant_id: string;
-  tenant_name: string;
-  status: string;
-  firmware_version: string;
-  last_seen: string;
-  current_volume: number | null;
-  last_measurement: string | null;
-  created_at: string;
-  archived_at?: string | null;
-}
-
-export interface AdminTenant {
-  id: string;
-  name: string;
-  created_at: string;
-  device_count: number;
-  user_count: number;
-  archived_at?: string | null;
-}
-
-const get = <T>(url: string) => api.get<T>(url).then((r) => r.data);
+// Types come from the contract, re-exported under the names the admin pages use.
+export type { AdminDevice, AdminSummary, AdminTenant } from '@aquamind/contracts';
 
 /** The dashboard and analytics pages read the same summary endpoint. */
 export const useAdminSummary = () =>
   useQuery({
     queryKey: ['admin', 'summary'],
-    queryFn: () => get<AdminSummary>('/api/v1/admin/analytics/summary'),
+    queryFn: () => get('/api/v1/admin/analytics/summary', adminSummarySchema),
   });
 
 export const useAdminDevices = (includeArchived = false) =>
   useQuery({
     queryKey: ['admin', 'devices', { includeArchived }],
     queryFn: () =>
-      get<{ devices: AdminDevice[] }>(
-        `/api/v1/admin/devices${includeArchived ? '?include_archived=true' : ''}`
-      ).then((d) => d.devices),
+      get(`/api/v1/admin/devices${includeArchived ? '?include_archived=true' : ''}`, adminDevicesResponseSchema).then(
+        (d) => d.devices
+      ),
   });
 
 export const useAdminTenants = (includeArchived = false) =>
   useQuery({
     queryKey: ['admin', 'tenants', { includeArchived }],
     queryFn: () =>
-      get<{ tenants: AdminTenant[] }>(
-        `/api/v1/admin/tenants${includeArchived ? '?include_archived=true' : ''}`
-      ).then((d) => d.tenants),
+      get(`/api/v1/admin/tenants${includeArchived ? '?include_archived=true' : ''}`, adminTenantsResponseSchema).then(
+        (d) => d.tenants
+      ),
   });
 
 export const errorMessage = (err: unknown, fallback: string) => {
