@@ -149,6 +149,22 @@ export async function getTankProfile(device: Device): Promise<ReturnType<typeof 
   return profile ? toTankProfileDto(profile) : null;
 }
 
+/**
+ * Return a device to "no profile" (#9). A wrongly entered profile could be
+ * corrected but never removed, and "no profile" is a distinct state: level
+ * becomes null and volume falls back to the stored snapshot rather than being
+ * derived. Bumps config_version like the upsert path, so the device drops its
+ * geometry block on the next check-in.
+ */
+export async function deleteTankProfile(device: Device): Promise<void> {
+  const profile = await prisma.tankProfile.findUnique({ where: { deviceId: device.id } });
+  if (!profile) throw new HttpError(404, 'This device has no tank profile');
+
+  await prisma.tankProfile.delete({ where: { deviceId: device.id } });
+  await bumpConfigVersion(device.id);
+  void pushConfigToDevice(device.id);
+}
+
 export async function getTankProfileRaw(deviceId: string): Promise<TankProfile | null> {
   return prisma.tankProfile.findUnique({ where: { deviceId } });
 }

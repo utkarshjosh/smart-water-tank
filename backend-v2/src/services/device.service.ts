@@ -265,6 +265,39 @@ export async function updateAlertThresholds(device: Device, input: AlertThreshol
   return toConfigDto(config);
 }
 
+export interface IntervalsInput {
+  measurement_interval_ms?: number;
+  report_interval_ms?: number;
+}
+
+/**
+ * Tenant-side write of the two cadence settings (#9). Until now they were
+ * readable at GET /config but only an operator could change them, so a user
+ * who wanted readings every 30 minutes instead of 5 to save battery had to
+ * ask. Range limits are enforced by the route; this checks the one rule that
+ * needs both values: reporting more often than measuring is meaningless.
+ */
+export async function updateIntervals(device: Device, input: IntervalsInput): Promise<DeviceConfigPayload> {
+  const existing = await prisma.deviceConfig.findUnique({ where: { deviceId: device.id } });
+
+  const measurementIntervalMs = input.measurement_interval_ms ?? existing?.measurementIntervalMs ?? DEFAULT_OPERATIONAL.measurement_interval_ms;
+  const reportIntervalMs = input.report_interval_ms ?? existing?.reportIntervalMs ?? DEFAULT_OPERATIONAL.report_interval_ms;
+  if (reportIntervalMs < measurementIntervalMs) {
+    throw new HttpError(400, 'report_interval_ms must be at least measurement_interval_ms');
+  }
+
+  await prisma.deviceConfig.upsert({
+    where: { deviceId: device.id },
+    create: { deviceId: device.id, measurementIntervalMs, reportIntervalMs },
+    update: { measurementIntervalMs, reportIntervalMs },
+  });
+
+  await bumpConfigVersion(device.id);
+  void pushConfigToDevice(device.id);
+
+  return buildDeviceConfig(device);
+}
+
 export async function claimDevice(claimCode: string, hardwareId: string): Promise<{ deviceToken: string; deviceId: string }> {
   const codeHash = hashClaimCode(claimCode);
 

@@ -357,6 +357,40 @@ router.put(
   })
 );
 
+// DELETE /api/v1/user/devices/:deviceId/tank-profile - Back to "no profile".
+// The upsert could correct a wrong profile but never remove it (#9).
+router.delete(
+  '/devices/:deviceId/tank-profile',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    await tankProfileService.deleteTankProfile(req.device!);
+    res.status(204).send();
+  })
+);
+
+// Cadence limits: the ultrasonic sensor needs time to settle, and a device
+// that reports less than once a day is indistinguishable from one that is
+// offline. Report must be at least measurement; the service checks that pair.
+const intervalsSchema = z
+  .object({
+    measurement_interval_ms: z.number().int().min(10_000).max(3_600_000).optional(),
+    report_interval_ms: z.number().int().min(60_000).max(86_400_000).optional(),
+  })
+  .refine((body) => body.measurement_interval_ms !== undefined || body.report_interval_ms !== undefined, {
+    message: 'Provide measurement_interval_ms or report_interval_ms',
+  });
+
+// PUT /api/v1/user/devices/:deviceId/config - Tenant-side cadence settings.
+// Previously admin-only (#9). Bumps config_version so the device applies it.
+router.put(
+  '/devices/:deviceId/config',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    const validated = intervalsSchema.parse(req.body);
+    sendJson(res, deviceConfigPayloadSchema, await deviceService.updateIntervals(req.device!, validated));
+  })
+);
+
 // GET /api/v1/user/devices/:deviceId/config - Read-only device config display
 router.get(
   '/devices/:deviceId/config',
