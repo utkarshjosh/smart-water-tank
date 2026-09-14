@@ -1,5 +1,8 @@
 import type { Device } from '@prisma/client';
-import type { DeviceConfigPayload, SyncMode } from '../services/device.service';
+// From the contract, not device.service: the gateway must stay a leaf that
+// services can import without creating a cycle (device.service imports
+// ./registry for pushConfigToDevice).
+import type { DeviceConfigPayload, SyncMode } from '@aquamind/contracts';
 
 // Transport-agnostic result of ingesting one telemetry frame. `stale` mirrors
 // the Phase 1 piggyback decision (config is non-null exactly when the device

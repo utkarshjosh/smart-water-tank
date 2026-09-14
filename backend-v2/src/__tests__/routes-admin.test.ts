@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import * as adminService from '../services/admin.service';
+import * as adminDevices from '../services/admin/devices';
+import * as adminTenants from '../services/admin/tenants';
 import { adminDeviceDto, callArgs, http, signInAs, userRow } from './helpers/http';
 
 // Admin routes: query parsing and the filters handed to the service. The role
@@ -11,7 +12,7 @@ const admin = () => userRow({ id: 'admin-1', role: 'admin', tenantId: null });
 test('GET /devices with no filters lists live devices only', async (t) => {
   const headers = signInAs(t, admin());
   const row = adminDeviceDto({ device_id: 'AQM-1' });
-  const list = t.mock.method(adminService, 'listDevices', async () => [row]);
+  const list = t.mock.method(adminDevices, 'listDevices', async () => [row]);
 
   const res = await http().get('/api/v1/admin/devices').set(headers);
 
@@ -22,7 +23,7 @@ test('GET /devices with no filters lists live devices only', async (t) => {
 
 test('GET /devices forwards tenant_id, status and include_archived', async (t) => {
   const headers = signInAs(t, admin());
-  const list = t.mock.method(adminService, 'listDevices', async () => []);
+  const list = t.mock.method(adminDevices, 'listDevices', async () => []);
 
   const res = await http()
     .get('/api/v1/admin/devices?tenant_id=123e4567-e89b-12d3-a456-426614174000&status=offline&include_archived=true')
@@ -49,4 +50,24 @@ test('POST /measurements/export rejects an empty device list', async (t) => {
     .set(headers)
     .send({ device_ids: [], from: '2026-01-01', to: '2026-01-02' });
   assert.equal(res.status, 400);
+});
+
+test('GET /tenants/:tenantId returns one tenant with live counts', async (t) => {
+  const headers = signInAs(t, admin());
+  const tenant = {
+    id: '123e4567-e89b-12d3-a456-426614174000',
+    name: 'Home',
+    created_at: '2026-09-14T10:00:00.000Z',
+    updated_at: '2026-09-14T10:00:00.000Z',
+    device_count: 2,
+    user_count: 3,
+    archived_at: null,
+  };
+  const get = t.mock.method(adminTenants, 'getTenant', async () => tenant);
+
+  const res = await http().get(`/api/v1/admin/tenants/${tenant.id}`).set(headers);
+
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body, tenant);
+  assert.equal(callArgs(get)[0], tenant.id);
 });
