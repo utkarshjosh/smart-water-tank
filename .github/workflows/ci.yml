@@ -51,6 +51,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint --workspace=frontend
+      - run: npm test --workspace=frontend
       # `build` runs tsc --noEmit first, then vite. Runtime env is read lazily,
       # so no VITE_* secrets are needed to compile.
       - run: npm run build --workspace=frontend
@@ -67,3 +68,4 @@ jobs:
       - run: npm ci
       - run: npm run typecheck --workspace=mobile
       - run: npm run lint --workspace=mobile -- --max-warnings=0
+      - run: npm test --workspace=mobile

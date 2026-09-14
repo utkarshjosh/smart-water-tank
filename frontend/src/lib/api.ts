@@ -1,6 +1,8 @@
-import axios from 'axios';
+import axios, { type AxiosRequestConfig } from 'axios';
+import type { z } from 'zod';
 import { auth, waitForAuthState } from './firebase';
 import { getEnv } from './env';
+import { parseResponse } from './contract';
 
 export const API_BASE_URL = getEnv('NEXT_PUBLIC_API_URL', 'http://localhost:3000');
 
@@ -33,5 +35,17 @@ api.interceptors.request.use(async (config) => {
   }
   return config;
 });
+
+/**
+ * GET a response and parse it against its contract. `api.get<T>()` was a type
+ * assertion — it compiled to nothing and TypeScript simply believed the
+ * server. This validates instead: the schema is the only source of the type.
+ */
+export const get = <S extends z.ZodType>(url: string, schema: S, config?: AxiosRequestConfig) =>
+  api.get(url, config).then((r) => parseResponse(schema, r.data, url));
+
+/** POST and parse the response the same way. */
+export const post = <S extends z.ZodType>(url: string, schema: S, body?: unknown, config?: AxiosRequestConfig) =>
+  api.post(url, body, config).then((r) => parseResponse(schema, r.data, url));
 
 export default api;

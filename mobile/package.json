@@ -9,7 +9,8 @@
     "prebuild": "expo prebuild --platform android",
     "tokens": "node scripts/generate-tokens.mjs",
     "typecheck": "tsc --noEmit",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "test": "vitest run"
   },
   "dependencies": {
     "@aquamind/contracts": "*",
@@ -56,6 +57,7 @@
     "eslint": "^9.0.0",
     "eslint-config-expo": "~57.0.2",
     "expo-build-properties": "~57.0.17",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "vitest": "^3.2.7"
   }
 }

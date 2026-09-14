@@ -1,50 +1,28 @@
 import { useQuery } from '@tanstack/react-query';
-import api from '@/lib/api';
-import type { TankProfileDto } from '@/components/tank-setup/TankSetupWizard';
+import {
+  currentReadingSchema,
+  deviceAlertsResponseSchema,
+  deviceConfigPayloadSchema,
+  deviceInfoSchema,
+  firmwareStatusSchema,
+  sharesResponseSchema,
+  tankProfileResponseSchema,
+  usageResponseSchema,
+} from '@aquamind/contracts';
+import { get } from '@/lib/api';
 
-export interface DeviceInfo {
-  id: string;
-  name: string;
-  status: string;
-  firmware_version: string | null;
-  last_seen: string | null;
-}
-
-export interface CurrentMeasurement {
-  level_cm: number | null;
-  volume_l: number | null;
-  level_percent: number | null;
-  level_percent_stale: boolean;
-  level_percent_as_of: string | null;
-  temperature_c: number | null;
-  battery_v: number | null;
-  timestamp: string;
-}
-
-export interface AlertItem {
-  id: string;
-  type: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  message: string | null;
-  acknowledged: boolean;
-  created_at: string;
-}
-
-export interface ConfigDto {
-  measurement_interval_ms: number;
-  report_interval_ms: number;
-  tank_low_threshold_pct: number | null;
-  tank_full_threshold_pct: number | null;
-  battery_low_threshold_v: number | null;
-}
-
-export interface FirmwareStatus {
-  current_version: string | null;
-  latest_known_version: string | null;
-  last_checked_at: string | null;
-}
-
-const get = <T>(url: string) => api.get<T>(url).then((r) => r.data);
+// Types come from the contract; re-exported under the names this folder's
+// components already use.
+export type {
+  Alert as AlertItem,
+  CurrentReading as CurrentMeasurement,
+  DeviceConfigPayload as ConfigDto,
+  DeviceInfo,
+  DeviceShare,
+  FirmwareStatus,
+  UsageDay,
+  UsageResponse,
+} from '@aquamind/contracts';
 
 export const deviceKeys = {
   info: (id?: string) => ['device', id] as const,
@@ -59,7 +37,7 @@ export const useDevice = (id?: string) =>
   useQuery({
     queryKey: deviceKeys.info(id),
     enabled: Boolean(id),
-    queryFn: () => get<DeviceInfo>(`/api/v1/user/devices/${id}`),
+    queryFn: () => get(`/api/v1/user/devices/${id}`, deviceInfoSchema),
   });
 
 /**
@@ -70,7 +48,7 @@ export const useCurrent = (id?: string) =>
   useQuery({
     queryKey: deviceKeys.current(id),
     enabled: Boolean(id),
-    queryFn: () => get<CurrentMeasurement>(`/api/v1/user/devices/${id}/current`),
+    queryFn: () => get(`/api/v1/user/devices/${id}/current`, currentReadingSchema),
     refetchInterval: () => (document.visibilityState === 'visible' ? 15_000 : false),
     refetchIntervalInBackground: false,
     staleTime: 0,
@@ -80,89 +58,43 @@ export const useTankProfile = (id?: string) =>
   useQuery({
     queryKey: deviceKeys.profile(id),
     enabled: Boolean(id),
-    queryFn: () =>
-      get<{ profile: TankProfileDto | null }>(`/api/v1/user/devices/${id}/tank-profile`).then(
-        (d) => d.profile
-      ),
+    queryFn: () => get(`/api/v1/user/devices/${id}/tank-profile`, tankProfileResponseSchema).then((d) => d.profile),
   });
 
 export const useAlerts = (id?: string) =>
   useQuery({
     queryKey: deviceKeys.alerts(id),
     enabled: Boolean(id),
-    queryFn: () =>
-      get<{ alerts: AlertItem[] }>(`/api/v1/user/devices/${id}/alerts`).then((d) => d.alerts ?? []),
+    queryFn: () => get(`/api/v1/user/devices/${id}/alerts`, deviceAlertsResponseSchema).then((d) => d.alerts),
   });
 
 export const useDeviceConfig = (id?: string) =>
   useQuery({
     queryKey: deviceKeys.config(id),
     enabled: Boolean(id),
-    queryFn: () => get<ConfigDto>(`/api/v1/user/devices/${id}/config`),
+    queryFn: () => get(`/api/v1/user/devices/${id}/config`, deviceConfigPayloadSchema),
   });
 
 export const useFirmwareStatus = (id?: string) =>
   useQuery({
     queryKey: deviceKeys.firmware(id),
     enabled: Boolean(id),
-    queryFn: () => get<FirmwareStatus>(`/api/v1/user/devices/${id}/firmware-status`),
+    queryFn: () => get(`/api/v1/user/devices/${id}/firmware-status`, firmwareStatusSchema),
   });
 
 export const formatReading = (value: number | null | undefined, digits = 0) =>
   value == null ? null : Number(value).toFixed(digits);
 
-export interface UsageDay {
-  date: string;
-  used_l: number | null;
-  min_l: number | null;
-  avg_l: number | null;
-  max_l: number | null;
-  refill_events: number;
-  leak_suspected: boolean;
-  readings: number;
-}
-
-export interface UsageResponse {
-  device_id: string;
-  from: string;
-  to: string;
-  has_tank_profile: boolean;
-  capacity_l: number | null;
-  days: UsageDay[];
-  totals: {
-    used_l: number | null;
-    daily_average_l: number | null;
-    refill_events: number;
-    leak_days: number;
-    days_with_data: number;
-    days_aggregated: number;
-  };
-}
-
 export const useUsage = (id?: string, days = 30) =>
   useQuery({
     queryKey: ['device', id, 'usage', days],
     enabled: Boolean(id),
-    queryFn: () => get<UsageResponse>(`/api/v1/user/devices/${id}/usage?days=${days}`),
+    queryFn: () => get(`/api/v1/user/devices/${id}/usage?days=${days}`, usageResponseSchema),
   });
-
-export interface DeviceShare {
-  user_id: string;
-  email: string;
-  name: string | null;
-  role: string;
-  via: 'tenant' | 'share';
-  revocable: boolean;
-  redundant?: boolean;
-  shared_at?: string;
-}
 
 export const useDeviceShares = (id?: string) =>
   useQuery({
     queryKey: ['device', id, 'shares'],
     enabled: Boolean(id),
-    queryFn: () =>
-      get<{ device_id: string; members: DeviceShare[]; shares: DeviceShare[] }>(
-        `/api/v1/user/devices/${id}/shares`
-      ),
+    queryFn: () => get(`/api/v1/user/devices/${id}/shares`, sharesResponseSchema),
   });
