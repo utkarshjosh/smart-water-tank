@@ -1,9 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { HttpError } from '../lib/http-error';
 import * as userService from '../services/user.service';
 import * as tankProfileService from '../services/tank-profile.service';
 import * as historyService from '../services/history.service';
-import { callArgs, claimCodeDto, deviceInfoDto, deviceLookupReturns, deviceRow, deviceSummaryDto, historySeriesDto, http, signInAs, userRow } from './helpers/http';
+import * as deviceService from '../services/device.service';
+import { callArgs, claimCodeDto, deviceConfigPayloadDto, deviceInfoDto, deviceLookupReturns, deviceRow, deviceSummaryDto, historySeriesDto, http, signInAs, userRow } from './helpers/http';
 
 // Tenant routes: request validation, what each handler passes to its service,
 // and the envelope it wraps the result in. Services are mocked; their own
@@ -122,4 +124,52 @@ test('GET /alerts caps limit at 200', async (t) => {
   const headers = signInAs(t, userRow());
   const res = await http().get('/api/v1/user/alerts?limit=500').set(headers);
   assert.equal(res.status, 400);
+});
+
+// --- #9: tank-profile delete and user-settable intervals ---------------------
+
+test('DELETE /devices/:id/tank-profile -> 204; 404 when there is none', async (t) => {
+  const headers = signInAs(t, userRow());
+  deviceLookupReturns(t, deviceRow());
+  const del = t.mock.method(tankProfileService, 'deleteTankProfile', async () => undefined);
+
+  const res = await http().delete('/api/v1/user/devices/AQM-0042/tank-profile').set(headers);
+  assert.equal(res.status, 204);
+  assert.equal(callArgs<typeof tankProfileService.deleteTankProfile>(del)[0].id, 'dev-uuid');
+
+  t.mock.method(tankProfileService, 'deleteTankProfile', async () => {
+    throw new HttpError(404, 'This device has no tank profile');
+  });
+  const missing = await http().delete('/api/v1/user/devices/AQM-0042/tank-profile').set(headers);
+  assert.equal(missing.status, 404);
+});
+
+test('PUT /devices/:id/config rejects out-of-range and empty bodies', async (t) => {
+  const headers = signInAs(t, userRow());
+  deviceLookupReturns(t, deviceRow());
+  const put = (body: object) => http().put('/api/v1/user/devices/AQM-0042/config').set(headers).send(body);
+
+  assert.equal((await put({})).status, 400);
+  assert.equal((await put({ measurement_interval_ms: 5_000 })).status, 400); // below 10 s
+  assert.equal((await put({ report_interval_ms: 90_000_000 })).status, 400); // above 24 h
+  assert.equal((await put({ report_interval_ms: 60000.5 })).status, 400); // not an integer
+});
+
+test('PUT /devices/:id/config forwards the intervals and returns the merged config', async (t) => {
+  const headers = signInAs(t, userRow());
+  deviceLookupReturns(t, deviceRow());
+  const payload = deviceConfigPayloadDto({ measurement_interval_ms: 600_000, report_interval_ms: 1_800_000, config_version: 4 });
+  const update = t.mock.method(deviceService, 'updateIntervals', async () => payload);
+
+  const res = await http()
+    .put('/api/v1/user/devices/AQM-0042/config')
+    .set(headers)
+    .send({ measurement_interval_ms: 600_000, report_interval_ms: 1_800_000 });
+
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body, payload);
+  assert.deepEqual(callArgs<typeof deviceService.updateIntervals>(update)[1], {
+    measurement_interval_ms: 600_000,
+    report_interval_ms: 1_800_000,
+  });
 });
