@@ -46,7 +46,7 @@ export function createApp(): express.Express {
 
   app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (err instanceof ZodError) {
-      res.status(400).json({ error: 'Invalid request data', details: err.errors });
+      res.status(400).json({ error: 'Invalid request data', details: err.issues });
       return;
     }
     if (err instanceof HttpError) {

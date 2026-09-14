@@ -4,7 +4,31 @@ import rateLimit from 'express-rate-limit';
 import { AuthRequest, firebaseAuth, requireTenant } from '../middleware/firebaseAuth.middleware';
 import { DeviceAccessRequest, requireDeviceAccess } from '../lib/access';
 import { asyncHandler } from '../lib/async-handler';
+import { sendJson } from '../lib/send-json';
 import { alertThresholdsSchema } from '../lib/alert-thresholds';
+import {
+  alertFeedResponseSchema,
+  alertRulesResponseSchema,
+  claimCodeSchema,
+  claimStatusSchema,
+  configDtoSchema,
+  currentReadingSchema,
+  deviceAlertsResponseSchema,
+  deviceConfigPayloadSchema,
+  deviceInfoSchema,
+  devicesResponseSchema,
+  firmwareStatusSchema,
+  historyResponseSchema,
+  historySeriesSchema,
+  meSchema,
+  okSchema,
+  registerResponseSchema,
+  shareCreatedSchema,
+  sharesResponseSchema,
+  syncModeResponseSchema,
+  tankProfileResponseSchema,
+  usageResponseSchema,
+} from '@aquamind/contracts';
 import * as userService from '../services/user.service';
 import * as deviceService from '../services/device.service';
 import * as tankProfileService from '../services/tank-profile.service';
@@ -32,10 +56,15 @@ router.post(
     const { name, tenant_id } = registerSchema.parse(req.body);
     const result = await userService.registerUser(req.firebaseUid!, name, tenant_id);
 
-    res.status(result.created ? 201 : 200).json({
-      user: result.user,
-      message: result.created ? 'User registered successfully' : 'User already registered. Profile updated.',
-    });
+    sendJson(
+      res,
+      registerResponseSchema,
+      {
+        user: result.user,
+        message: result.created ? 'User registered successfully' : 'User already registered. Profile updated.',
+      },
+      result.created ? 201 : 200
+    );
   })
 );
 
@@ -45,7 +74,7 @@ router.get(
   '/me',
   firebaseAuth,
   asyncHandler(async (req: AuthRequest, res) => {
-    res.json(await userService.getMe(req.user!.id));
+    sendJson(res, meSchema, await userService.getMe(req.user!.id));
   })
 );
 
@@ -74,7 +103,7 @@ router.put(
   firebaseAuth,
   asyncHandler(async (req: AuthRequest, res) => {
     const validated = updateMeSchema.parse(req.body);
-    res.json(await userService.updateMe(req.user!.id, validated));
+    sendJson(res, meSchema, await userService.updateMe(req.user!.id, validated));
   })
 );
 
@@ -84,7 +113,7 @@ router.post(
   '/devices/claim-code',
   claimCodeMintLimiter,
   asyncHandler(async (req: AuthRequest, res) => {
-    res.status(201).json(await userService.mintClaimCode(req.user!.tenantId!, req.user!.id));
+    sendJson(res, claimCodeSchema, await userService.mintClaimCode(req.user!.tenantId!, req.user!.id), 201);
   })
 );
 
@@ -93,7 +122,7 @@ router.post(
 router.get(
   '/devices/claim-code/:code/status',
   asyncHandler(async (req: AuthRequest, res) => {
-    res.json(await userService.getClaimCodeStatus(req.user!.tenantId!, req.params.code));
+    sendJson(res, claimStatusSchema, await userService.getClaimCodeStatus(req.user!.tenantId!, req.params.code));
   })
 );
 
@@ -111,7 +140,7 @@ router.delete(
 router.get(
   '/devices',
   asyncHandler(async (req: AuthRequest, res) => {
-    res.json({ devices: await userService.listDevicesForTenant(req.user!.tenantId!, req.user!.id) });
+    sendJson(res, devicesResponseSchema, { devices: await userService.listDevicesForTenant(req.user!.tenantId!, req.user!.id) });
   })
 );
 
@@ -135,7 +164,9 @@ router.get(
   '/alerts',
   asyncHandler(async (req: AuthRequest, res) => {
     const { limit, include_dismissed, unacknowledged, cursor } = userAlertsQuerySchema.parse(req.query);
-    res.json(
+    sendJson(
+      res,
+      alertFeedResponseSchema,
       await userService.getUserAlerts(
         { id: req.user!.id, tenantId: req.user!.tenantId },
         { limit, includeDismissed: include_dismissed, onlyUnacknowledged: unacknowledged, cursor }
@@ -168,7 +199,7 @@ router.get(
   '/devices/:deviceId',
   requireDeviceAccess,
   asyncHandler(async (req: DeviceAccessRequest, res) => {
-    res.json(await userService.getDeviceInfo(req.device!));
+    sendJson(res, deviceInfoSchema, await userService.getDeviceInfo(req.device!));
   })
 );
 
@@ -177,7 +208,7 @@ router.get(
   '/devices/:deviceId/current',
   requireDeviceAccess,
   asyncHandler(async (req: DeviceAccessRequest, res) => {
-    res.json(await userService.getDeviceCurrent(req.device!));
+    sendJson(res, currentReadingSchema, await userService.getDeviceCurrent(req.device!));
   })
 );
 
@@ -192,7 +223,7 @@ router.get(
   requireDeviceAccess,
   asyncHandler(async (req: DeviceAccessRequest, res) => {
     const { days, limit } = historyQuerySchema.parse(req.query);
-    res.json(await userService.getDeviceHistory(req.device!, days, limit));
+    sendJson(res, historyResponseSchema, await userService.getDeviceHistory(req.device!, days, limit));
   })
 );
 
@@ -209,7 +240,7 @@ router.put(
   requireDeviceAccess,
   asyncHandler(async (req: DeviceAccessRequest, res) => {
     const { name } = renameDeviceSchema.parse(req.body);
-    res.json(await userService.renameDevice(req.device!, name));
+    sendJson(res, deviceInfoSchema, await userService.renameDevice(req.device!, name));
   })
 );
 
@@ -242,7 +273,7 @@ router.get(
   requireDeviceAccess,
   asyncHandler(async (req: DeviceAccessRequest, res) => {
     const options = historySeriesQuerySchema.parse(req.query);
-    res.json(await getDeviceHistorySeries(req.device!, options));
+    sendJson(res, historySeriesSchema, await getDeviceHistorySeries(req.device!, options));
   })
 );
 
@@ -251,7 +282,7 @@ router.get(
   '/devices/:deviceId/shares',
   requireDeviceAccess,
   asyncHandler(async (req: DeviceAccessRequest, res) => {
-    res.json(await userService.listDeviceShares(req.device!));
+    sendJson(res, sharesResponseSchema, await userService.listDeviceShares(req.device!));
   })
 );
 
@@ -264,7 +295,7 @@ router.post(
   requireDeviceAccess,
   asyncHandler(async (req: DeviceAccessRequest, res) => {
     const { email } = shareSchema.parse(req.body);
-    res.status(201).json(await userService.shareDevice(req.device!, email));
+    sendJson(res, shareCreatedSchema, await userService.shareDevice(req.device!, email), 201);
   })
 );
 
@@ -291,7 +322,7 @@ router.get(
   requireDeviceAccess,
   asyncHandler(async (req: DeviceAccessRequest, res) => {
     const { days } = usageQuerySchema.parse(req.query);
-    res.json(await getDeviceUsage(req.device!, days));
+    sendJson(res, usageResponseSchema, await getDeviceUsage(req.device!, days));
   })
 );
 
@@ -300,7 +331,7 @@ router.get(
   '/devices/:deviceId/tank-profile',
   requireDeviceAccess,
   asyncHandler(async (req: DeviceAccessRequest, res) => {
-    res.json({ profile: await tankProfileService.getTankProfile(req.device!) });
+    sendJson(res, tankProfileResponseSchema, { profile: await tankProfileService.getTankProfile(req.device!) });
   })
 );
 
@@ -322,7 +353,7 @@ router.put(
   requireDeviceAccess,
   asyncHandler(async (req: DeviceAccessRequest, res) => {
     const validated = tankProfileSchema.parse(req.body);
-    res.json({ profile: await tankProfileService.upsertTankProfile(req.device!, validated) });
+    sendJson(res, tankProfileResponseSchema, { profile: await tankProfileService.upsertTankProfile(req.device!, validated) });
   })
 );
 
@@ -331,7 +362,7 @@ router.get(
   '/devices/:deviceId/config',
   requireDeviceAccess,
   asyncHandler(async (req: DeviceAccessRequest, res) => {
-    res.json(await deviceService.getDeviceConfig(req.device!));
+    sendJson(res, deviceConfigPayloadSchema, await deviceService.getDeviceConfig(req.device!));
   })
 );
 
@@ -344,7 +375,7 @@ router.put(
   requireDeviceAccess,
   asyncHandler(async (req: DeviceAccessRequest, res) => {
     const validated = alertThresholdsSchema.parse(req.body);
-    res.json(await deviceService.updateAlertThresholds(req.device!, validated));
+    sendJson(res, configDtoSchema, await deviceService.updateAlertThresholds(req.device!, validated));
   })
 );
 
@@ -355,7 +386,7 @@ router.get(
   '/devices/:deviceId/alert-rules',
   requireDeviceAccess,
   asyncHandler(async (req: DeviceAccessRequest, res) => {
-    res.json(await alertRulesService.getAlertRules(req.device!));
+    sendJson(res, alertRulesResponseSchema, await alertRulesService.getAlertRules(req.device!));
   })
 );
 
@@ -378,7 +409,7 @@ router.put(
   requireDeviceAccess,
   asyncHandler(async (req: DeviceAccessRequest, res) => {
     const { rules } = alertRulesSchema.parse(req.body);
-    res.json(await alertRulesService.updateAlertRules(req.device!, rules));
+    sendJson(res, alertRulesResponseSchema, await alertRulesService.updateAlertRules(req.device!, rules));
   })
 );
 
@@ -394,7 +425,7 @@ router.put(
   asyncHandler(async (req: DeviceAccessRequest, res) => {
     const { sync_mode } = syncModeSchema.parse(req.body);
     const applied = await deviceService.setSyncMode(req.device!, sync_mode);
-    res.json({ sync_mode: applied });
+    sendJson(res, syncModeResponseSchema, { sync_mode: applied });
   })
 );
 
@@ -403,7 +434,7 @@ router.get(
   '/devices/:deviceId/firmware-status',
   requireDeviceAccess,
   asyncHandler(async (req: DeviceAccessRequest, res) => {
-    res.json(await firmwareService.getTenantFacingOtaStatus(req.device!));
+    sendJson(res, firmwareStatusSchema, await firmwareService.getTenantFacingOtaStatus(req.device!));
   })
 );
 
@@ -418,7 +449,7 @@ router.get(
   requireDeviceAccess,
   asyncHandler(async (req: DeviceAccessRequest, res) => {
     const { limit, include_dismissed } = deviceAlertsQuerySchema.parse(req.query);
-    res.json(await userService.getDeviceAlerts(req.device!, limit, include_dismissed));
+    sendJson(res, deviceAlertsResponseSchema, await userService.getDeviceAlerts(req.device!, limit, include_dismissed));
   })
 );
 
@@ -450,7 +481,7 @@ router.post(
   requireDeviceAccess,
   asyncHandler(async (req: DeviceAccessRequest & AuthRequest, res) => {
     await userService.acknowledgeAlert(req.device!, req.params.alertId, req.user!.id);
-    res.json({ success: true });
+    sendJson(res, okSchema, { success: true });
   })
 );
 
@@ -460,7 +491,7 @@ router.post(
   '/alerts/:alertId/acknowledge',
   asyncHandler(async (req: AuthRequest, res) => {
     await userService.acknowledgeAlertById({ id: req.user!.id, tenantId: req.user!.tenantId }, req.params.alertId);
-    res.json({ success: true });
+    sendJson(res, okSchema, { success: true });
   })
 );
 
@@ -476,7 +507,7 @@ router.post(
   asyncHandler(async (req: AuthRequest, res) => {
     const { token, platform } = pushTokenSchema.parse(req.body);
     await registerPushToken(req.user!.id, token, platform);
-    res.status(201).json({ success: true });
+    sendJson(res, okSchema, { success: true }, 201);
   })
 );
 
@@ -487,7 +518,7 @@ router.delete(
   asyncHandler(async (req: AuthRequest, res) => {
     const { token } = pushTokenSchema.pick({ token: true }).parse(req.body);
     await removePushToken(req.user!.id, token);
-    res.json({ success: true });
+    sendJson(res, okSchema, { success: true });
   })
 );
 
@@ -502,7 +533,7 @@ router.post(
   asyncHandler(async (req: AuthRequest, res) => {
     const { fcm_token } = fcmTokenSchema.parse(req.body);
     await updateUserFCMToken(req.user!.id, fcm_token);
-    res.json({ success: true });
+    sendJson(res, okSchema, { success: true });
   })
 );
 

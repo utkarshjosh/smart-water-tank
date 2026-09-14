@@ -1,4 +1,4 @@
-import { Device, User } from '@prisma/client';
+import { AlertSeverity, AlertType, Device, Role, User } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http-error';
 import { isUniqueConstraintError } from '../lib/prisma-errors';
@@ -62,7 +62,7 @@ async function resolveLevelPercent(
   };
 }
 
-function toUserDto(user: { id: string; email: string; name: string | null; role: string; tenantId: string | null; tenant?: { name: string } | null }) {
+function toUserDto(user: { id: string; email: string; name: string | null; role: Role; tenantId: string | null; tenant?: { name: string } | null }) {
   return {
     id: user.id,
     email: user.email,
@@ -265,7 +265,7 @@ export async function listDevicesForTenant(tenantId: string, userId: string) {
         level_percent_as_of: levelInfo.level_percent_as_of,
         has_tank_profile: !!profile,
         last_measurement: latest ? latest.timestamp : null,
-        active_alert: activeAlert ? (activeAlert.type === 'leak_detected' ? 'leak' : 'low') : null,
+        active_alert: activeAlert ? (activeAlert.type === 'leak_detected' ? ('leak' as const) : ('low' as const)) : null,
       };
     })
   );
@@ -342,14 +342,13 @@ export async function getDeviceAlerts(device: Device, limit: number, includeDism
 /** Shape shared by the per-device feed and the tenant-wide feed. */
 function toAlertDto(a: {
   id: string;
-  type: string;
-  severity: string;
+  type: AlertType;
+  severity: AlertSeverity;
   message: string | null;
   payload: unknown;
   acknowledged: boolean;
   dismissedAt: Date | null;
   createdAt: Date;
-  device?: { deviceId: string; name: string | null } | null;
 }) {
   return {
     id: a.id,
@@ -360,9 +359,6 @@ function toAlertDto(a: {
     acknowledged: a.acknowledged,
     dismissed: a.dismissedAt != null,
     created_at: a.createdAt,
-    ...(a.device
-      ? { device_id: a.device.deviceId, device_name: a.device.name || a.device.deviceId }
-      : {}),
   };
 }
 
@@ -418,7 +414,13 @@ export async function getUserAlerts(
   const alerts = rows.slice(0, opts.limit);
 
   return {
-    alerts: alerts.map(toAlertDto),
+    // The tenant-wide feed names the tank each alert is about; the per-device
+    // feed does not need to.
+    alerts: alerts.map((a) => ({
+      ...toAlertDto(a),
+      device_id: a.device.deviceId,
+      device_name: a.device.name || a.device.deviceId,
+    })),
     unacknowledged,
     // Null rather than absent, so a client has one thing to check. Callers
     // that ignore it (the web UI) behave exactly as before.

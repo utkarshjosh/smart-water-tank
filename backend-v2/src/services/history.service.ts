@@ -429,7 +429,7 @@ export async function getDeviceHistorySeries(device: Device, options: HistorySer
     // `from` has been narrowed to the oldest reading actually returned.
     truncated,
     has_tank_profile: profile != null,
-    columns: ['t', 'min', 'avg', 'max'],
+    columns: ['t', 'min', 'avg', 'max'] as const,
     series: buildSeries(buckets, metrics, profile, gapMs),
     samples: buckets.map((b) => [b.t, b.samples] as [number, number]),
   };

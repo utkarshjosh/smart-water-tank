@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as adminService from '../services/admin.service';
-import { callArgs, http, signInAs, userRow } from './helpers/http';
+import { adminDeviceDto, callArgs, http, signInAs, userRow } from './helpers/http';
 
 // Admin routes: query parsing and the filters handed to the service. The role
 // gate itself is covered in routes-auth.test.ts.
@@ -10,12 +10,13 @@ const admin = () => userRow({ id: 'admin-1', role: 'admin', tenantId: null });
 
 test('GET /devices with no filters lists live devices only', async (t) => {
   const headers = signInAs(t, admin());
-  const list = t.mock.method(adminService, 'listDevices', async () => [{ id: 'AQM-1' }]);
+  const row = adminDeviceDto({ device_id: 'AQM-1' });
+  const list = t.mock.method(adminService, 'listDevices', async () => [row]);
 
   const res = await http().get('/api/v1/admin/devices').set(headers);
 
   assert.equal(res.status, 200);
-  assert.deepEqual(res.body, { devices: [{ id: 'AQM-1' }] });
+  assert.deepEqual(res.body, { devices: [row] });
   assert.deepEqual(callArgs(list)[0], { tenantId: undefined, status: undefined, includeArchived: false });
 });
 

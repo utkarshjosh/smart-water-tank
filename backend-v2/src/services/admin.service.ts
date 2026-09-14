@@ -1,4 +1,4 @@
-import { AlertSeverity, DeviceStatus, Role, User } from '@prisma/client';
+import { Alert, AlertSeverity, DeviceStatus, Role, Tenant, User } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http-error';
 import { isUniqueConstraintError } from '../lib/prisma-errors';
@@ -6,6 +6,34 @@ import { getAuth } from '../config/firebase';
 import { createDeviceToken } from '../lib/device-token';
 import { toConfigDto } from './device.service';
 import { getTankProfileRaw, volumeLForProfile } from './tank-profile.service';
+
+// Tenant rows leave the API in snake_case like everything else, rather than
+// as the raw Prisma record the create/update routes used to echo.
+function toTenantDto(tenant: Tenant) {
+  return {
+    id: tenant.id,
+    name: tenant.name,
+    created_at: tenant.createdAt,
+    updated_at: tenant.updatedAt,
+    archived_at: tenant.archivedAt,
+  };
+}
+
+// The admin console's alert shape: no payload, with acknowledgement time.
+// getDeviceDetail used to return raw Prisma rows here (camelCase createdAt),
+// which the console read as created_at and rendered blank.
+function toAdminAlertDto(a: Alert) {
+  return {
+    id: a.id,
+    type: a.type,
+    severity: a.severity,
+    message: a.message,
+    acknowledged: a.acknowledged,
+    acknowledged_at: a.acknowledgedAt,
+    dismissed: a.dismissedAt != null,
+    created_at: a.createdAt,
+  };
+}
 
 function toRawUserDto(user: User) {
   return {
@@ -145,7 +173,7 @@ export async function getDeviceDetail(deviceId: string) {
           rssi: latestMeasurement.rssi,
         }
       : null,
-    recent_alerts: recentAlerts,
+    recent_alerts: recentAlerts.map(toAdminAlertDto),
   };
 }
 
@@ -231,7 +259,7 @@ export async function listTenants(opts: { includeArchived?: boolean } = {}) {
 export async function createTenant(name: string) {
   const existing = await prisma.tenant.findFirst({ where: { name } });
   if (existing) throw new HttpError(409, 'Tenant name already exists');
-  return prisma.tenant.create({ data: { name } });
+  return toTenantDto(await prisma.tenant.create({ data: { name } }));
 }
 
 export async function updateTenant(tenantId: string, name: string) {
@@ -241,7 +269,7 @@ export async function updateTenant(tenantId: string, name: string) {
   const nameTaken = await prisma.tenant.findFirst({ where: { name, NOT: { id: tenantId } } });
   if (nameTaken) throw new HttpError(409, 'Tenant name already exists');
 
-  return prisma.tenant.update({ where: { id: tenantId }, data: { name } });
+  return toTenantDto(await prisma.tenant.update({ where: { id: tenantId }, data: { name } }));
 }
 
 /**
@@ -288,14 +316,7 @@ export async function listAlerts(opts: {
   return {
     total,
     alerts: alerts.map((a) => ({
-      id: a.id,
-      type: a.type,
-      severity: a.severity,
-      message: a.message,
-      acknowledged: a.acknowledged,
-      acknowledged_at: a.acknowledgedAt,
-      dismissed: a.dismissedAt != null,
-      created_at: a.createdAt,
+      ...toAdminAlertDto(a),
       device_id: a.device.deviceId,
       device_name: a.device.name || a.device.deviceId,
       tenant_id: a.tenant.id,
@@ -668,7 +689,7 @@ export async function syncFirebaseUsers(limit: number | undefined, dryRun: boole
 
   if (dryRun) {
     return {
-      dry_run: true,
+      dry_run: true as const,
       stats,
       users_to_create: usersToCreate.map((u) => ({ uid: u.uid, email: u.email, displayName: u.displayName })),
     };
@@ -689,7 +710,7 @@ export async function syncFirebaseUsers(limit: number | undefined, dryRun: boole
     }
   }
 
-  return { dry_run: false, stats };
+  return { dry_run: false as const, stats };
 }
 
 export async function updateUserTenant(userIdOrUid: string, tenantId: string) {

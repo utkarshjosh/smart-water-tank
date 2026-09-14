@@ -81,12 +81,19 @@ backup_database() {
   ok "✅ Backup complete ($(numfmt --to=iec "$size" 2>/dev/null || echo "$size B"))"
 }
 
+# The repo is one npm workspace: the lockfile lives at the root and
+# packages/contracts is a dependency of both apps. Installing from the root
+# with --workspace pulls in just that app plus contracts (built by its
+# `prepare` script) and skips the mobile toolchain.
+install_workspace() {
+  echo "  → Installing dependencies (workspace: $1)..."
+  (cd "$(dirname "$0")" && npm ci --workspace="$1" --no-audit --no-fund)
+}
+
 deploy_backend() {
   info "📦 Deploying backend API..."
+  install_workspace backend-v2
   cd "$BACKEND_DIR"
-
-  echo "  → Installing dependencies..."
-  npm ci
 
   echo "  → Building (prisma generate + tsc)..."
   npm run build
@@ -107,10 +114,8 @@ deploy_backend() {
 
 deploy_frontend() {
   info "📦 Deploying admin panel + app..."
+  install_workspace frontend
   cd frontend
-
-  echo "  → Installing dependencies..."
-  npm ci
 
   echo "  → Building static bundle..."
   npm run build

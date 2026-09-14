@@ -4,7 +4,9 @@ import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { deviceAuth, DeviceAuthRequest } from '../middleware/deviceAuth.middleware';
 import { asyncHandler } from '../lib/async-handler';
+import { sendJson } from '../lib/send-json';
 import { HttpError } from '../lib/http-error';
+import { claimResponseSchema, deviceConfigPayloadSchema, measurementResponseSchema, otaCheckSchema } from '@aquamind/contracts';
 import * as deviceService from '../services/device.service';
 import * as firmwareService from '../services/firmware.service';
 
@@ -33,7 +35,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const validated = claimSchema.parse(req.body);
     const result = await deviceService.claimDevice(validated.claim_code, validated.hardware_id);
-    res.json({ device_token: result.deviceToken, device_id: result.deviceId });
+    sendJson(res, claimResponseSchema, { device_token: result.deviceToken, device_id: result.deviceId });
   })
 );
 
@@ -69,15 +71,20 @@ router.post(
       configVersion: validated.config_version,
     });
 
-    res.status(201).json({
-      success: true,
-      measurement_id: result.measurementId,
-      // Always echo the current version so the device can confirm it's in sync
-      // even when no full config is piggybacked.
-      config_version: result.configVersion,
-      // Full merged config included only when the device is stale.
-      ...(result.config ? { config: result.config } : {}),
-    });
+    sendJson(
+      res,
+      measurementResponseSchema,
+      {
+        success: true,
+        measurement_id: result.measurementId,
+        // Always echo the current version so the device can confirm it's in sync
+        // even when no full config is piggybacked.
+        config_version: result.configVersion,
+        // Full merged config included only when the device is stale.
+        ...(result.config ? { config: result.config } : {}),
+      },
+      201
+    );
   })
 );
 
@@ -86,7 +93,7 @@ router.get(
   '/devices/:deviceId/config',
   deviceAuth,
   asyncHandler(async (req: DeviceAuthRequest, res) => {
-    res.json(await deviceService.getDeviceConfig(req.device!));
+    sendJson(res, deviceConfigPayloadSchema, await deviceService.getDeviceConfig(req.device!));
   })
 );
 
@@ -96,7 +103,7 @@ router.get(
   deviceAuth,
   asyncHandler(async (req: DeviceAuthRequest, res) => {
     const headerVersion = req.headers['x-firmware-version'] as string | undefined;
-    res.json(await firmwareService.checkOtaUpdate(req.device!, headerVersion));
+    sendJson(res, otaCheckSchema, await firmwareService.checkOtaUpdate(req.device!, headerVersion));
   })
 );
 

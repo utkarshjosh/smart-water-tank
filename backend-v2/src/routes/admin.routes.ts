@@ -4,7 +4,34 @@ import * as fs from 'fs';
 import { z } from 'zod';
 import { AuthRequest, firebaseAuth, requireRole } from '../middleware/firebaseAuth.middleware';
 import { asyncHandler } from '../lib/async-handler';
+import { sendJson } from '../lib/send-json';
 import { HttpError } from '../lib/http-error';
+import {
+  adminAlertsResponseSchema,
+  adminDeviceCreatedSchema,
+  adminDeviceDetailSchema,
+  adminDeviceUpdatedSchema,
+  adminDevicesResponseSchema,
+  adminSummarySchema,
+  adminTenantsResponseSchema,
+  adminUsersResponseSchema,
+  archiveSummarySchema,
+  deviceArchivedSchema,
+  deviceRestoredSchema,
+  deviceTokenResponseSchema,
+  firebaseUsersResponseSchema,
+  firmwareDeletedResponseSchema,
+  firmwareListResponseSchema,
+  firmwareRolloutResponseSchema,
+  firmwareUnrolledResponseSchema,
+  firmwareUploadedResponseSchema,
+  okSchema,
+  syncFirebaseUsersResponseSchema,
+  tenantResponseSchema,
+  userArchivedSchema,
+  userLinkedResponseSchema,
+  userUpdatedResponseSchema,
+} from '@aquamind/contracts';
 import { env } from '../config/env';
 import * as adminService from '../services/admin.service';
 import * as firmwareService from '../services/firmware.service';
@@ -40,7 +67,7 @@ router.get(
   '/devices',
   asyncHandler(async (req, res) => {
     const { tenant_id, status } = listDevicesQuerySchema.parse(req.query);
-    res.json({
+    sendJson(res, adminDevicesResponseSchema, {
       devices: await adminService.listDevices({
         tenantId: tenant_id,
         status,
@@ -83,7 +110,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const { device_id, tenant_id, name } = createDeviceSchema.parse(req.body);
     const result = await adminService.createDevice({ deviceId: device_id, tenantId: tenant_id, name });
-    res.status(201).json(result);
+    sendJson(res, adminDeviceCreatedSchema, result, 201);
   })
 );
 
@@ -91,7 +118,7 @@ router.post(
 router.get(
   '/devices/:deviceId',
   asyncHandler(async (req, res) => {
-    res.json(await adminService.getDeviceDetail(req.params.deviceId));
+    sendJson(res, adminDeviceDetailSchema, await adminService.getDeviceDetail(req.params.deviceId));
   })
 );
 
@@ -111,7 +138,9 @@ router.put(
   '/devices/:deviceId',
   asyncHandler(async (req, res) => {
     const body = updateDeviceSchema.parse(req.body);
-    res.json(
+    sendJson(
+      res,
+      adminDeviceUpdatedSchema,
       await adminService.updateDevice(req.params.deviceId, {
         ...(body.name !== undefined ? { name: body.name } : {}),
         ...(body.tenant_id !== undefined ? { tenantId: body.tenant_id } : {}),
@@ -125,7 +154,7 @@ router.post(
   '/devices/:deviceId/config',
   asyncHandler(async (req, res) => {
     await adminService.upsertDeviceConfig(req.params.deviceId, req.body);
-    res.json({ success: true });
+    sendJson(res, okSchema, { success: true });
   })
 );
 
@@ -136,7 +165,7 @@ router.post(
   asyncHandler(async (req, res) => {
     if (!req.file) throw new HttpError(400, 'No file uploaded');
     const firmware = await firmwareService.uploadFirmware(req.file, req.body.version, req.body.description);
-    res.json({
+    sendJson(res, firmwareUploadedResponseSchema, {
       success: true,
       firmware: {
         id: firmware.id,
@@ -154,7 +183,7 @@ router.get(
   '/firmware',
   asyncHandler(async (req, res) => {
     const firmware = await firmwareService.listFirmware();
-    res.json({
+    sendJson(res, firmwareListResponseSchema, {
       firmware: firmware.map((fw) => ({
         id: fw.id,
         version: fw.version,
@@ -202,7 +231,7 @@ router.post(
       tenantIds: tenant_ids,
       rolloutPercentage: rollout_percentage,
     });
-    res.json({ success: true, assigned_devices: result.assignedDevices });
+    sendJson(res, firmwareRolloutResponseSchema, { success: true, assigned_devices: result.assignedDevices });
   })
 );
 
@@ -211,7 +240,7 @@ router.post(
   '/firmware/:firmwareId/unroll',
   asyncHandler(async (req, res) => {
     const result = await firmwareService.unrollFirmware(req.params.firmwareId);
-    res.json({
+    sendJson(res, firmwareUnrolledResponseSchema, {
       success: true,
       firmware_id: result.firmwareId,
       version: result.version,
@@ -225,7 +254,7 @@ router.delete(
   '/firmware/:firmwareId',
   asyncHandler(async (req, res) => {
     const result = await firmwareService.deleteFirmware(req.params.firmwareId);
-    res.json({
+    sendJson(res, firmwareDeletedResponseSchema, {
       success: true,
       firmware_id: result.firmwareId,
       version: result.version,
@@ -253,7 +282,9 @@ router.get(
   '/alerts',
   asyncHandler(async (req, res) => {
     const q = adminAlertsQuerySchema.parse(req.query);
-    res.json(
+    sendJson(
+      res,
+      adminAlertsResponseSchema,
       await adminService.listAlerts({
         limit: q.limit,
         tenantId: q.tenant_id,
@@ -272,7 +303,7 @@ router.get(
 router.get(
   '/tenants/:tenantId/archive-preview',
   asyncHandler(async (req, res) => {
-    res.json(await adminService.previewTenantArchive(req.params.tenantId));
+    sendJson(res, archiveSummarySchema, await adminService.previewTenantArchive(req.params.tenantId));
   })
 );
 
@@ -289,7 +320,7 @@ router.delete(
         'Archiving a tenant also archives its devices and users. Re-send with ?confirm=true.'
       );
     }
-    res.json(await adminService.archiveTenant(req.params.tenantId));
+    sendJson(res, archiveSummarySchema, await adminService.archiveTenant(req.params.tenantId));
   })
 );
 
@@ -297,7 +328,7 @@ router.delete(
 router.post(
   '/tenants/:tenantId/restore',
   asyncHandler(async (req, res) => {
-    res.json(await adminService.restoreTenant(req.params.tenantId));
+    sendJson(res, archiveSummarySchema, await adminService.restoreTenant(req.params.tenantId));
   })
 );
 
@@ -307,7 +338,7 @@ router.post(
 router.delete(
   '/devices/:deviceId',
   asyncHandler(async (req, res) => {
-    res.json(await adminService.archiveDevice(req.params.deviceId));
+    sendJson(res, deviceArchivedSchema, await adminService.archiveDevice(req.params.deviceId));
   })
 );
 
@@ -315,7 +346,7 @@ router.delete(
 router.post(
   '/devices/:deviceId/restore',
   asyncHandler(async (req, res) => {
-    res.json(await adminService.restoreDevice(req.params.deviceId));
+    sendJson(res, deviceRestoredSchema, await adminService.restoreDevice(req.params.deviceId));
   })
 );
 
@@ -325,7 +356,7 @@ router.post(
 router.delete(
   '/users/:userId',
   asyncHandler(async (req: AuthRequest, res) => {
-    res.json(await adminService.archiveUser(req.params.userId, req.user!.id));
+    sendJson(res, userArchivedSchema, await adminService.archiveUser(req.params.userId, req.user!.id));
   })
 );
 
@@ -333,7 +364,7 @@ router.delete(
 router.post(
   '/users/:userId/restore',
   asyncHandler(async (req, res) => {
-    res.json(await adminService.restoreUser(req.params.userId));
+    sendJson(res, userArchivedSchema, await adminService.restoreUser(req.params.userId));
   })
 );
 
@@ -341,7 +372,7 @@ router.post(
 router.get(
   '/analytics/summary',
   asyncHandler(async (req, res) => {
-    res.json(await adminService.analyticsSummary());
+    sendJson(res, adminSummarySchema, await adminService.analyticsSummary());
   })
 );
 
@@ -349,7 +380,7 @@ router.get(
 router.get(
   '/tenants',
   asyncHandler(async (req, res) => {
-    res.json({
+    sendJson(res, adminTenantsResponseSchema, {
       tenants: await adminService.listTenants({ includeArchived: req.query.include_archived === 'true' }),
     });
   })
@@ -363,7 +394,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const { name } = createTenantSchema.parse(req.body);
     const tenant = await adminService.createTenant(name);
-    res.status(201).json({ tenant });
+    sendJson(res, tenantResponseSchema, { tenant }, 201);
   })
 );
 
@@ -375,7 +406,7 @@ router.put(
   asyncHandler(async (req, res) => {
     const { name } = updateTenantSchema.parse(req.body);
     const tenant = await adminService.updateTenant(req.params.tenantId, name);
-    res.json({ tenant });
+    sendJson(res, tenantResponseSchema, { tenant });
   })
 );
 
@@ -396,7 +427,7 @@ router.post(
       throw new HttpError(403, 'Only a super admin can create another super admin');
     }
     const result = await adminService.createOrLinkUser({ firebaseUid: firebase_uid, email, name, tenantId: tenant_id, role });
-    res.json(result);
+    sendJson(res, userLinkedResponseSchema, result);
   })
 );
 
@@ -405,7 +436,7 @@ router.post(
   '/devices/:deviceId/token',
   asyncHandler(async (req, res) => {
     const token = await adminService.reissueDeviceToken(req.params.deviceId);
-    res.json({ success: true, token, device_id: req.params.deviceId });
+    sendJson(res, deviceTokenResponseSchema, { success: true, token, device_id: req.params.deviceId });
   })
 );
 
@@ -419,7 +450,7 @@ router.get(
   '/users',
   asyncHandler(async (req, res) => {
     const { tenant_id, search } = listUsersQuerySchema.parse(req.query);
-    res.json({
+    sendJson(res, adminUsersResponseSchema, {
       users: await adminService.listUsers({
         tenantId: tenant_id,
         search,
@@ -439,7 +470,7 @@ router.get(
   '/users/firebase',
   asyncHandler(async (req, res) => {
     const { search, limit } = listFirebaseUsersQuerySchema.parse(req.query);
-    res.json(await adminService.listFirebaseUsers(search, limit));
+    sendJson(res, firebaseUsersResponseSchema, await adminService.listFirebaseUsers(search, limit));
   })
 );
 
@@ -453,7 +484,7 @@ router.post(
   '/users/sync-firebase',
   asyncHandler(async (req, res) => {
     const { limit, dry_run } = syncFirebaseSchema.parse(req.body);
-    res.json(await adminService.syncFirebaseUsers(limit, dry_run === true));
+    sendJson(res, syncFirebaseUsersResponseSchema, await adminService.syncFirebaseUsers(limit, dry_run === true));
   })
 );
 
@@ -465,7 +496,7 @@ router.put(
   asyncHandler(async (req, res) => {
     const { tenant_id } = updateUserTenantSchema.parse(req.body);
     const user = await adminService.updateUserTenant(req.params.userId, tenant_id);
-    res.json({ user, message: 'User tenant updated successfully' });
+    sendJson(res, userUpdatedResponseSchema, { user, message: 'User tenant updated successfully' });
   })
 );
 
@@ -479,7 +510,7 @@ router.put(
   asyncHandler(async (req, res) => {
     const { role } = updateUserRoleSchema.parse(req.body);
     const user = await adminService.updateUserRole(req.params.userId, role);
-    res.json({ user, message: 'User role updated successfully' });
+    sendJson(res, userUpdatedResponseSchema, { user, message: 'User role updated successfully' });
   })
 );
 

@@ -121,3 +121,7 @@ mobile-app/*.orig.*
 
 # Claude Code local worktrees
 .claude/worktrees/
+
+# Workspace
+node_modules/
+packages/*/dist/

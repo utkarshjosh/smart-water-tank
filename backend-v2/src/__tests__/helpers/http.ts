@@ -4,6 +4,7 @@ import type { Device, User } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import * as firebase from '../../config/firebase';
 import { createApp } from '../../app';
+import type * as contracts from '@aquamind/contracts';
 
 // One app for the whole test process. createApp() has no side effects beyond
 // wiring middleware, so sharing it between files is safe.
@@ -101,4 +102,109 @@ export function callArgs<F extends (...args: any[]) => unknown = (...args: any[]
   const call = spy.mock.calls[n];
   if (!call) throw new Error(`expected call #${n} but the mock was called ${spy.mock.calls.length} time(s)`);
   return call.arguments as Parameters<F>;
+}
+
+// --- Contract-complete response fixtures -------------------------------------
+// sendJson() validates every response against @aquamind/contracts in test, so a
+// mocked service must return the full wire shape. Dates are ISO strings here
+// (what the wire carries) so a test can deepEqual res.body against the fixture.
+
+const T = '2026-09-14T10:00:00.000Z';
+
+export function meDto(overrides: Partial<contracts.Me> = {}): contracts.Me {
+  return { id: 'user-1', email: 'user@example.com', name: 'Test User', role: 'user', tenant_id: 'tenant-1', tenant_name: 'Home', ...overrides };
+}
+
+export function deviceSummaryDto(overrides: Partial<contracts.DeviceSummary> = {}): contracts.DeviceSummary {
+  return {
+    id: 'AQM-0042',
+    name: 'Roof tank',
+    status: 'online',
+    firmware_version: '1.2.0',
+    last_seen: T,
+    current_volume: 812.5,
+    level_percent: 64,
+    level_percent_stale: false,
+    level_percent_as_of: T,
+    has_tank_profile: true,
+    last_measurement: T,
+    active_alert: null,
+    ...overrides,
+  };
+}
+
+export function deviceInfoDto(overrides: Partial<contracts.DeviceInfo> = {}): contracts.DeviceInfo {
+  return { id: 'AQM-0042', name: 'Roof tank', status: 'online', firmware_version: '1.2.0', last_seen: T, created_at: T, ...overrides };
+}
+
+export function currentReadingDto(overrides: Partial<contracts.CurrentReading> = {}): contracts.CurrentReading {
+  return {
+    device_id: 'AQM-0042',
+    timestamp: T,
+    level_cm: 40,
+    volume_l: 812.5,
+    temperature_c: 24.5,
+    battery_v: 3.9,
+    rssi: -61,
+    level_percent: 64,
+    level_percent_stale: false,
+    level_percent_as_of: T,
+    ...overrides,
+  };
+}
+
+export function claimCodeDto(overrides: Partial<contracts.ClaimCode> = {}): contracts.ClaimCode {
+  return { claim_code: 'ABCD-1234', expires_at: T, expires_in_seconds: 600, ...overrides };
+}
+
+export function historySeriesDto(overrides: Partial<contracts.HistorySeries> = {}): contracts.HistorySeries {
+  return {
+    device_id: 'AQM-0042',
+    from: T,
+    to: T,
+    requested_from: T,
+    bucket: '1h',
+    requested_bucket: 'auto',
+    bucket_seconds: 3600,
+    point_count: 0,
+    truncated: false,
+    has_tank_profile: true,
+    columns: ['t', 'min', 'avg', 'max'],
+    series: {},
+    samples: [],
+    ...overrides,
+  };
+}
+
+export function deviceConfigPayloadDto(overrides: Partial<contracts.DeviceConfigPayload> = {}): contracts.DeviceConfigPayload {
+  return {
+    measurement_interval_ms: 60000,
+    report_interval_ms: 300000,
+    tank_full_threshold_l: null,
+    tank_low_threshold_l: null,
+    tank_full_threshold_pct: 95,
+    tank_low_threshold_pct: 20,
+    battery_low_threshold_v: 3.3,
+    sync_mode: 'piggyback',
+    config_version: 3,
+    ...overrides,
+  };
+}
+
+export function adminDeviceDto(overrides: Partial<contracts.AdminDevice> = {}): contracts.AdminDevice {
+  return {
+    id: 'dev-uuid',
+    device_id: 'AQM-0042',
+    name: 'Roof tank',
+    tenant_id: 'tenant-1',
+    tenant_name: 'Home',
+    status: 'online',
+    firmware_version: '1.2.0',
+    last_seen: T,
+    current_volume: 812.5,
+    last_measurement: T,
+    created_at: T,
+    archived_at: null,
+    ...overrides,
+  };
 }

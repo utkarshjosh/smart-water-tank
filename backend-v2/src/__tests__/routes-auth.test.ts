@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { HttpError } from '../lib/http-error';
 import * as onboarding from '../services/onboarding.service';
 import * as userService from '../services/user.service';
-import { callArgs, deviceLookupReturns, deviceRow, http, signInAs, userRow } from './helpers/http';
+import { callArgs, currentReadingDto, deviceLookupReturns, deviceRow, http, meDto, signInAs, userRow } from './helpers/http';
 
 // The auth chain every tenant route sits behind:
 //   firebaseAuth -> requireTenant -> requireDeviceAccess (for :deviceId routes)
@@ -42,12 +42,12 @@ test('first sign-in with no user row auto-provisions a personal tenant', async (
   const headers = signInAs(t, null, { uid: 'brand-new-uid' });
   const provisioned = userRow({ id: 'user-new', firebaseUid: 'brand-new-uid', tenantId: 'tenant-new' });
   const provision = t.mock.method(onboarding, 'provisionPersonalTenantAndUser', async () => provisioned);
-  t.mock.method(userService, 'getMe', async (userId: string) => ({ id: userId }));
+  t.mock.method(userService, 'getMe', async (userId: string) => meDto({ id: userId, tenant_id: 'tenant-new' }));
 
   const res = await http().get('/api/v1/user/me').set(headers);
 
   assert.equal(res.status, 200);
-  assert.deepEqual(res.body, { id: 'user-new' });
+  assert.equal(res.body.id, 'user-new');
   assert.equal(provision.mock.callCount(), 1);
   assert.deepEqual(callArgs(provision)[0], {
     firebaseUid: 'brand-new-uid',
@@ -60,7 +60,7 @@ test('first sign-in with no user row auto-provisions a personal tenant', async (
 
 test('/me works for a user with no tenant', async (t) => {
   const headers = signInAs(t, userRow({ tenantId: null }));
-  t.mock.method(userService, 'getMe', async () => ({ id: 'user-1', tenant_id: null }));
+  t.mock.method(userService, 'getMe', async () => meDto({ tenant_id: null, tenant_name: null }));
   const res = await http().get('/api/v1/user/me').set(headers);
   assert.equal(res.status, 200);
 });
@@ -101,7 +101,7 @@ test("another tenant's device with no share -> 403", async (t) => {
 test("another tenant's device with a user_device_mappings grant -> allowed", async (t) => {
   const headers = signInAs(t, userRow({ tenantId: 'tenant-1' }));
   deviceLookupReturns(t, deviceRow({ tenantId: 'tenant-2' }), { id: 'map-1' });
-  t.mock.method(userService, 'getDeviceCurrent', async () => ({ device_id: 'AQM-0042' }));
+  t.mock.method(userService, 'getDeviceCurrent', async () => currentReadingDto());
   const res = await http().get('/api/v1/user/devices/AQM-0042/current').set(headers);
   assert.equal(res.status, 200);
 });
@@ -109,7 +109,7 @@ test("another tenant's device with a user_device_mappings grant -> allowed", asy
 test('same tenant -> allowed and the handler receives the device row', async (t) => {
   const headers = signInAs(t, userRow({ tenantId: 'tenant-1' }));
   deviceLookupReturns(t, deviceRow({ tenantId: 'tenant-1' }));
-  const current = t.mock.method(userService, 'getDeviceCurrent', async () => ({ device_id: 'AQM-0042' }));
+  const current = t.mock.method(userService, 'getDeviceCurrent', async () => currentReadingDto());
   const res = await http().get('/api/v1/user/devices/AQM-0042/current').set(headers);
   assert.equal(res.status, 200);
   assert.equal(callArgs<typeof userService.getDeviceCurrent>(current)[0].deviceId, 'AQM-0042');
@@ -118,7 +118,7 @@ test('same tenant -> allowed and the handler receives the device row', async (t)
 test('admin role bypasses tenant and share checks', async (t) => {
   const headers = signInAs(t, userRow({ role: 'admin', tenantId: 'tenant-admin' }));
   deviceLookupReturns(t, deviceRow({ tenantId: 'tenant-2' }), null);
-  t.mock.method(userService, 'getDeviceCurrent', async () => ({ device_id: 'AQM-0042' }));
+  t.mock.method(userService, 'getDeviceCurrent', async () => currentReadingDto());
   const res = await http().get('/api/v1/user/devices/AQM-0042/current').set(headers);
   assert.equal(res.status, 200);
 });
@@ -180,4 +180,17 @@ test('unexpected error -> 500 with a generic body (no stack or message)', async 
   const res = await http().get('/api/v1/user/me').set(headers);
   assert.equal(res.status, 500);
   assert.deepEqual(res.body, { error: 'Internal server error' });
+});
+
+// --- contract enforcement ---------------------------------------------------
+
+test('a handler whose payload does not match its contract -> 500 naming the fields', async (t) => {
+  const headers = signInAs(t, userRow());
+  // Drops email and sends role as something the enum does not allow.
+  t.mock.method(userService, 'getMe', async () => ({ id: 'user-1', name: null, role: 'owner', tenant_id: null, tenant_name: null }) as never);
+  const res = await http().get('/api/v1/user/me').set(headers);
+  assert.equal(res.status, 500);
+  assert.equal(res.body.error, 'Response does not match its contract');
+  assert.ok(res.body.details.some((d: string) => d.startsWith('email:')));
+  assert.ok(res.body.details.some((d: string) => d.startsWith('role:')));
 });

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as deviceService from '../services/device.service';
-import { callArgs, deviceRow, deviceTokenResolvesTo, http } from './helpers/http';
+import { callArgs, deviceConfigPayloadDto, deviceRow, deviceTokenResolvesTo, http } from './helpers/http';
 
 // Device-facing routes: the unauthenticated claim exchange and the
 // bearer-token routes a provisioned device calls from firmware.
@@ -73,26 +73,28 @@ test('POST /measurements -> 201 with the echoed config_version and no config whe
 
 test('POST /measurements piggybacks the full config when the device is stale', async (t) => {
   const headers = deviceTokenResolvesTo(t, deviceRow());
+  const config = deviceConfigPayloadDto({ config_version: 4 });
   t.mock.method(deviceService, 'recordMeasurement', async () => ({
     measurementId: 'm-2',
     configVersion: 4,
-    config: { config_version: 4, report_interval_ms: 300000 },
+    config,
   }));
 
   const res = await http().post('/api/v1/measurements').set(headers).send({ level_cm: 12.5, volume_l: 800, config_version: 3 });
 
   assert.equal(res.status, 201);
-  assert.deepEqual(res.body.config, { config_version: 4, report_interval_ms: 300000 });
+  assert.deepEqual(res.body.config, config);
 });
 
 test('GET /devices/:id/config returns the config for the token holder, ignoring the URL id', async (t) => {
   const headers = deviceTokenResolvesTo(t, deviceRow({ deviceId: 'AQM-0042' }));
-  const config = t.mock.method(deviceService, 'getDeviceConfig', async () => ({ config_version: 3 }));
+  const payload = deviceConfigPayloadDto({ config_version: 3 });
+  const config = t.mock.method(deviceService, 'getDeviceConfig', async () => payload);
 
   const res = await http().get('/api/v1/devices/AQM-9999/config').set(headers);
 
   assert.equal(res.status, 200);
-  assert.deepEqual(res.body, { config_version: 3 });
+  assert.deepEqual(res.body, payload);
   // Identity comes from the bearer, not the path.
   assert.equal(callArgs<typeof deviceService.getDeviceConfig>(config)[0].deviceId, 'AQM-0042');
 });
