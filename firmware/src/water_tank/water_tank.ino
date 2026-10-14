@@ -185,7 +185,7 @@ void setup() {
 
         #if MQTT_ENABLED
         // MQTT transport: connect, announce, and subscribe to config/cmd.
-        // init() may spend up to 45 seconds inside NTP, which narrates itself;
+        // init() may spend up to 18 seconds inside NTP, which narrates itself;
         // connect() then blocks in a TLS handshake we cannot tick from, so it
         // gets a static line rather than a bar that would sit still.
         MqttReporter::init();

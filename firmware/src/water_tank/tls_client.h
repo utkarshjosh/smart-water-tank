@@ -81,13 +81,19 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
 )EOF";
 
     constexpr time_t MIN_VALID_EPOCH = 1704067200; // 2024-01-01 UTC
-    // A freshly connected ESP8266 often needs a few seconds for DHCP, DNS and
-    // the first UDP reply. Retry across independent NTP providers before
-    // refusing TLS; never fall back to insecure certificate verification.
-    constexpr unsigned long TIME_SYNC_ATTEMPT_MS = 15000;
-    constexpr uint8_t TIME_SYNC_ATTEMPTS = 3;
+    // Each attempt asks exactly one server for a short window, then moves on.
+    // configTime() restarts the SNTP client at its first server, and lwIP only
+    // fails over after 15 s of silence - so handing it all three servers with a
+    // 15 s window restarted it just before it would try the second one, and
+    // only the first server was ever asked, one packet per attempt. A healthy
+    // reply takes well under a second; a lost packet now costs 3 s, not 15.
+    // Never fall back to insecure certificate verification.
+    static const char* const NTP_SERVERS[] = {"time.google.com", "time.cloudflare.com", "pool.ntp.org"};
+    constexpr uint8_t NTP_SERVER_COUNT = sizeof(NTP_SERVERS) / sizeof(NTP_SERVERS[0]);
+    constexpr unsigned long TIME_SYNC_ATTEMPT_MS = 3000;
+    constexpr uint8_t TIME_SYNC_ATTEMPTS = 6; // every server twice: 18 s worst case
     // Several clients (HTTP recovery, MQTT, OTA) may ask for TLS during one
-    // boot. After one 45-second NTP failure, do not immediately spend another
+    // boot. After one 18-second NTP failure, do not immediately spend another
     // full window before the duty-cycle awake budget can put the device back to
     // sleep. A later reconnect in always-on mode can retry after this cooldown.
     constexpr unsigned long TIME_SYNC_FAILURE_COOLDOWN_MS = 60000;
@@ -109,23 +115,26 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
         }
 
         for (uint8_t attempt = 1; attempt <= TIME_SYNC_ATTEMPTS; ++attempt) {
-            Serial.printf("[TLS] Syncing clock via NTP (attempt %u/%u)...\n", attempt, TIME_SYNC_ATTEMPTS);
-            // Up to three 15-second attempts is 45 seconds of a boot that
-            // otherwise shows nothing at all. The attempt number is on screen
-            // because reaching 3/3 is the moment this stops being slow and
-            // starts being broken.
+            const char* server = NTP_SERVERS[(attempt - 1) % NTP_SERVER_COUNT];
+            Serial.printf("[TLS] Syncing clock via %s (attempt %u/%u)...\n", server, attempt, TIME_SYNC_ATTEMPTS);
+            // The attempt number is on screen because reaching the last one is
+            // the moment this stops being slow and starts being broken.
             char stage[Progress::TEXT_MAX];
             snprintf(stage, sizeof(stage), "Clock: NTP %u/%u", attempt, TIME_SYNC_ATTEMPTS);
             Progress::stage(stage);
 
-            configTime(0, 0, "time.cloudflare.com", "time.google.com", "pool.ntp.org");
+            configTime(0, 0, server);
             const unsigned long started = millis();
             while (time(nullptr) < MIN_VALID_EPOCH && millis() - started < TIME_SYNC_ATTEMPT_MS) {
-                delay(250);
+                delay(100);
                 Progress::tick();
             }
             if (time(nullptr) >= MIN_VALID_EPOCH) {
-                Serial.println(F("[TLS] Clock synchronized"));
+                Serial.printf("[TLS] Clock synchronized via %s in %lu ms\n", server, millis() - started);
+                // Single-server setup is only for fast first contact. Re-arm
+                // with every server so the hourly re-sync keeps lwIP's own
+                // failover; the clock already set stays set across the restart.
+                configTime(0, 0, NTP_SERVERS[0], NTP_SERVERS[1], NTP_SERVERS[2]);
                 return true;
             }
         }
