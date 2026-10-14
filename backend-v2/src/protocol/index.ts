@@ -41,7 +41,9 @@ export const telemetryDataSchema = z.object({
   level_cm: z.number().nullable(),
   temperature_c: z.number().nullable().optional(),
   battery_v: z.number().optional(),
+  battery_pct: z.number().optional(),
   rssi: z.number().optional(),
+  sleep_duration_sec: z.number().optional(),
 });
 export type TelemetryData = z.infer<typeof telemetryDataSchema>;
 

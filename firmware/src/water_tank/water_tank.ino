@@ -33,6 +33,9 @@
 #include "ota_handler.h"
 #include "power_manager.h"
 #include "storage.h"
+#include "display.h"
+#include "buttons.h"
+#include "progress.h"
 
 // ============================================================================
 // Global State
@@ -103,8 +106,29 @@ void setup() {
     Config::load();
     PowerManager::init();
     
+    // Intermediate 8-second keep-alive pulse to reset TP4221B power bank 16s auto-shutdown
+    if (PowerManager::shouldPerformKeepAlivePulseOnly(Config::reportIntervalMs)) {
+        PowerManager::executeKeepAlivePulseOnly();
+        return; // ESP.deepSleep() does not return
+    }
+
     Sensor::init();
+
+    #if DISPLAY_ENABLED
+    // Early, so the panel can narrate the boot instead of sitting blank while
+    // WiFi negotiates. A missing panel is not fatal - init() returns false and
+    // every later call is a no-op.
+    Display::init();
+    Buttons::init();
+    // The version rather than "starting up...": on a device that is now only
+    // ever updated over the air, the splash is the one moment you can read
+    // which image actually booted without pressing a button twice.
+    Display::showMessage("AquaMind", FIRMWARE_VERSION);
+    #endif
+
+    #if ENABLE_LOCAL_ALERTS
     Alerts::init();
+    #endif
 
     // Take a real measurement now, before any WiFi/report timer can fire.
     // Without this, state.waterLevelCm stays at its zero-initialized value
@@ -120,6 +144,9 @@ void setup() {
     // Connect to WiFi (will open the config portal after WIFI_RESTART_THRESHOLD
     // restarts in a row with no successful connection)
     Serial.println(F("[WiFi] Connecting..."));
+    #if DISPLAY_ENABLED
+    Display::showMessage("WiFi connecting", Config::wifiSsid.c_str());
+    #endif
     WifiManager::init();
 
     if (WifiManager::connect()) {
@@ -129,11 +156,22 @@ void setup() {
         Serial.print(F("[WiFi] Connected! IP: "));
         Serial.println(WiFi.localIP());
 
+        #if ENABLE_WIFI_LIGHT_SLEEP
+        // Keeps the association (so the device stays continuously online and
+        // MQTT keeps its subscriptions) while the CPU sleeps between DTIM
+        // beacons. Buttons still respond because the loop resumes on wake.
+        WiFi.setSleepMode(WIFI_LIGHT_SLEEP, WIFI_LIGHT_SLEEP_LISTEN_INTERVAL);
+        Serial.println(F("[Power] WiFi light sleep enabled"));
+        #endif
+
         // A device that's connected to WiFi but never completed pairing has
         // no usable device id/token - send it back into the config portal
         // instead of reporting with an empty token forever.
         if (!Config::isMqttProvisioned()) {
             Serial.println(F("[WiFi] MQTT provisioning proof missing, entering config portal..."));
+            #if DISPLAY_ENABLED
+            Display::showMessage("PAIRING MODE", AP_SSID);
+            #endif
             WifiManager::connect(true); // blocks; always restarts the device when it returns
             return;
         }
@@ -147,7 +185,11 @@ void setup() {
 
         #if MQTT_ENABLED
         // MQTT transport: connect, announce, and subscribe to config/cmd.
+        // init() may spend up to 45 seconds inside NTP, which narrates itself;
+        // connect() then blocks in a TLS handshake we cannot tick from, so it
+        // gets a static line rather than a bar that would sit still.
         MqttReporter::init();
+        Progress::note("Cloud connecting", "TLS handshake");
         MqttReporter::connect();
         #endif
 
@@ -176,9 +218,15 @@ void setup() {
         #endif
     }
     
+    #if ENABLE_LOCAL_ALERTS
     // Play startup sound
     Alerts::playStartupSound();
+    #endif
     
+    // Narration is over; the first loop() pass draws real state. Doing this
+    // explicitly (update() would also do it) marks where boot ends.
+    Progress::clear();
+
     Serial.println(F("[System] Setup complete!"));
     Serial.println();
 }
@@ -189,7 +237,36 @@ void setup() {
 
 void loop() {
     unsigned long now = millis();
-    
+
+    #if DISPLAY_ENABLED
+    // Serviced first so a press is never delayed behind network work.
+    Buttons::update();
+
+    if (Buttons::takeShortPress(Buttons::NEXT)) {
+        Display::nextScreen();
+        Display::backlightOn();
+    }
+
+    // "Refresh now": re-measure and let the existing report path fire on this
+    // pass rather than duplicating the transport logic here.
+    if (Buttons::takeShortPress(Buttons::SELECT)) {
+        Display::backlightOn();
+        takeMeasurement();
+        state.lastMeasurement = now;
+        state.lastReport = 0;
+    }
+
+    // Held: back into pairing. connect(true) blocks and always restarts the
+    // device when the portal closes, so nothing after this runs.
+    if (Buttons::takeLongPress(Buttons::SELECT)) {
+        Serial.println(F("[Buttons] Long press - entering config portal"));
+        Display::showMessage("PAIRING MODE", AP_SSID);
+        WifiManager::connect(true);
+    }
+
+    Display::tick();
+    #endif
+
     // Handle OTA updates
     OTAHandler::handle();
 
@@ -247,7 +324,13 @@ void loop() {
     
     // Check alert conditions
     checkAlerts();
-    
+
+    #if DISPLAY_ENABLED
+    // Last, so the panel shows the state this pass actually produced. update()
+    // skips the I2C write when the rendered text is unchanged.
+    Display::update(state);
+    #endif
+
     // Small delay to prevent tight loop
     delay(10);
 }
@@ -341,13 +424,17 @@ void checkAlerts() {
         if (state.volumeLiters >= Config::tankFullThreshold) {
             if (!state.alertActive) {
                 Serial.println(F("[Alert] Tank is FULL!"));
+                #if ENABLE_LOCAL_ALERTS
                 Alerts::triggerTankFull();
+                #endif
             }
             alertTriggered = true;
         } else if (state.volumeLiters <= Config::tankLowThreshold) {
             if (!state.alertActive) {
                 Serial.println(F("[Alert] Tank is LOW!"));
+                #if ENABLE_LOCAL_ALERTS
                 Alerts::triggerTankLow();
+                #endif
             }
             alertTriggered = true;
         }
@@ -357,7 +444,9 @@ void checkAlerts() {
     if (!alertTriggered && state.batteryVoltage < Config::batteryLowThreshold) {
         if (!state.alertActive) {
             Serial.println(F("[Alert] Battery LOW!"));
+            #if ENABLE_LOCAL_ALERTS
             Alerts::triggerBatteryLow();
+            #endif
         }
         alertTriggered = true;
     }

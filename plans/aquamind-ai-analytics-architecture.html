@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Analytics &amp; Water Consumption Predictor - AquaMind Plans</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/tokyo-night-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #090d16;
+            --bg-secondary: #111827;
+            --bg-card: rgba(17, 24, 39, 0.7);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --accent-cyan: #38bdf8;
+            --accent-blue: #6366f1;
+            --accent-green: #34d399;
+            --accent-amber: #fbbf24;
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --text-muted: #6b7280;
+            --code-bg: #0d1322;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.7;
+            overflow-x: hidden;
+        }
+
+        /* Header / Navbar */
+        .navbar {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(9, 13, 22, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.85rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .nav-left {
+            display: flex;
+            align-items: center;
+            gap: 1.25rem;
+        }
+
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9rem;
+            padding: 0.4rem 0.85rem;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            transition: all 0.2s ease;
+        }
+
+        .back-btn:hover {
+            color: var(--accent-cyan);
+            background: rgba(56, 189, 248, 0.1);
+            border-color: rgba(56, 189, 248, 0.3);
+        }
+
+        .nav-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #ffffff 0%, var(--accent-cyan) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.65rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+        }
+
+        .badge-active {
+            background: rgba(56, 189, 248, 0.15);
+            color: var(--accent-cyan);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+        }
+
+        .badge-executed {
+            background: rgba(52, 211, 153, 0.15);
+            color: var(--accent-green);
+            border: 1px solid rgba(52, 211, 153, 0.3);
+        }
+
+        .badge-arch {
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--accent-blue);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+        }
+
+        /* Container Layout */
+        .layout {
+            display: flex;
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 2rem;
+            gap: 2.5rem;
+        }
+
+        /* Sidebar TOC */
+        .sidebar {
+            width: 280px;
+            flex-shrink: 0;
+            position: sticky;
+            top: 5rem;
+            height: calc(100vh - 6rem);
+            overflow-y: auto;
+            padding-right: 1rem;
+        }
+
+        .sidebar h4 {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+
+        .toc-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .toc-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.88rem;
+            font-weight: 500;
+            display: block;
+            padding: 0.35rem 0.65rem;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .toc-link:hover, .toc-link.active {
+            color: var(--accent-cyan);
+            background: rgba(56, 189, 248, 0.08);
+        }
+
+        .toc-sub {
+            padding-left: 1rem;
+            font-size: 0.82rem;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            min-width: 0;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 3rem;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+        }
+
+        .doc-header {
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .doc-header h1 {
+            font-size: 2.25rem;
+            font-weight: 800;
+            line-height: 1.25;
+            margin-bottom: 0.75rem;
+            color: #ffffff;
+        }
+
+        .doc-meta {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        /* Markdown Rendered Styling */
+        .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 {
+            color: #ffffff;
+            font-weight: 700;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            scroll-margin-top: 6rem;
+        }
+
+        .markdown-body h1 { font-size: 1.75rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; }
+        .markdown-body h2 { font-size: 1.4rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.4rem; }
+        .markdown-body h3 { font-size: 1.15rem; }
+
+        .markdown-body p {
+            margin-bottom: 1.25rem;
+            color: #d1d5db;
+        }
+
+        .markdown-body ul, .markdown-body ol {
+            margin-bottom: 1.25rem;
+            padding-left: 1.5rem;
+            color: #d1d5db;
+        }
+
+        .markdown-body li {
+            margin-bottom: 0.4rem;
+        }
+
+        .markdown-body blockquote {
+            border-left: 4px solid var(--accent-cyan);
+            background: rgba(56, 189, 248, 0.05);
+            padding: 1rem 1.25rem;
+            border-radius: 0 8px 8px 0;
+            margin-bottom: 1.5rem;
+            color: #e5e7eb;
+        }
+
+        .markdown-body table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+            font-size: 0.9rem;
+        }
+
+        .markdown-body th, .markdown-body td {
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--border-color);
+            text-align: left;
+        }
+
+        .markdown-body th {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--accent-cyan);
+            font-weight: 700;
+        }
+
+        .markdown-body tr:nth-child(even) {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .markdown-body code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--code-bg);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.85em;
+            color: var(--accent-cyan);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .markdown-body pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 1.25rem;
+            overflow-x: auto;
+            margin: 1.5rem 0;
+        }
+
+        .markdown-body pre code {
+            background: transparent;
+            padding: 0;
+            border: none;
+            color: inherit;
+            font-size: 0.88rem;
+        }
+
+        .mermaid {
+            background: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            display: flex;
+            justify-content: center;
+            margin: 1.5rem 0;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        @media (max-width: 1024px) {
+            .sidebar { display: none; }
+            .main-content { padding: 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar">
+        <div class="nav-left">
+            <a href="index.html" class="back-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                Plans Hub
+            </a>
+            <span class="nav-title">AI Analytics &amp; Water Consumption Predictor</span>
+        </div>
+        <div>
+            <span class="badge badge-arch">Architecture</span>
+        </div>
+    </nav>
+
+    <div class="layout">
+        <aside class="sidebar">
+            <h4>Table of Contents</h4>
+            <ul class="toc-list" id="toc"></ul>
+        </aside>
+
+        <main class="main-content">
+            <div class="doc-header">
+                <h1>AI Analytics &amp; Water Consumption Predictor</h1>
+                <div class="doc-meta">
+                    <span>Category: <strong>AI &amp; Analytics</strong></span>
+                    <span>•</span>
+                    <span>Status: <strong>Architecture</strong></span>
+                </div>
+            </div>
+
+            <div id="content" class="markdown-body">
+                <!-- Markdown Content rendered here -->
+            </div>
+        </main>
+    </div>
+
+    <script id="raw-markdown" type="text/template">
+# AquaMind AI Analytics Architecture
+
+Issue: UTK-23
+Status: v1 design
+Date: 2026-07-18
+Related: UTK-2 roadmap revision 2, UTK-11 app information layer scope
+
+## Objective
+
+Define the analytics architecture AquaMind needs before it can honestly ship AI-assisted fill prediction, leak detection, abnormal-use detection, and per-household customization.
+
+The v1 product should start useful with deterministic backend analytics and labelled feedback collection. ML models come later, after enough verified tank history exists to train and evaluate them. ESP8266 firmware remains deterministic in v1: measure, report, receive config, alert locally when configured, and never make cloud-model decisions on-device.
+
+## Current Baseline
+
+AquaMind already has the right foundation for a cloud-side analytics loop:
+
+- `Measurement` stores server-timestamped level distance, canonical volume, temperature, battery, RSSI, and device id.
+- `TankProfile` stores shape, dimensions, parallel tank count, nominal volume, sensor offset, and dead zone.
+- `DeviceConfig` stores measurement/report cadence, thresholds, config version, and MQTT sync mode.
+- `DailySummary` stores total usage, min/max/avg volume, refill count, and leak suspected.
+- `Alert` stores tank full, tank low, battery low, offline, and leak alerts with payload and acknowledgement.
+- HTTP and MQTT telemetry converge through `GatewayCore` into `recordMeasurement`, so analytics can sit behind one ingestion path.
+- `frontend-v2/src/lib/predictions.ts` intentionally returns unavailable until a real prediction service exists with confidence, evidence, timestamps, and model version.
+
+Gaps before training is credible:
+
+- No normalized event/feature table for derived telemetry quality, deltas, gaps, resets, firmware/config versions, or user feedback.
+- No label storage for fill, drain, leak, abnormal consumption, maintenance, sensor fault, offline, or false-positive feedback.
+- No model/version registry or prediction record with confidence, evidence, and expiry.
+- No evaluation harness to compare heuristic detections, user feedback, and future model candidates.
+
+## V1 Analytics Data Contract
+
+Store raw measurements unchanged, then add derived analytics events/features so models are trained from stable, explainable inputs instead of ad hoc queries.
+
+### Source Data
+
+| Data | Source | Current storage | Required v1 storage/change |
+|---|---|---|---|
+| Raw ultrasonic distance | Device telemetry `level_cm` via HTTP/MQTT | `Measurement.levelCm` | Keep; add quality flags derived from null, impossible, stuck, jumpy, or out-of-profile readings. |
+| Level percent | Backend `computeLevelPercent` from `levelCm` plus `TankProfile` | Computed at read time in services/UI paths | Persist analytics feature snapshot per reading so historical training is not rewritten when tank geometry changes. |
+| Canonical volume | Backend `computeVolumeL` | `Measurement.volumeL` | Keep; mark whether computed from profile or fallback device-sent volume. |
+| Temperature | Device telemetry | `Measurement.temperatureC` | Keep; use for sensor drift/context, not leak decisions alone. |
+| RSSI | Device telemetry | `Measurement.rssi` | Keep; derive weak-signal and signal-change features. |
+| Battery/power state | Device telemetry `battery_v`; future firmware power/reset fields | `Measurement.batteryV` | Add derived battery band; add firmware-reported `power_state` and `reset_reason` when available. |
+| Firmware version | Device telemetry/announce | `Device.firmwareVersion` | Snapshot per analytics feature/event so model behavior can be segmented by firmware. |
+| Config version | Device telemetry/announce | `Device.configVersion` plus reported telemetry config version | Snapshot server and reported config version to explain behavior changes. |
+| Offline gaps | Backend `lastSeen`, expected cadence, cron | `Device.lastSeen`, offline alerts | Store gap events with start/end, expected cadence, missed report count, and recovery reading. |
+| Tank profile metadata | User setup / backend profile | `TankProfile` | Snapshot profile version and capacity features on analytics records. |
+| User/tank identifiers | Firebase user, tenant, user-device mapping, device | `User`, `Tenant`, `Device`, `UserDeviceMapping` | Use tenant/device/user ids for authorization; analytics exports should pseudonymize user id and tenant id. |
+| Alert/user feedback | Alert acknowledgement and future UI feedback | `Alert.acknowledged` only | Add feedback labels for correct/incorrect, event type, severity, user comment bucket, and whether issue was physically verified. |
+
+### Proposed Storage Additions
+
+Add these backend-owned tables when implementation begins:
+
+| Table | Purpose | Key fields |
+|---|---|---|
+| `analytics_feature_points` | Immutable per-measurement feature snapshot for training and online inference. | `measurement_id`, `device_id`, `tenant_id`, `timestamp`, `level_percent`, `volume_l`, `delta_volume_l`, `delta_minutes`, `flow_l_per_hour`, `is_refill_candidate`, `is_drain_candidate`, `sensor_quality`, `battery_band`, `rssi_band`, `firmware_version`, `server_config_version`, `reported_config_version`, `tank_profile_hash`, `feature_version`. |
+| `analytics_events` | Interpreted time-range events from heuristics or models. | `device_id`, `tenant_id`, `type`, `start_at`, `end_at`, `severity`, `confidence`, `source`, `model_version`, `evidence_json`, `status`. |
+| `analytics_labels` | Human, admin, bench, or rule-generated labels for training/evaluation. | `analytics_event_id`, `measurement_id`, `label_type`, `label_value`, `label_source`, `verified`, `created_by_user_id`, `notes_bucket`, `created_at`. |
+| `device_baselines` | Per-device learned household/tank baseline. | `device_id`, `baseline_version`, `timezone`, `typical_usage_by_hour_json`, `typical_refill_windows_json`, `night_drain_lph`, `weekday_profile_json`, `confidence`, `training_window_start`, `training_window_end`. |
+| `analytics_model_versions` | Registry for heuristic and ML candidates. | `model_key`, `version`, `kind`, `feature_version`, `status`, `trained_at`, `metrics_json`, `rollout_percent`, `notes`. |
+| `prediction_snapshots` | UI-facing predictions/insights. | `device_id`, `type`, `status`, `prediction_at`, `valid_until`, `confidence`, `model_version`, `evidence_json`, `recommended_action`, `feedback_state`. |
+
+Keep raw sensor data, labels, predictions, and baselines tenant-scoped. Do not store free-form household notes in analytics events; capture fixed feedback reason codes first.
+
+## Derived Feature Schema
+
+Each valid reading should derive one feature point. Null/unreadable readings should still create a quality event, but not a consumption feature.
+
+Minimum fields:
+
+| Field | Type | Notes |
+|---|---|---|
+| `feature_version` | string | Start with `aquamind_features_v1`. Bump on math changes. |
+| `measurement_id` | UUID | Nullable only for offline gap events. |
+| `device_id`, `tenant_id` | UUID | Required for authorization and baseline lookup. |
+| `timestamp` | DateTime | Server receipt timestamp for v1. |
+| `level_cm_raw` | number/null | Raw distance; null means sensor could not read this cycle. |
+| `level_percent` | number/null | Backend derived from profile, clamped 0-100. |
+| `volume_l` | number/null | Canonical backend volume. |
+| `capacity_l` | number/null | Snapshot from tank profile. |
+| `delta_volume_l` | number/null | Current volume minus previous valid volume. |
+| `delta_minutes` | number/null | Minutes since previous valid reading. |
+| `flow_l_per_hour` | number/null | Negative means drain, positive means fill. Cap or mark outliers. |
+| `reading_gap_minutes` | number | Time since previous telemetry, including invalid readings. |
+| `sensor_quality` | enum | `valid`, `unreadable`, `out_of_profile`, `stuck`, `spike`, `stale_after_gap`. |
+| `event_candidate` | enum/null | `fill`, `drain`, `leak`, `abnormal_use`, `offline`, `maintenance`, `sensor_fault`. |
+| `firmware_version` | string/null | Snapshot for regression analysis. |
+| `server_config_version` | int | Current backend config version. |
+| `reported_config_version` | int/null | Device-held config version from telemetry. |
+| `measurement_interval_ms`, `report_interval_ms` | int/null | Expected cadence from config snapshot. |
+| `battery_v`, `battery_band` | number/null, enum/null | `normal`, `low`, `critical`, `unknown`. |
+| `rssi`, `rssi_band` | int/null, enum/null | `good`, `weak`, `poor`, `unknown`. |
+| `local_hour`, `day_of_week` | int | Uses tenant/device timezone once supported; default UTC until then. |
+| `tank_profile_hash` | string/null | Stable hash of shape/dimensions/dead-zone/capacity. |
+
+## Detection Path
+
+### Phase 1: Baseline Heuristics
+
+Ship deterministic backend analytics first. This creates immediate user value, explainable alerts, and labelled examples for later ML.
+
+Fill detection:
+
+- Detect positive volume deltas above a tank-relative threshold, for example max(10 percent capacity, 50 L), with short-duration confirmation.
+- Split very large jumps after offline gaps into `fill_after_gap` with lower confidence.
+- Record start/end readings, liters added, duration, and confidence.
+
+Drain detection:
+
+- Treat negative volume deltas as usage when sensor quality is valid and not during a refill.
+- Aggregate into hourly and daily consumption by local hour and day-of-week.
+- Exclude first reading after long offline gaps from normal usage baseline unless followed by stable readings.
+
+Leak detection:
+
+- Start with current `env.leakThresholdLPerHour` logic, then replace the fixed threshold with per-device baselines once seven to fourteen valid days exist.
+- High-confidence leak candidate: sustained overnight drain above both absolute threshold and household baseline, no refill event, valid sensor quality, no offline gap, and battery/RSSI not poor.
+- Low-confidence leak candidate: suspicious drain with weak signal, stale recovery, or limited history. UI should request verification rather than alarm.
+
+Abnormal consumption:
+
+- Compare current hourly/daily drain against the household baseline and tank capacity.
+- Require repeated deviation over multiple reporting intervals before creating an insight.
+- Do not page users for abnormal use in v1; show as an insight with feedback.
+
+Offline and sensor fault:
+
+- Offline is cadence-based: expected report interval plus grace, emitted as an event with missed-report count.
+- Sensor fault candidates include repeated nulls, stuck identical distance, impossible jumps, out-of-profile distances, and disagreement after config/profile changes.
+- Sensor fault should suppress leak/fill confidence until readings recover.
+
+### Phase 2: Label Collection
+
+Add labels before training:
+
+- UI feedback on every insight/alert: `accurate`, `not_accurate`, `not_sure`.
+- Specific reason codes: `actual_fill`, `actual_leak`, `normal_usage`, `sensor_moved`, `maintenance`, `power_outage`, `wifi_issue`, `wrong_tank_profile`, `unknown`.
+- Admin/bench labels for controlled tests: known refill volume, simulated leak rate, sensor obstruction, WiFi outage, battery sag.
+- Automatic weak labels from heuristics, always marked `verified=false`.
+
+Do not train a supervised model from acknowledged alerts alone. Acknowledgement means the user saw it, not that the event was correct.
+
+### Phase 3: Model Candidates
+
+Only evaluate model candidates after there is enough labelled history across diverse tank profiles and households.
+
+Initial candidates:
+
+- Fill/drain segmentation: robust changepoint detection over volume/time, likely using deterministic or statistical methods before ML.
+- Leak anomaly scoring: per-device seasonal baseline plus anomaly score, with model features for hour-of-day, day-of-week, tank percent, recent fills, offline gaps, battery, RSSI, and sensor quality.
+- Sensor-fault classifier: rules first, then supervised classifier once bench labels are available.
+- Time-to-low forecast: baseline consumption rate by recent usage and household schedule; upgrade to model only when it beats simple baselines.
+
+Model candidates must beat deterministic baselines in offline replay before any user-visible rollout.
+
+## Per-User Customization
+
+Customization is cloud-side and should not require ESP8266 ML.
+
+Per-device customization inputs:
+
+- Tank profile: capacity, shape, sensor offset, dead zone, parallel count.
+- Reporting cadence and config version.
+- Household timezone and local usage windows.
+- Learned baseline: normal daily usage, overnight drain, refill habits, weekday/weekend pattern, typical signal quality.
+- User feedback: false positives, verified events, maintenance notes as reason codes.
+
+Customization behavior:
+
+- New tanks start in `learning` state until they have a profile and enough valid history.
+- Global defaults protect users during learning, but use lower-confidence copy.
+- After seven valid days, build a first per-device baseline.
+- After fourteen to thirty valid days, compare abnormal-use/leak candidates against the device baseline.
+- Reset or fork the baseline when tank profile hash, sensor placement, firmware behavior, or reporting cadence materially changes.
+
+## Deployment Architecture
+
+V1 runs in the backend, not firmware:
+
+1. Telemetry arrives through HTTP or MQTT and is recorded by `recordMeasurement`.
+2. A feature extraction service runs synchronously after measurement commit or from a small queue. If it fails, raw telemetry still succeeds.
+3. Stream heuristics evaluate recent features for fill, leak, abnormal use, offline recovery, and sensor fault.
+4. Daily batch jobs update summaries, baselines, and low-risk prediction snapshots.
+5. UI reads `prediction_snapshots` or a `/api/v1/user/devices/:deviceId/insights` endpoint.
+6. Alerts are created only for high-confidence user-actionable states; lower-confidence detections remain insights.
+
+Implementation order:
+
+1. Add feature/label/prediction schema and extraction from existing `Measurement`, `TankProfile`, `Device`, and `DeviceConfig`.
+2. Add deterministic fill/drain/offline/sensor-quality analytics events.
+3. Replace leak alert payloads with richer evidence and confidence while retaining conservative thresholds.
+4. Add UI insight states and feedback capture.
+5. Add per-device baselines from seven-plus valid days.
+6. Add offline replay evaluation for heuristics.
+7. Train and evaluate model candidates only after labels and benchmarks exist.
+
+## UI Contract
+
+Do not present AI as shipped until model-backed predictions exist. V1 UI states should be honest:
+
+| State | When | UI behavior |
+|---|---|---|
+| `unavailable` | Prediction service/table not deployed | Say insights are unavailable; do not imply learning. |
+| `needs_profile` | Tank profile missing | Ask user to complete tank dimensions before forecasting. |
+| `collecting_data` | Profile exists but not enough valid history | Show progress such as &quot;3 of 7 valid days collected&quot;. |
+| `low_confidence_insight` | Heuristic or baseline candidate with limited evidence | Show evidence and ask for feedback; avoid alarming language. |
+| `alert` | High-confidence actionable leak/offline/low/full state | Show severity, evidence, recommended action, and acknowledgement/feedback. |
+| `prediction_ready` | Evaluated model or baseline forecast meets rollout gates | Show prediction, confidence, evidence, timestamp, expiry, model/baseline version, and feedback controls. |
+| `stale` | Prediction expired or last reading stale | Show last known prediction as expired; do not treat as current guidance. |
+
+Every insight card should include:
+
+- Conclusion.
+- Confidence bucket: low, medium, high.
+- Evidence: recent rate, duration, affected time window, last reading freshness, and sensor quality.
+- Recommended action.
+- Feedback: accurate, not accurate, not sure, with optional reason code.
+- Timestamp, expiry, and model/baseline version.
+
+## Evaluation Metrics
+
+Measure heuristic and model quality separately from product engagement.
+
+Detection metrics:
+
+- Fill event precision and recall against bench/user labels.
+- Leak false-positive rate per device per month.
+- Leak detection latency from first sustained abnormal drain to alert.
+- Abnormal-use precision against feedback.
+- Sensor-fault precision against bench and support labels.
+- Forecast error: mean absolute percentage error for time-to-low and volume after N hours.
+
+Reliability metrics:
+
+- Feature extraction success rate and lag.
+- Prediction generation lag and expiry rate.
+- Percent of predictions suppressed by stale/offline/sensor-quality gates.
+- Alert notification delivery rate from `Alert.deliveredToFirebase`.
+
+Product metrics:
+
+- Insight view rate.
+- Feedback submission rate.
+- Alert acknowledgement and false-positive rate.
+- Profile completion rate after prediction unavailable/needs-profile state.
+- Retention of users who receive useful insights versus users who only see raw tank status.
+
+## Privacy And Retention Assumptions
+
+- Raw telemetry and analytics remain tenant-scoped and are only accessible to authorized users/admins.
+- Analytics exports for model training should pseudonymize `user_id`, `tenant_id`, and `device_id`.
+- Store location-like signals only as coarse timezone/local-hour features unless the product explicitly collects household location with user consent.
+- Avoid free-form user notes in v1 analytics. Prefer reason codes to reduce personal data leakage.
+- Retain raw high-frequency measurements for a limited product window, for example 90 to 180 days, then preserve daily aggregates, events, labels, and baselines as needed for product quality.
+- Document and expose deletion behavior before using customer data for durable training sets.
+
+Escalation required before external model training or vendor analytics export: privacy retention policy, user consent language, and allowed data fields.
+
+## Rollout Gates
+
+Do not turn on user-visible AI claims until these gates pass:
+
+1. Feature extraction has run for at least seven valid days on pilot devices with less than 1 percent processing failure.
+2. UI can show unavailable, collecting-data, stale, insight, confidence, evidence, expiry, and feedback states.
+3. Leak alerts use conservative thresholds and suppress known sensor/offline faults.
+4. Feedback labels are stored and reviewable.
+5. Offline replay proves the new heuristic does not regress current alert behavior on historical data.
+6. For any ML model, offline evaluation beats the deterministic baseline on precision, false positives, and forecast error.
+7. Rollout starts behind a per-tenant or per-device flag and logs model version on every prediction.
+
+## Risks And Mitigations
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| Premature AI claims | Loss of user trust and support burden | Keep UI copy as unavailable/collecting-data/heuristic until rollout gates pass. |
+| Bad tank profile corrupts volume and features | False leaks/fills/forecasts | Gate forecasts behind profile completion; reset baseline when profile hash changes; surface profile confidence. |
+| Offline gaps look like leaks or fills | False positives | Mark recovery readings after gaps and lower/suppress confidence. |
+| Sensor faults mimic water movement | False alerts | Derive sensor quality before event detection; suppress leak/fill on invalid quality. |
+| Household patterns vary widely | Generic thresholds fail | Build per-device baselines before abnormal-use claims. |
+| Too little labelled data | Model overfits and cannot be trusted | Start with heuristics, collect labels, run offline replay, keep ML behind feature flags. |
+| Privacy-sensitive household routines | User trust and compliance risk | Pseudonymize exports, avoid free text, use retention limits, escalate before vendor/model-training export. |
+
+## Acceptance Criteria Mapping
+
+- Data required and source/storage are named in `V1 Analytics Data Contract`, `Derived Feature Schema`, and `Proposed Storage Additions`.
+- Fill, leak, abnormal-use, offline, and sensor-fault detection starts with useful deterministic heuristics in `Detection Path`.
+- Per-user customization is explicit in `Per-User Customization` and stays cloud-side for v1.
+- ESP8266 remains deterministic under `Deployment Architecture`.
+- UI states before and after models exist are defined in `UI Contract`.
+- Risks, evaluation metrics, privacy assumptions, retention, and rollout gates are documented.
+
+
+    </script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            mermaid.initialize({ startOnLoad: false, theme: 'dark' });
+
+            const rawMarkdown = document.getElementById('raw-markdown').innerHTML;
+            
+            // Configure marked
+            marked.setOptions({
+                highlight: function(code, lang) {
+                    if (lang && hljs.getLanguage(lang)) {
+                        return hljs.highlight(code, { language: lang }).value;
+                    }
+                    return hljs.highlightAuto(code).value;
+                },
+                breaks: true
+            });
+
+            const contentEl = document.getElementById('content');
+            contentEl.innerHTML = marked.parse(rawMarkdown);
+
+            // Handle Mermaid blocks
+            const codeBlocks = contentEl.querySelectorAll('pre code.language-mermaid');
+            codeBlocks.forEach((codeBlock, i) => {
+                const pre = codeBlock.parentElement;
+                const mermaidDiv = document.createElement('div');
+                mermaidDiv.className = 'mermaid';
+                mermaidDiv.textContent = codeBlock.textContent;
+                pre.replaceWith(mermaidDiv);
+            });
+
+            mermaid.run();
+
+            // Build Table of Contents
+            const tocEl = document.getElementById('toc');
+            const headings = contentEl.querySelectorAll('h1, h2, h3');
+            
+            headings.forEach((heading, index) => {
+                const id = 'heading-' + index;
+                heading.id = id;
+
+                const li = document.createElement('li');
+                const a = document.createElement('a');
+                a.href = '#' + id;
+                a.className = 'toc-link' + (heading.tagName === 'H3' ? ' toc-sub' : '');
+                a.textContent = heading.textContent;
+                
+                li.appendChild(a);
+                tocEl.appendChild(li);
+            });
+
+            // Highlight Active TOC link on scroll
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        document.querySelectorAll('.toc-link').forEach(link => {
+                            link.classList.toggle('active', link.getAttribute('href') === '#' + entry.target.id);
+                        });
+                    }
+                });
+            }, { rootMargin: '-20% 0px -70% 0px' });
+
+            headings.forEach(heading => observer.observe(heading));
+        });
+    </script>
+</body>
+</html>

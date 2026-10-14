@@ -17,8 +17,12 @@ namespace PowerManager {
     bool otaCheckDue();
     void markOtaCheckAttempted();
     bool httpRecoveryDue();
+    bool getWifiBssidAndChannel(uint8_t &channel, uint8_t* bssid);
+    void saveWifiBssidAndChannel(uint8_t channel, const uint8_t* bssid);
     void finishCycle(bool deliverySucceeded);
     void sleepUntilNextCycle(unsigned long normalIntervalMs);
+    bool shouldPerformKeepAlivePulseOnly(unsigned long normalIntervalMs);
+    void executeKeepAlivePulseOnly();
 }
 
 #endif // POWER_MANAGER_H

@@ -34,7 +34,8 @@ MQTT/TLS as its primary normal telemetry and retained-config path. It does not
 mean waiting for live sessions, SSE, MQTT v2, admin controls, or ML data tooling.
 
 - Devices use MQTT for telemetry, presence, desired configuration, reported
-  state, commands, command acknowledgements, and server ingestion receipts.
+  state, commands, command acknowledgements, structured device logs, and server
+  ingestion receipts.
 - Web and mobile clients do **not** connect directly to Mosquitto. They use REST
   for queries and control, plus an authenticated Server-Sent Events (SSE) stream
   for live updates. This preserves tenant authorization and avoids distributing
@@ -71,6 +72,10 @@ mean waiting for live sessions, SSE, MQTT v2, admin controls, or ML data tooling
 - Future learning jobs consume the same governed data contracts and export APIs
   as product/admin clients. They do not scrape charts, consume transient SSE as
   training truth, or depend on one-off production SQL dumps.
+- Device logs are an admin-only operational record, not a second telemetry
+  stream and not a remote serial console. They use a bounded structured-event
+  contract, short retention, explicit rate limits, and secret redaction. The
+  backend persists and authorizes them; browsers never receive broker access.
 
 ## 2. Review of the current implementation
 
@@ -133,6 +138,11 @@ than the complete operating model required for production.
     old export can then change without any raw sensor change. Future learning
     requires immutable observations plus versioned/effective-dated derivation
     context.
+15. The device emits useful serial diagnostics but does not deliver a durable,
+    queryable account of boots, sensor failures, Wi-Fi/TLS/MQTT failures, config
+    application, OTA outcomes, or buffer pressure to an administrator. This
+    makes a failed field update unnecessarily dependent on physical serial
+    access or server-side inference.
 
 The existing dense admin table is a useful inspection foundation and should be
 extended rather than discarded. Its query/export path still needs to become
@@ -211,7 +221,7 @@ as live.
 
 ```text
 ESP8266 devices
-  | MQTT/TLS: telemetry, state, presence, ack
+  | MQTT/TLS: telemetry, state, presence, ack, structured log events
   | MQTT/TLS: config, desired policy, command, receipt
   v
 Mosquitto
@@ -222,6 +232,7 @@ Backend MQTT ingest -> validate -> deduplicate -> MySQL transaction
                                       +-> MQTT retained receipt
                                       +-> internal realtime fan-out
                                       +-> alert/aggregation jobs
+                                      +-> admin device-event timeline
 
 Web/mobile -> authenticated REST -> query/control services -> MySQL/outbox
 Web/mobile <- authenticated SSE  <- realtime gateway <- internal fan-out
@@ -249,6 +260,7 @@ tenant ownership is mutable and enforced by the application.
 | `v2/devices/{id}/up/telemetry` | device -> server | 1 | no | sample batch |
 | `v2/devices/{id}/up/state` | device -> server | 1 | yes | reported shadow/capabilities |
 | `v2/devices/{id}/up/ack` | device -> server | 1 | no | correlated command/lease ack |
+| `v2/devices/{id}/up/log` | device -> server | 1 | no | bounded structured operational event |
 | `v2/devices/{id}/status` | device -> server | 1 | yes | birth or Last Will presence |
 | `v2/devices/{id}/down/config` | server -> device | 1 | yes | versioned desired config |
 | `v2/devices/{id}/down/policy` | server -> device | 1 | yes | normal policy + live lease |
@@ -363,6 +375,64 @@ recover when it reconnects immediately after publishing.
   wake, recent sensor quality, and active lease state. Do not use a single
   online/offline boolean as the complete device health model.
 
+### 5.6 Structured device logs
+
+This deliberately follows the common fleet pattern of publishing device-side
+logs to a dedicated MQTT topic and routing them to a queryable log store, while
+remaining much smaller than a general log platform. AWS documents this
+device-to-MQTT-to-log-store flow; its Connected Farm reference likewise sends
+field sensor data through an edge/cloud ingestion path and sends change events
+back through MQTT. [AWS device-side logs](https://docs.aws.amazon.com/iot/latest/developerguide/upload-device-logs-to-cloudwatch.html)
+and [Connected Farm reference architecture](https://docs.aws.amazon.com/pdfs/architecture-diagrams/latest/fleet-management-for-connected-farm/fleet-management-for-connected-farm.pdf)
+are the reference patterns. Microsoft FarmBeats also highlights the practical
+farm constraint that field deployments often lack reliable power or Internet,
+which is directly relevant to a tank device even though AquaMind does not need
+a farm gateway today. [FarmBeats](https://www.microsoft.com/en-us/research/project/farmbeats-iot-agriculture/)
+
+The first contract is one concise event per occurrence, not serial-line upload,
+stack trace upload, packet capture, or continuous debug streaming:
+
+```json
+{
+  "schema": 2,
+  "type": "log",
+  "device_id": "tank-001",
+  "message_id": "tank-001:8f31:1043",
+  "boot_id": "8f31",
+  "seq": 1043,
+  "sent_at": "2026-07-13T12:00:02Z",
+  "uptime_ms": 240102,
+  "firmware_version": "2.1.0",
+  "level": "warn",
+  "code": "ota.download_failed",
+  "message": "download ended before expected length",
+  "attrs": { "http_status": 200, "written_bytes": 48128, "expected_bytes": 92160 }
+}
+```
+
+- `code` is a stable, allow-listed dotted identifier; the short human-readable
+  `message` is optional context, not an API contract.
+- Initial codes cover boot/reset reason, sensor quality/failure, Wi-Fi, NTP,
+  TLS, MQTT connect/subscription/publish failures, retained config/policy
+  application, telemetry buffer overflow/replay, OTA check/download/install,
+  and command/self-test results.
+- Enforce a small payload ceiling (target 512 bytes), no tokens, Wi-Fi
+  passwords, authorization headers, full URLs with credentials, or arbitrary
+  server responses. The backend revalidates and redacts before storage.
+- Normal mode emits `warn`/`error` plus a small set of lifecycle `info` events;
+  it must never publish a log on every loop, sample, reconnect retry, or failed
+  packet. Coalesce repeated events with a count/window. Diagnostic leases may
+  enable bounded `debug` events, at most one per second and only for the lease
+  duration.
+- Keep a tiny RAM queue for recently generated important events and flush while
+  connected. Do not create a flash-backed general logging system in the first
+  version: flash wear and a full offline log backlog are worse than losing
+  routine diagnostics. Critical operational outcomes are also represented in
+  reported state and command/OTA records.
+- Log messages are non-retained QoS 1 and deduplicated by `message_id`. The
+  backend emits an authorized SSE `device_log` event after persistence; it does
+  not pass raw MQTT through to the browser.
+
 ## 6. Canonical backend data model
 
 This is the Part II durable data target. Part I applies only the migrations
@@ -407,6 +477,12 @@ diagnostics. Preserve out-of-order replay rather than hiding it.
   timestamps, status, result, and error.
 - `DeviceProtocolEvent`: bounded payload metadata for malformed, unsupported,
   unauthorized, or rejected messages. Redact secrets.
+- `DeviceLogEvent`: device ID, stable message/boot/sequence identity, received
+  and optional device timestamps, level, allow-listed code, short message,
+  bounded redacted attributes, firmware/protocol version, and transport. Index
+  `(deviceId, receivedAt DESC)` and `(deviceId, level, receivedAt DESC)` for
+  the admin timeline; this is distinct from backend protocol errors and user
+  audit records.
 - `MeasurementAggregate`: device, bucket start, resolution, counts, min/max/avg,
   first/last values, usage/refill indicators, and quality counts.
 - `DeviceConfigRevision` and `TankProfileRevision`: immutable version snapshots
@@ -421,6 +497,9 @@ diagnostics. Preserve out-of-order replay rather than hiding it.
 - Normal raw samples: 13 months.
 - Live raw samples: 90 days.
 - Diagnostic raw samples and protocol payloads: 14 days.
+- Device log events: 30 days, with normal-mode `info` rate-limited at ingest;
+  this can be shortened or extended by environment policy once fleet volume is
+  measured.
 - 5-minute/hourly aggregates: 5 years.
 - Daily summaries, session audit, and command audit: indefinite unless policy
   requires otherwise.
@@ -493,6 +572,11 @@ caches, and an AI hints UI before history/export semantics are stable.
   later without changing dataset semantics.
 - Admin variants expose the same canonical DTOs with additional operational
   fields; they do not implement a separate data interpretation.
+- `GET /api/v1/admin/devices/:id/logs?from=&to=&levels=&codes=&cursor=&limit=`
+  returns redacted `DeviceLogEvent` rows in reverse chronological order.
+  Defaults are deliberately small (for example 100 rows and 24 hours); CSV or
+  NDJSON export reuses the same authorization, filters, retention boundaries,
+  and DTO rather than scraping the UI.
 
 ### Control APIs
 
@@ -517,6 +601,7 @@ authorized, rate limited, audited, and backed by `ControlOutbox`.
 - `session_state`
 - `reported_state`
 - `command_state` for authorized admins
+- `device_log` for authorized admins; only persisted, redacted events are sent
 
 Events carry monotonically increasing stream IDs. Support `Last-Event-ID`, send
 heartbeats, and force a snapshot refresh if replay is no longer available. The
@@ -571,6 +656,10 @@ Required firmware capabilities:
     failure policy and is visible in reported state.
 12. OTA is deferred during live/diagnostic sessions and while unacknowledged
     telemetry is being flushed, except for an explicit critical admin action.
+13. A `DeviceLogger` facade with compile-time code definitions, payload/queue
+    bounds, severity filtering, repeated-event coalescing, and a hard rule that
+    credentials and Wi-Fi secrets never reach either serial or MQTT logs. It
+    shares message identity and connection handling with the v2 transport.
 
 ## 9. Web and mobile experience
 
@@ -680,7 +769,7 @@ firmware, and change normal policy. Do not provide bulk reboot by default.
 ### Admin device workspace
 
 Tabs: **Overview**, **Live**, **History**, **Connectivity**, **Config & State**,
-**Commands**, **Events**, and **Firmware**.
+**Commands**, **Logs**, **Events**, and **Firmware**.
 
 - Live supports normal metrics and a diagnostic view of raw distance, filtered
   level, temperature, battery ADC/voltage, RSSI, heap, loop latency, queue depth,
@@ -690,6 +779,11 @@ Tabs: **Overview**, **Live**, **History**, **Connectivity**, **Config & State**,
 - Config compares desired versus reported values and revisions field-by-field.
 - Commands show pending/sent/acknowledged/timed-out state with correlation IDs
   and results. Destructive actions require confirmation.
+- Logs are admin-only and show device time (when trustworthy), server receive
+  time, severity, code, concise message, and redacted structured attributes.
+  They filter by time, severity, and code; repeated-event coalescing is visible
+  as a count. The workspace starts with the last 100 events, not an unbounded
+  live console.
 - Events provide searchable protocol metadata without leaking tokens or Wi-Fi
   credentials.
 
@@ -1054,6 +1148,10 @@ full offline replay, live sessions, SSE, history/admin UX, and governed exports.
 - Write versioned JSON Schemas/Zod schemas and golden payload fixtures for every
   v2 message. Generate or manually mirror constrained firmware structs from the
   same fixtures.
+- Freeze the initial structured device-log taxonomy, severity policy, 512-byte
+  payload cap, repeated-event coalescing window, redaction test corpus, and
+  normal/diagnostic rate limits. Treat this as a compatibility contract, not
+  serial output formatting.
 - Establish one shared TypeScript DTO contract module for REST, SSE, web, and
   mobile, with contract compatibility tests and explicit units/null semantics.
 - Reconcile `tools/debug-hub` and simulator payloads with the v2 contract.
@@ -1072,6 +1170,9 @@ full offline replay, live sessions, SSE, history/admin UX, and governed exports.
   hub.
 - REST and SSE contract fixtures deserialize to the same shared DTOs in backend,
   web, and mobile contract tests.
+- Log fixtures prove that duplicate events dedupe, malformed/oversized events
+  are rejected, and tokens, passwords, bearer headers, and credential-bearing
+  URLs are redacted or refused before storage.
 - MQTT client choice and maximum payload/batch size are recorded from hardware
   tests.
 - Baseline measurements and rollout feature flags are documented.
@@ -1115,6 +1216,10 @@ full offline replay, live sessions, SSE, history/admin UX, and governed exports.
 
 - Add v2 subscriptions, shared-subscription naming, schema validation, protocol
   error records, and topic/payload identity checks.
+- Add the `up/log` subscription and transactional `DeviceLogEvent` persistence,
+  dedupe, severity/code rate limits, retention job, admin query endpoint, and
+  post-commit admin SSE event. It must be isolated from telemetry ingestion so
+  an event burst cannot delay measurements or receipts.
 - Implement retained config, reported state, birth/Last Will, and commit receipt.
 - Add the transactional `ControlOutbox` and a retrying MQTT publisher.
 - Split ingest/control broker identities and tighten device ACLs.
@@ -1132,6 +1237,9 @@ full offline replay, live sessions, SSE, history/admin UX, and governed exports.
 - Config written while a device is offline applies after reconnect.
 - With two ingest instances, each normal delivery is handled by one shared-
   subscription member; QoS redeliveries remain harmless through deduplication.
+- A synthetic reconnect/OTA failure storm remains within the log rate limit,
+  produces a readable coalesced admin timeline, and does not affect telemetry
+  commit latency.
 
 #### Phase II-3 - Durable offline replay on deployed firmware
 
@@ -1144,6 +1252,10 @@ full offline replay, live sessions, SSE, history/admin UX, and governed exports.
 - Add intentional-sleep presence and expected-wake reporting.
 - Verify CA and remove insecure TLS in production builds.
 - Make HTTP fallback use the same canonical buffer/config code.
+- Add the bounded `DeviceLogger` facade and initial code taxonomy. Test reset,
+  Wi-Fi/TLS/MQTT failure, config rejection, sensor failure, buffer overflow,
+  and OTA failure paths on hardware; verify that normal operation does not
+  create a persistent log backlog or expose a secret.
 - Add brownout/reset recovery and flash-wear tests.
 - Add battery profiling for normal, prolonged outage, replay, live, and
   diagnostic cases.
@@ -1240,7 +1352,7 @@ full offline replay, live sessions, SSE, history/admin UX, and governed exports.
 - Extend the existing dense fleet table with health derivation/filtering, saved
   views, cursor pagination, operational columns, and canonical export controls.
 - Build device Overview/Live/History/Connectivity/Config & State/Commands/Events/
-  Firmware tabs against canonical APIs.
+  Logs/Firmware tabs against canonical APIs.
 - Add diagnostic leases, structured self-test, desired/reported diff, command
   audit, connection timeline, raw export, and protocol/auth error summaries.
 - Ensure table, export, and future pipeline access share canonical filters and
@@ -1252,8 +1364,9 @@ full offline replay, live sessions, SSE, history/admin UX, and governed exports.
 **Exit criteria**
 
 - An admin can locate a stale/faulty device, inspect its last valid and raw data,
-  start diagnostics, receive self-test results, compare config, and see the
-  entire audit trail without reading server logs.
+  start diagnostics, receive self-test results, compare config, inspect its
+  recent structured device logs, and see the entire audit trail without reading
+  server logs.
 - Role and destructive-action tests cover admin versus super-admin boundaries.
 - Fleet queries meet the target at the agreed simulated fleet size.
 

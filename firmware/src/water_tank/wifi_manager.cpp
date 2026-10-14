@@ -8,6 +8,7 @@
 #include "claim_client.h"
 #include "mqtt_reporter.h"
 #include "power_manager.h"
+#include "progress.h"
 #include <ESP8266WiFi.h>
 #include <WiFiManager.h>
 
@@ -115,24 +116,56 @@ namespace WifiManager {
         
         // Try autoConnect - will start portal if connection fails
         if (Config::wifiSsid.length() > 0 && Config::wifiPassword.length() > 0) {
-            // Pre-fill WiFi credentials
-            WiFi.begin(Config::wifiSsid.c_str(), Config::wifiPassword.c_str());
-            
-            unsigned long startTime = millis();
-            while (WiFi.status() != WL_CONNECTED && (millis() - startTime < WIFI_CONNECT_TIMEOUT_MS)) {
-                delay(500);
-                Serial.print(".");
+            uint8_t rtcChannel = 0;
+            uint8_t rtcBssid[6] = {0};
+            bool hasRtcInfo = PowerManager::getWifiBssidAndChannel(rtcChannel, rtcBssid);
+
+            // Attempt fast direct connect if BSSID and Channel are cached in RTC memory
+            if (hasRtcInfo) {
+                Serial.printf("[WiFi] Fast RTC reconnecting to %s (Channel %d)...\n", Config::wifiSsid.c_str(), rtcChannel);
+                // Naming the strategy, not just "connecting", is what makes
+                // the panel worth reading: a boot that spends three seconds
+                // here and then twenty on a scan is a stale cached BSSID, and
+                // that is a different problem from a weak signal.
+                Progress::stage("Wi-Fi: cached");
+                WiFi.begin(Config::wifiSsid.c_str(), Config::wifiPassword.c_str(), rtcChannel, rtcBssid);
+
+                unsigned long startTime = millis();
+                while (WiFi.status() != WL_CONNECTED && (millis() - startTime < 3000)) {
+                    delay(100);
+                    Progress::tick();
+                }
             }
-            Serial.println();
-            
+
+            // Fallback to full channel scan if fast connect did not succeed
+            if (WiFi.status() != WL_CONNECTED) {
+                Serial.printf("[WiFi] Full scan connecting to %s...\n", Config::wifiSsid.c_str());
+                Progress::stage("Wi-Fi: scanning");
+                WiFi.begin(Config::wifiSsid.c_str(), Config::wifiPassword.c_str());
+                
+                unsigned long startTime = millis();
+                while (WiFi.status() != WL_CONNECTED && (millis() - startTime < WIFI_CONNECT_TIMEOUT_MS)) {
+                    delay(500);
+                    Serial.print(".");
+                    Progress::tick();
+                }
+                Serial.println();
+            }
+
             if (WiFi.status() == WL_CONNECTED) {
                 connected = true;
+                // Save channel and BSSID for ultra-fast deep sleep reconnects
+                PowerManager::saveWifiBssidAndChannel(WiFi.channel(), WiFi.BSSID());
             }
         }
         
         if (!connected) {
             if (Config::isMqttProvisioned()) {
                 Serial.println(F("[WiFi] Connection failed; staying provisioned for bounded recovery"));
+                // Held, because the main loop redraws within milliseconds and
+                // "why is it showing an old reading" is the question this
+                // screen exists to answer.
+                Progress::note("Wi-Fi failed", "will keep trying", 3000);
             } else {
                 Serial.println(F("[WiFi] Connection failed, starting config portal..."));
                 startConfigPortal();

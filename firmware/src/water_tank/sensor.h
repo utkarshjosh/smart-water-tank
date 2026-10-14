@@ -17,6 +17,16 @@ namespace Sensor {
     void init();
     
     /**
+     * Power ON sensor rail (assert power gate GPIO)
+     */
+    void powerOn();
+    
+    /**
+     * Power OFF sensor rail (isolate sensors during deep sleep)
+     */
+    void powerOff();
+    
+    /**
      * Read water level using ultrasonic sensor
      * @param valid Set to false if no echo was received on any sample
      *              (no sensor connected) - the returned distance is
