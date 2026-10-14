@@ -130,12 +130,17 @@ cd aquamind-backend
 ### 3.2 Install Dependencies
 
 The repository is one npm workspace, so the install runs from the repo root
-and names the app. This also builds `packages/contracts`, which the backend
-imports, and generates the Prisma client.
+and names the apps. This also builds `packages/contracts`, which both apps
+import, and generates the Prisma client.
+
+Always name **both** server apps. `npm ci` empties every workspace's
+`node_modules` before installing, so installing only one app deletes the
+other's libraries — on 2026-09-14 a frontend-only install did this to the
+running API and broke every JSON POST, including Mosquitto's auth check.
 
 ```bash
 cd /home/aquamind/apps/aquamind          # repo root
-npm ci --workspace=backend-v2
+npm ci --workspace=backend-v2 --workspace=frontend
 cd backend-v2
 npm run build
 ```
@@ -227,9 +232,13 @@ cd frontend
 
 ### 4.2 Install Dependencies
 
+Step 3.2 already installed the frontend. If you re-run the install, name both
+apps (see 3.2 for why): installing the frontend alone wipes the backend's
+libraries.
+
 ```bash
 cd /home/aquamind/apps/aquamind          # repo root
-npm ci --workspace=frontend
+npm ci --workspace=backend-v2 --workspace=frontend
 cd frontend
 ```
 
@@ -563,15 +572,18 @@ echo "🚀 Starting deployment..."
 cd /home/aquamind/apps/aquamind          # repo root: one workspace, one lockfile
 git pull origin main  # or your branch
 
+# One install for both apps: `npm ci` wipes every workspace's node_modules,
+# so installing one app alone deletes the other's libraries.
+echo "📦 Installing dependencies..."
+npm ci --workspace=backend-v2 --workspace=frontend
+
 # Backend deployment
 echo "📦 Deploying backend..."
-npm ci --workspace=backend-v2
 (cd backend-v2 && npm run build)
 pm2 restart aquamind-api
 
 # Frontend deployment
 echo "📦 Deploying frontend..."
-npm ci --workspace=frontend
 (cd frontend && npm run build)
 pm2 restart aquamind-admin
 
