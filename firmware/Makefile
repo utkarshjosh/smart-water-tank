@@ -63,13 +63,24 @@ compile: check-sketch prepare-sketch
 		$(SKETCH_DIR)
 
 ## Upload firmware to device
-upload: build
+# Depends on check-permissions so a missing or unplugged port fails here, with
+# a clear message, instead of letting arduino-cli fail underneath and still
+# printing "Upload complete!" - which silently leaves the old image running.
+upload: check-permissions build
 	@echo "$(CYAN)→ Uploading to $(SERIAL_PORT)...$(NC)"
-	$(CLI) upload \
+	@$(CLI) upload \
 		--fqbn $(BOARD_FQBN) \
 		--port $(SERIAL_PORT) \
 		--input-file $(BINARY) \
-		$(SKETCH_DIR)
+		$(SKETCH_DIR) 2>&1 | tee $(BUILD_DIR)/upload.log
+	@# arduino-cli exits 0 even when esptool underneath fails (busy port,
+	@# unplugged board), which used to print "Upload complete!" over a flash
+	@# that never happened - and then you debug the old image. The verified
+	@# hash is the only trustworthy signal that new bytes are on the chip.
+	@if ! grep -q "Hash of data verified" $(BUILD_DIR)/upload.log; then \
+		echo "$(RED)✗ Upload did NOT verify - the old image is still running$(NC)"; \
+		exit 1; \
+	fi
 	@echo "$(GREEN)✓ Upload complete!$(NC)"
 
 ## Flash (alias for upload)
@@ -96,8 +107,9 @@ monitor: check-permissions
 ## Check serial port permissions
 check-permissions:
 	@if [ -z "$(SERIAL_PORT)" ]; then \
-		echo "$(YELLOW)Warning: No serial port detected$(NC)"; \
-		exit 0; \
+		echo "$(RED)✗ No serial port detected - is the board plugged in?$(NC)"; \
+		echo "$(YELLOW)  Run 'make list-boards', or pass SERIAL_PORT=/dev/...$(NC)"; \
+		exit 1; \
 	fi
 	@if [ ! -e "$(SERIAL_PORT)" ]; then \
 		echo "$(RED)Error: Port $(SERIAL_PORT) does not exist!$(NC)"; \

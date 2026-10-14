@@ -133,6 +133,101 @@
 #endif
 
 // ============================================================================
+// Display Build  (DISPLAY_ENABLED)
+// ============================================================================
+// A display build is a different product, not an added feature: mains powered
+// via an SMPS, permanently associated to WiFi, and read by a person standing
+// at the tank. Nothing below is compiled into a normal build, so a device with
+// no panel pays nothing for any of it.
+//
+// Enable with:  make build DISPLAY=1
+
+#ifndef DISPLAY_ENABLED
+#define DISPLAY_ENABLED     0
+#endif
+
+#if DISPLAY_ENABLED
+
+// --- 16x2 character LCD on a PCF8574 backpack ------------------------------
+// The pins silkscreened SDA/SCL (D2/D1) are the ultrasonic sensor's ECHO/TRIG.
+// That is not a problem: the ESP8266 has no fixed hardware I2C peripheral -
+// Wire is bit-banged, so any GPIO pair works. GPIO2 must be HIGH at boot and
+// an I2C bus idles HIGH through its pull-ups, which makes the status-LED pin
+// electrically correct here rather than merely tolerated.
+#define PIN_LCD_SDA         13      // D7
+#define PIN_LCD_SCL         2       // D4 - was the status LED
+#define LCD_COLS            16
+#define LCD_ROWS            2
+#define LCD_ADDR_PRIMARY    0x27    // PCF8574
+#define LCD_ADDR_FALLBACK   0x3F    // PCF8574A
+
+// Minutes east of UTC for the on-screen reading time. tls_client.h configures
+// NTP as configTime(0, 0, ...), so the clock runs in UTC and the display
+// applies this offset itself. 330 = IST.
+#ifndef DISPLAY_TZ_OFFSET_MIN
+#define DISPLAY_TZ_OFFSET_MIN   330
+#endif
+
+// --- Panel buttons ---------------------------------------------------------
+// All three wired identically: one side to 3V3, the other to the GPIO, with a
+// 10k pull-down to GND. Active HIGH throughout.
+//
+// The uniformity is load-bearing, not cosmetic. GPIO15 must be LOW at boot or
+// the ESP8266 will not start, so an INPUT_PULLUP button to GND is impossible
+// there. One wiring rule for the whole panel means no boot surprises.
+#define PIN_BTN_NEXT        14      // D5 - freed by dropping the speaker
+#define PIN_BTN_SELECT      15      // D8 - idles LOW, as boot requires
+
+// There is deliberately no third button on D0/GPIO16.
+//
+// GPIO16 is the deep-sleep wake output (XPD_DCDC): the chip drives it HIGH
+// during normal operation and drops it LOW to pull RST and wake itself. That
+// is what makes the D0-to-RST jumper work at all. The consequence is that D0
+// idles at 3.3 V on a bare board with nothing attached, and no pull-down beats
+// an active push-pull driver - so a button on it reads permanently pressed.
+//
+// Measured on hardware: with every wire off D0, the pin still sat at 3.3 V and
+// digitalRead returned 1. Do not re-add a button here.
+
+#define BUTTON_DEBOUNCE_MS      40
+#define BUTTON_LONG_PRESS_MS    2000
+#define BACKLIGHT_TIMEOUT_MS    30000   // 0 disables auto-off
+
+// --- Power model -----------------------------------------------------------
+// Deep sleep is wrong for this build, and not because mains makes power free.
+// The panel would survive it fine - the HD44780 holds its own frame - but an
+// ESP8266 can only be woken from deep sleep by the RST pin, so every button
+// would be dead between wakes.
+//
+// Automatic light sleep instead: the WiFi association survives, so the device
+// stays continuously online and MQTT keeps its subscriptions, buttons stay
+// responsive, and average current still drops well over an order of magnitude
+// from always-awake. In a sealed box on a rooftop that headroom is about heat,
+// not the electricity bill.
+#define ENABLE_DEEP_SLEEP           0
+#define TP4221B_KEEP_ALIVE_ENABLE   false
+#define ENABLE_WIFI_LIGHT_SLEEP     1
+
+// DTIM beacons to skip while light sleeping. Higher saves more power and
+// delays inbound packets; 3 is the usual balance for a device that still
+// wants config pushes to feel immediate.
+#ifndef WIFI_LIGHT_SLEEP_LISTEN_INTERVAL
+#define WIFI_LIGHT_SLEEP_LISTEN_INTERVAL 3
+#endif
+
+// The speaker and status LED are both gone: GPIO14 is a button now and GPIO2
+// is the I2C clock. The screen replaces both, and the server already owns
+// alerting through its own alert pipeline.
+#define ENABLE_LOCAL_ALERTS         0
+
+#else   // !DISPLAY_ENABLED
+
+#define ENABLE_LOCAL_ALERTS         1
+#define ENABLE_WIFI_LIGHT_SLEEP     0
+
+#endif  // DISPLAY_ENABLED
+
+// ============================================================================
 // Tank Configuration
 // ============================================================================
 
