@@ -5,6 +5,7 @@
 #include "mqtt_reporter.h"
 #include "config.h"
 #include "tls_client.h"
+#include "debug_diagnostics.h"
 #include <ESP8266WiFi.h>
 #include <WiFiClientSecure.h>
 #include <ArduinoMqttClient.h>
@@ -159,6 +160,7 @@ namespace MqttReporter {
     bool connect(bool publishPresence) {
         if (mqtt.connected()) return true;
         if (Config::deviceId.length() == 0) return false;
+        DebugDiagnostics::Scope timing("MQTT connect", true);
         if (MQTT_USE_TLS && !tlsReady) {
             // NTP/DNS may recover after a transient boot-time failure.
             tlsReady = TlsClient::configure(secureClient);

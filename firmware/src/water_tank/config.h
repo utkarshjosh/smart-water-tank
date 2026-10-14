@@ -20,6 +20,10 @@
 #define FIRMWARE_VERSION "0.0.0-dev"
 #endif
 
+#ifndef AUTO_OTA_ENABLED
+#define AUTO_OTA_ENABLED 1
+#endif
+
 // ============================================================================
 // WiFi Configuration
 // ============================================================================

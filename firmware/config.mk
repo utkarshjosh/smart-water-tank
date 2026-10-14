@@ -4,7 +4,7 @@
 
 # Project Settings
 PROJECT_NAME    := water_tank
-VERSION         := 1.1.6
+VERSION         := 1.16
 
 # Board Configuration (ESP8266)
 BOARD_FQBN      := esp8266:esp8266:nodemcuv2
@@ -55,6 +55,12 @@ BUILD_FLAGS     := \
 #   make build MQTT_HOST=192.168.1.10 MQTT_PORT=1883 MQTT_TLS=0
 EXTRA_BUILD_FLAGS ?=
 BUILD_FLAGS += $(EXTRA_BUILD_FLAGS)
+
+# Local diagnostics can opt out of scheduled OTA without removing the manual
+# update function or USB recovery. A higher version alone does not prevent an
+# explicitly assigned (different) server version from being installed.
+AUTO_OTA ?= 1
+BUILD_FLAGS += -DAUTO_OTA_ENABLED=$(AUTO_OTA)
 
 ifeq ($(DISPLAY),1)
     BUILD_FLAGS += -DDISPLAY_ENABLED=1

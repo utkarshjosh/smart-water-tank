@@ -36,6 +36,7 @@
 #include "display.h"
 #include "buttons.h"
 #include "progress.h"
+#include "debug_diagnostics.h"
 
 // ============================================================================
 // Global State
@@ -69,7 +70,7 @@ static void runDutyCycle() {
 
         // OTA is deliberately deferred until after telemetry and config are
         // complete. The RTC scheduler prevents a check on every wake.
-        if (PowerManager::otaCheckDue() && !PowerManager::awakeBudgetExceeded()) {
+        if (AUTO_OTA_ENABLED && PowerManager::otaCheckDue() && !PowerManager::awakeBudgetExceeded()) {
             Serial.println(F("[OTA] Scheduled update check..."));
             PowerManager::markOtaCheckAttempted();
             OTAHandler::checkForUpdate();
@@ -100,6 +101,12 @@ void setup() {
     Serial.println(FIRMWARE_VERSION);
     Serial.println(F("═══════════════════════════════════════════════════"));
     Serial.println();
+
+#if defined(DEBUG) && DEBUG
+    Serial.printf("[Debug] build display=%d autoOTA=%d reset=%s\n",
+        DISPLAY_ENABLED, AUTO_OTA_ENABLED, ESP.getResetReason().c_str());
+    DebugDiagnostics::Scope setupTiming("setup", true);
+#endif
 
     // Initialize modules
     Storage::init();
@@ -149,7 +156,12 @@ void setup() {
     #endif
     WifiManager::init();
 
-    if (WifiManager::connect()) {
+    bool wifiReady;
+    {
+        DebugDiagnostics::Scope timing("WiFi initial connect", true);
+        wifiReady = WifiManager::connect();
+    }
+    if (wifiReady) {
         state.wifiConnected = true;
         state.wifiRssi = WiFi.RSSI();
         state.fastReportMode = true;
@@ -181,14 +193,20 @@ void setup() {
         
         // Initialize data reporter (HTTP path; also used as the buffered-data
         // flush fallback even when MQTT is the primary transport).
-        DataReporter::init();
+        {
+            DebugDiagnostics::Scope timing("HTTP reporter init / NTP", true);
+            DataReporter::init();
+        }
 
         #if MQTT_ENABLED
         // MQTT transport: connect, announce, and subscribe to config/cmd.
         // init() may spend up to 45 seconds inside NTP, which narrates itself;
         // connect() then blocks in a TLS handshake we cannot tick from, so it
         // gets a static line rather than a bar that would sit still.
-        MqttReporter::init();
+        {
+            DebugDiagnostics::Scope timing("MQTT init / NTP", true);
+            MqttReporter::init();
+        }
         Progress::note("Cloud connecting", "TLS handshake");
         MqttReporter::connect();
         #endif
@@ -198,7 +216,7 @@ void setup() {
         return; // ESP.deepSleep() does not return; keeps static analysis sane.
         #else
         // RTC scheduling prevents an OTA HTTP request on every reboot.
-        if (PowerManager::otaCheckDue()) {
+        if (AUTO_OTA_ENABLED && PowerManager::otaCheckDue()) {
             Serial.println(F("[OTA] Scheduled update check..."));
             PowerManager::markOtaCheckAttempted();
             OTAHandler::checkForUpdate();
@@ -236,13 +254,16 @@ void setup() {
 // ============================================================================
 
 void loop() {
+    DebugDiagnostics::loopTick();
     unsigned long now = millis();
 
     #if DISPLAY_ENABLED
-    // Serviced first so a press is never delayed behind network work.
+    // Poll before this pass's network work. Synchronous work can still delay
+    // the next poll; debug timing reports those gaps explicitly.
     Buttons::update();
 
     if (Buttons::takeShortPress(Buttons::NEXT)) {
+        Serial.println(F("[Buttons] NEXT short press -> next screen"));
         Display::nextScreen();
         Display::backlightOn();
     }
@@ -250,6 +271,7 @@ void loop() {
     // "Refresh now": re-measure and let the existing report path fire on this
     // pass rather than duplicating the transport logic here.
     if (Buttons::takeShortPress(Buttons::SELECT)) {
+        Serial.println(F("[Buttons] SELECT short press -> refresh measurement"));
         Display::backlightOn();
         takeMeasurement();
         state.lastMeasurement = now;
@@ -273,6 +295,7 @@ void loop() {
     #if MQTT_ENABLED
     // Service the MQTT link (reconnect + inbound config/cmd) once paired.
     if (Config::isMqttProvisioned() && state.wifiConnected) {
+        DebugDiagnostics::Scope timing("MQTT service");
         MqttReporter::loop();
     }
     #endif
@@ -315,7 +338,7 @@ void loop() {
     }
     
     // RTC scheduling survives reboot/deep sleep, unlike millis().
-    if (state.wifiConnected && PowerManager::otaCheckDue()) {
+    if (AUTO_OTA_ENABLED && state.wifiConnected && PowerManager::otaCheckDue()) {
         Serial.println(F("[OTA] Periodic update check..."));
         PowerManager::markOtaCheckAttempted();
         OTAHandler::checkForUpdate();
@@ -340,14 +363,21 @@ void loop() {
 // ============================================================================
 
 void takeMeasurement() {
+    DebugDiagnostics::Scope timing("measurement", true);
     Serial.println(F("[Sensor] Taking measurement..."));
     
     // Read water level
-    state.waterLevelCm = Sensor::readWaterLevel(state.waterLevelValid);
+    {
+        DebugDiagnostics::Scope sensorTiming("ultrasonic");
+        state.waterLevelCm = Sensor::readWaterLevel(state.waterLevelValid);
+    }
     state.volumeLiters = state.waterLevelValid ? Sensor::calculateVolume(state.waterLevelCm) : 0;
 
     // Read temperature
-    state.temperatureC = Sensor::readTemperature(state.temperatureValid);
+    {
+        DebugDiagnostics::Scope sensorTiming("temperature");
+        state.temperatureC = Sensor::readTemperature(state.temperatureValid);
+    }
     
     // Read battery voltage
     state.batteryVoltage = Sensor::readBatteryVoltage();
@@ -367,6 +397,7 @@ void takeMeasurement() {
 }
 
 static bool reportData() {
+    DebugDiagnostics::Scope timing("report", true);
     Serial.println(F("[Report] Sending data..."));
 
     // Transport selection: MQTT when enabled (telemetry carries config_version;

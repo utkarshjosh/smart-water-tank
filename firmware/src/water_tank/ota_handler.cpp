@@ -38,7 +38,11 @@ namespace OTAHandler {
     }
 
     void init() {
+#if AUTO_OTA_ENABLED
         Serial.println(F("[OTA] Authenticated HTTPS OTA enabled"));
+#else
+        Serial.println(F("[OTA] Automatic checks disabled for this local build; manual update function retained"));
+#endif
     }
 
     void handle() {
@@ -46,6 +50,9 @@ namespace OTAHandler {
     }
 
     bool checkForUpdate() {
+#if !AUTO_OTA_ENABLED
+        return false;
+#else
         Serial.println(F("[OTA] Checking for updates..."));
         // Not a stage: the HTTP GET below blocks somewhere we cannot tick, and
         // a bar that stops moving is a worse signal than a line of text. On a
@@ -122,6 +129,7 @@ namespace OTAHandler {
         
         Serial.println(F("[OTA] No updates available"));
         return false;
+#endif
     }
 
     // The download has a dozen failure returns and exactly one success path,

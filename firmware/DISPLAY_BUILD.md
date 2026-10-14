@@ -5,6 +5,29 @@ make build DISPLAY=1          # LCD variant
 make build                    # normal device, unchanged
 ```
 
+## Local button and responsiveness diagnostics
+
+```bash
+make upload DISPLAY=1 DEBUG=1 AUTO_OTA=0 SERIAL_PORT=/dev/cu.usbserial-0001
+```
+
+The local diagnostic version is **1.16** and the display variant reports
+**1.16-display**. `AUTO_OTA=0` prevents automatic update checks, including a
+direct call to `checkForUpdate()`. The server compares assigned and current
+versions for equality, so a larger version number alone cannot prevent an
+older assigned image replacing this build. This option does not remove USB
+flashing or the explicit `updateFromUrl()` function. Normal builds still
+default to `AUTO_OTA=1`; no server assignment or release is changed.
+
+At 115200 baud, `DEBUG=1` logs raw button transitions (rate limited per input),
+debounced edges and the action consumed, plus a ten-second input summary and
+loop/heap heartbeat. Timings identify slow measurements, connection attempts,
+reporting and gaps between button polls. A stable idle should show
+`NEXT=0 SELECT=0` with unchanged raw-change counters. Short presses act on
+release; hold Select for two seconds only when deliberately entering pairing.
+Raw sampling runs in the main loop, so it cannot observe an entire press that
+occurs during a blocking operation.
+
 A display build is a **different product**, not an added feature: mains powered
 through an SMPS, permanently associated to WiFi, and read by a person standing
 at the tank. The default build compiles none of it — the binary is byte for byte

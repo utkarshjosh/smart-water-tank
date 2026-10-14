@@ -22,6 +22,12 @@ namespace {
         {PIN_BTN_NEXT,   false, false, 0, 0, false, false, false},
         {PIN_BTN_SELECT, false, false, 0, 0, false, false, false},
     };
+
+#if defined(DEBUG) && DEBUG
+    unsigned long rawChanges[Buttons::COUNT] = {0};
+    unsigned long rawLastLog[Buttons::COUNT] = {0};
+    unsigned long lastSummary = 0;
+#endif
 }
 
 namespace Buttons {
@@ -34,10 +40,8 @@ namespace Buttons {
         }
         Serial.println(F("[Buttons] Initialized (2 buttons, active HIGH, external pull-downs)"));
 
-        // Raw state with nothing pressed. Every pin must read 0 here. A pin
-        // reading 1 at rest is held HIGH by something external - on GPIO16 that
-        // is almost always a leftover D0-to-RST wire from a deep-sleep build,
-        // whose reset pull-up keeps the pin high and makes the button look dead.
+        // With neither button pressed both inputs must read LOW. Live raw
+        // changes distinguish an unstable idle input from a polling stall.
         Serial.printf("[Buttons] raw at boot: NEXT(D5)=%d SELECT(D8)=%d  (both should be 0)\n",
             digitalRead(PIN_BTN_NEXT), digitalRead(PIN_BTN_SELECT));
     }
@@ -50,6 +54,14 @@ namespace Buttons {
             const bool sample = digitalRead(b.pin) == HIGH;
 
             if (sample != b.lastSample) {
+#if defined(DEBUG) && DEBUG
+                ++rawChanges[i];
+                if (now - rawLastLog[i] >= 100) {
+                    Serial.printf("[Buttons] raw %s=%d t=%lu changes=%lu\n",
+                        (i == NEXT) ? "NEXT" : "SELECT", sample, now, rawChanges[i]);
+                    rawLastLog[i] = now;
+                }
+#endif
                 b.lastSample = sample;
                 b.lastChange = now;
                 continue;   // wait out the bounce before believing it
@@ -58,8 +70,9 @@ namespace Buttons {
             if (now - b.lastChange < BUTTON_DEBOUNCE_MS || sample == b.stableDown) continue;
 
             b.stableDown = sample;
-            Serial.printf("[Buttons] %s %s\n",
-                (i == NEXT) ? "NEXT" : "SELECT", sample ? "down" : "up");
+            Serial.printf("[Buttons] %s %s t=%lu held=%lums\n",
+                (i == NEXT) ? "NEXT" : "SELECT", sample ? "down" : "up", now,
+                sample ? 0UL : now - b.pressedAt);
             if (sample) {
                 b.pressedAt = now;
                 b.longFired = false;
@@ -78,6 +91,14 @@ namespace Buttons {
                 b.longPending = true;
             }
         }
+#if defined(DEBUG) && DEBUG
+        if (now - lastSummary >= 10000) {
+            Serial.printf("[Buttons] idle/sample NEXT=%d SELECT=%d rawChanges=%lu/%lu t=%lu\n",
+                digitalRead(PIN_BTN_NEXT), digitalRead(PIN_BTN_SELECT),
+                rawChanges[NEXT], rawChanges[SELECT], now);
+            lastSummary = now;
+        }
+#endif
     }
 
     bool takeShortPress(Id id) {
