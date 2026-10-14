@@ -83,16 +83,23 @@ backup_database() {
 
 # The repo is one npm workspace: the lockfile lives at the root and
 # packages/contracts is a dependency of both apps. Installing from the root
-# with --workspace pulls in just that app plus contracts (built by its
+# with --workspace pulls in the named apps plus contracts (built by its
 # `prepare` script) and skips the mobile toolchain.
-install_workspace() {
-  echo "  → Installing dependencies (workspace: $1)..."
-  (cd "$(dirname "$0")" && npm ci --workspace="$1" --no-audit --no-fund)
+#
+# Both server apps are always installed together, whatever the target.
+# `npm ci` empties every workspace's node_modules before it installs, so
+# naming only one app deletes the other's libraries from under it. On
+# 2026-09-14 a frontend-only deploy did this to the running API: it carried on
+# with the modules already in memory, but every lazily loaded one failed, so
+# every JSON POST broke (including Mosquitto's /api/v1/mqtt-auth/user check)
+# and the next restart would have taken it down entirely.
+install_dependencies() {
+  info "📦 Installing dependencies (backend-v2 + frontend)..."
+  (cd "$(dirname "$0")" && npm ci --workspace=backend-v2 --workspace=frontend --no-audit --no-fund)
 }
 
 deploy_backend() {
   info "📦 Deploying backend API..."
-  install_workspace backend-v2
   cd "$BACKEND_DIR"
 
   echo "  → Building (prisma generate + tsc)..."
@@ -114,7 +121,6 @@ deploy_backend() {
 
 deploy_frontend() {
   info "📦 Deploying admin panel + app..."
-  install_workspace frontend
   cd frontend
 
   echo "  → Building static bundle..."
@@ -128,9 +134,9 @@ deploy_frontend() {
 }
 
 case "$DEPLOY_TARGET" in
-  backend)  backup_database; deploy_backend ;;
-  frontend) deploy_frontend ;;
-  all)      backup_database; deploy_backend; echo ""; deploy_frontend ;;
+  backend)  backup_database; install_dependencies; deploy_backend ;;
+  frontend) install_dependencies; deploy_frontend ;;
+  all)      backup_database; install_dependencies; deploy_backend; echo ""; deploy_frontend ;;
   *)
     fail "❌ Invalid target: $DEPLOY_TARGET
 Usage: ./deploy.sh [backend|frontend|all] [--skip-backup]"
