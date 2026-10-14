@@ -14,6 +14,7 @@
 #include <ESP8266WiFi.h>
 #include <WiFiClientSecureBearSSL.h>
 #include <time.h>
+#include "progress.h"
 
 namespace TlsClient {
     // Concatenated PEM roots are supported by BearSSL::X509List. These are CA
@@ -109,10 +110,19 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
 
         for (uint8_t attempt = 1; attempt <= TIME_SYNC_ATTEMPTS; ++attempt) {
             Serial.printf("[TLS] Syncing clock via NTP (attempt %u/%u)...\n", attempt, TIME_SYNC_ATTEMPTS);
+            // Up to three 15-second attempts is 45 seconds of a boot that
+            // otherwise shows nothing at all. The attempt number is on screen
+            // because reaching 3/3 is the moment this stops being slow and
+            // starts being broken.
+            char stage[Progress::TEXT_MAX];
+            snprintf(stage, sizeof(stage), "Clock: NTP %u/%u", attempt, TIME_SYNC_ATTEMPTS);
+            Progress::stage(stage);
+
             configTime(0, 0, "time.cloudflare.com", "time.google.com", "pool.ntp.org");
             const unsigned long started = millis();
             while (time(nullptr) < MIN_VALID_EPOCH && millis() - started < TIME_SYNC_ATTEMPT_MS) {
                 delay(250);
+                Progress::tick();
             }
             if (time(nullptr) >= MIN_VALID_EPOCH) {
                 Serial.println(F("[TLS] Clock synchronized"));
@@ -121,6 +131,10 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
         }
         lastFailedSyncAt = millis();
         Serial.println(F("[TLS] Clock sync failed; refusing unverified TLS"));
+        // Without a clock there is no certificate validation and so no
+        // telemetry, no OTA and no config. That is a whole-device outage with
+        // no other visible symptom, which makes it worth a held message.
+        Progress::note("Clock sync failed", "no secure link", 3000);
         return false;
     }
 

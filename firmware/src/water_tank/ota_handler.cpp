@@ -4,6 +4,7 @@
 
 #include "ota_handler.h"
 #include "config.h"
+#include "progress.h"
 #include "tls_client.h"
 #include <ArduinoJson.h>
 #include <WiFiClientSecure.h>
@@ -46,6 +47,11 @@ namespace OTAHandler {
 
     bool checkForUpdate() {
         Serial.println(F("[OTA] Checking for updates..."));
+        // Not a stage: the HTTP GET below blocks somewhere we cannot tick, and
+        // a bar that stops moving is a worse signal than a line of text. On a
+        // routine six-hourly check with no update this is invisible anyway -
+        // the backlight is off and the main loop redraws immediately after.
+        Progress::note("Checking for", "firmware update");
         
         String downloadUrl = "";
         String latestVersion = "";
@@ -106,6 +112,9 @@ namespace OTAHandler {
         if (updateFound) {
             Serial.printf("[OTA] Update available: v%s\n", latestVersion.c_str());
             Serial.printf("[OTA] URL: %s\n", downloadUrl.c_str());
+            // Held long enough to read. Whoever walks past during an update
+            // should be able to find out afterwards what it was installing.
+            Progress::note("Update found", latestVersion.c_str(), 2000);
             
             // Now we can safely start the download with freed memory
             return updateFromUrl(downloadUrl.c_str(), expectedSha256.c_str(), expectedSize);
@@ -115,7 +124,24 @@ namespace OTAHandler {
         return false;
     }
 
+    // The download has a dozen failure returns and exactly one success path,
+    // and the success path never returns at all - it reboots into the new
+    // image. So the panel's "it failed" message belongs in a wrapper rather
+    // than repeated at every early return inside.
+    static bool performUpdate(const char* url, const char* expectedSha256, size_t expectedSize);
+
     bool updateFromUrl(const char* url, const char* expectedSha256, size_t expectedSize) {
+        const bool ok = performUpdate(url, expectedSha256, expectedSize);
+        if (!ok) {
+            // A failed OTA leaves the running firmware untouched, which is the
+            // one thing the person watching the screen needs to be told before
+            // they decide to start pulling wires.
+            Progress::note("Update failed", "device unharmed", 3000);
+        }
+        return ok;
+    }
+
+    static bool performUpdate(const char* url, const char* expectedSha256, size_t expectedSize) {
         Serial.printf("[OTA] Downloading from %s\n", url);
 
         if (!isValidSha256(expectedSha256) || expectedSize == 0) {
@@ -184,6 +210,11 @@ namespace OTAHandler {
         }
         
         Serial.println(F("[OTA] Writing firmware..."));
+        // The whole reason this screen exists. A minute of a frozen panel
+        // during a flash write reads as a crash, and the natural response to a
+        // crashed device - cutting the power - is the one action that turns a
+        // recoverable update into a board that needs a USB cable to revive.
+        Progress::stage("DO NOT POWER OFF");
         
         // Get stream and write to Update
         WiFiClient* stream = http.getStreamPtr();
@@ -210,6 +241,7 @@ namespace OTAHandler {
                 br_sha256_update(&sha256, buff, c);
                 written += c;
                 lastDataAt = millis();
+                Progress::percent(static_cast<uint8_t>((written * 100) / totalSize));
                 
                 // Progress indicator
                 if (written % 10240 == 0 || written == totalSize) {
@@ -238,6 +270,8 @@ namespace OTAHandler {
             return false;
         }
 
+        Progress::note("Verifying image", "checksum...");
+
         uint8_t digest[SHA256_BYTES];
         br_sha256_out(&sha256, digest);
         String actualSha256 = sha256Hex(digest);
@@ -260,6 +294,7 @@ namespace OTAHandler {
         }
         
         Serial.println(F("[OTA] Update successful! Rebooting..."));
+        Progress::note("Update OK", "restarting...");
         delay(1000);
         ESP.restart();
         

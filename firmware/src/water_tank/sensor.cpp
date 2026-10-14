@@ -27,6 +27,40 @@ static DallasTemperature* tempSensor = nullptr;
 // If using direct: ratio = 1.0 (ESP8266 ADC max is 1V!)
 #define BATTERY_DIVIDER_RATIO   2.0
 
+namespace {
+    // Distinguishes the two ways a DS18B20 reading goes missing, because they
+    // have completely different fixes and the -127 the library returns for
+    // both tells you nothing.
+    //
+    // A 1-Wire reset is answered by a presence pulse from any device on the
+    // bus. No presence means the bus itself is the problem - almost always a
+    // missing 4.7k pull-up from data to 3V3, since the bus is open-drain and
+    // has nothing else to pull it high. Presence with no readable device
+    // points at the sensor or the conversion instead.
+    void reportOneWireBus() {
+        if (!oneWire || !tempSensor) return;
+
+        const bool presence = oneWire->reset() != 0;
+        const uint8_t count = tempSensor->getDeviceCount();
+        Serial.printf("[Sensor] 1-Wire on GPIO%d: presence=%s, devices=%u\n",
+            PIN_TEMPERATURE, presence ? "yes" : "NO", static_cast<unsigned>(count));
+
+        if (!presence) {
+            Serial.println(F("[Sensor] No device answered. Check the 4.7k pull-up from data to 3V3, "
+                             "and that data/GND share a twisted pair on long runs."));
+            return;
+        }
+
+        DeviceAddress addr;
+        for (uint8_t i = 0; i < count; i++) {
+            if (!tempSensor->getAddress(addr, i)) continue;
+            Serial.printf("[Sensor]   #%u ROM:", static_cast<unsigned>(i));
+            for (uint8_t b = 0; b < 8; b++) Serial.printf(" %02X", addr[b]);
+            Serial.println();
+        }
+    }
+}
+
 namespace Sensor {
     void powerOn() {
 #if defined(PIN_SENSOR_POWER) && PIN_SENSOR_POWER >= 0
@@ -57,6 +91,7 @@ namespace Sensor {
         oneWire = new OneWire(PIN_TEMPERATURE);
         tempSensor = new DallasTemperature(oneWire);
         tempSensor->begin();
+        reportOneWireBus();
         
         Serial.println(F("[Sensor] Initialized"));
     }
@@ -142,7 +177,12 @@ namespace Sensor {
 
         // Check for error (-127 means no sensor or disconnected)
         if (tempC == DEVICE_DISCONNECTED_C) {
-            Serial.println(F("[Sensor] Temperature sensor disconnected"));
+            reportOneWireBus();
+            // begin() caches the device list, so a probe that was absent when
+            // init() ran - a loose connector, a rail that came up late - stays
+            // invisible until the next boot unless the bus is re-enumerated.
+            // Re-scanning here lets a reseated connector recover on its own.
+            tempSensor->begin();
             valid = false;
             return -127;
         }
