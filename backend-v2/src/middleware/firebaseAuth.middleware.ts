@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
 import { User } from '@prisma/client';
+import type { DecodedIdToken } from 'firebase-admin/auth';
 import { getAuth } from '../config/firebase';
 import { prisma } from '../lib/prisma';
 import { extractBearer } from '../lib/bearer';
@@ -11,15 +12,50 @@ export interface AuthRequest extends Request {
   firebaseUid?: string;
 }
 
+// firebase-admin codes that mean "this ID token is not acceptable". Anything
+// else verifyIdToken throws (credentials or project ID not configured, an
+// internal error) is the server's problem, not the caller's.
+const REJECTED_TOKEN_CODES = new Set([
+  'auth/argument-error', // malformed, bad signature, wrong project, unknown key id
+  'auth/id-token-expired',
+  'auth/invalid-id-token',
+  'auth/id-token-revoked',
+  'auth/user-disabled',
+]);
+
+function isRejectedToken(error: unknown): boolean {
+  const { code, message } = (error ?? {}) as { code?: unknown; message?: unknown };
+  if (typeof code !== 'string' || !REJECTED_TOKEN_CODES.has(code)) return false;
+  // firebase-admin also files a failed fetch of Google's signing keys under
+  // auth/argument-error. When Google answered with an error status the message
+  // says so; a bare network failure does not, and still reads as a bad token.
+  return !(typeof message === 'string' && message.includes('Error fetching public keys'));
+}
+
+// 401 means only "this ID token is not valid". A server-side failure answers
+// 503, which the mobile client retries with backoff instead of force-refreshing
+// a token that was fine.
 export async function firebaseAuth(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  const token = extractBearer(req);
+  if (!token) {
+    next(new HttpError(401, 'Missing or invalid authorization header'));
+    return;
+  }
+
+  let decoded: DecodedIdToken;
   try {
-    const token = extractBearer(req);
-    if (!token) {
-      next(new HttpError(401, 'Missing or invalid authorization header'));
+    decoded = await getAuth().verifyIdToken(token);
+  } catch (error) {
+    if (isRejectedToken(error)) {
+      res.status(401).json({ error: 'Invalid or expired token' });
       return;
     }
+    console.error('Firebase token verification error:', error);
+    next(new HttpError(503, 'Authentication temporarily unavailable'));
+    return;
+  }
 
-    const decoded = await getAuth().verifyIdToken(token);
+  try {
     req.firebaseUid = decoded.uid;
 
     let user = await prisma.user.findUnique({ where: { firebaseUid: decoded.uid } });
@@ -48,8 +84,10 @@ export async function firebaseAuth(req: AuthRequest, res: Response, next: NextFu
     req.user = user;
     next();
   } catch (error) {
+    // The token was valid; the user lookup or first-sign-in provisioning
+    // failed (database down, Firebase user fetch failed).
     console.error('Firebase authentication error:', error);
-    res.status(401).json({ error: 'Invalid or expired token' });
+    next(new HttpError(503, 'Authentication temporarily unavailable'));
   }
 }
 

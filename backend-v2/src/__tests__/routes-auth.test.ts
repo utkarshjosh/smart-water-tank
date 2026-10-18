@@ -1,9 +1,32 @@
-import { test } from 'node:test';
+import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
+import * as firebase from '../config/firebase';
 import { HttpError } from '../lib/http-error';
+import { prisma } from '../lib/prisma';
 import * as onboarding from '../services/onboarding.service';
 import * as userService from '../services/user.service';
-import { callArgs, currentReadingDto, deviceLookupReturns, deviceRow, http, meDto, signInAs, userRow } from './helpers/http';
+import {
+  callArgs,
+  currentReadingDto,
+  deviceLookupReturns,
+  deviceRow,
+  firebaseError,
+  http,
+  meDto,
+  signInAs,
+  userRow,
+} from './helpers/http';
+
+// Makes Firebase's verifyIdToken fail with `error` for one test.
+function verifyIdTokenThrows(t: TestContext, error: Error): Record<string, string> {
+  t.mock.method(firebase, 'getAuth', () => ({
+    verifyIdToken: async () => {
+      throw error;
+    },
+  }) as unknown as ReturnType<typeof firebase.getAuth>);
+  t.mock.method(console, 'error', () => {});
+  return { Authorization: 'Bearer some-token' };
+}
 
 // The auth chain every tenant route sits behind:
 //   firebaseAuth -> requireTenant -> requireDeviceAccess (for :deviceId routes)
@@ -29,6 +52,58 @@ test('token Firebase rejects -> 401 without leaking the reason', async (t) => {
   const res = await http().get('/api/v1/user/me').set('Authorization', 'Bearer forged');
   assert.equal(res.status, 401);
   assert.deepEqual(res.body, { error: 'Invalid or expired token' });
+});
+
+test('expired token -> 401', async (t) => {
+  const headers = verifyIdTokenThrows(t, firebaseError('auth/id-token-expired'));
+  const res = await http().get('/api/v1/user/me').set(headers);
+  assert.equal(res.status, 401);
+  assert.deepEqual(res.body, { error: 'Invalid or expired token' });
+});
+
+// 401 must mean only "this token is not valid". When the server itself fails
+// the answer is 503, so clients retry instead of treating the user as signed out.
+
+test('users-table lookup throws -> 503, not 401', async (t) => {
+  const headers = signInAs(t, userRow());
+  // signInAs swapped prisma.user for a plain object, so its method can be mocked.
+  t.mock.method(prisma.user, 'findUnique', async () => {
+    throw new Error("Can't reach database server");
+  });
+  t.mock.method(console, 'error', () => {});
+  const res = await http().get('/api/v1/user/me').set(headers);
+  assert.equal(res.status, 503);
+  assert.deepEqual(res.body, { error: 'Authentication temporarily unavailable' });
+});
+
+test('first sign-in provisioning throws -> 503, not 401', async (t) => {
+  const headers = signInAs(t, null, { uid: 'brand-new-uid' });
+  t.mock.method(onboarding, 'provisionPersonalTenantAndUser', async () => {
+    throw new Error("Can't reach database server");
+  });
+  t.mock.method(console, 'error', () => {});
+  const res = await http().get('/api/v1/user/me').set(headers);
+  assert.equal(res.status, 503);
+});
+
+test('Firebase not configured -> 503, not 401', async (t) => {
+  t.mock.method(firebase, 'getAuth', () => {
+    throw new Error('Firebase configuration is missing');
+  });
+  t.mock.method(console, 'error', () => {});
+  const res = await http().get('/api/v1/user/me').set('Authorization', 'Bearer some-token');
+  assert.equal(res.status, 503);
+});
+
+test("Google's signing keys could not be fetched -> 503, not 401", async (t) => {
+  // firebase-admin reports this under auth/argument-error, the same code as a
+  // forged token; only the message tells them apart.
+  const headers = verifyIdTokenThrows(
+    t,
+    firebaseError('auth/argument-error', 'Error fetching public keys for Google certs: 503 Service Unavailable')
+  );
+  const res = await http().get('/api/v1/user/me').set(headers);
+  assert.equal(res.status, 503);
 });
 
 test('archived user still holds Firebase credentials but is refused -> 403', async (t) => {
