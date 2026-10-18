@@ -117,6 +117,9 @@ model Device {
   // queryable and the hardware ID stays claimed, so a retired sensor cannot
   // silently re-pair itself.
   archivedAt      DateTime?    @map("archived_at")
+  // IANA zone (e.g. "Asia/Kolkata") the tank's days and hours are cut in.
+  // null = the server default (DEFAULT_TIMEZONE).
+  timezone        String?      @db.VarChar(64)
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt @map("updated_at")
 
@@ -131,6 +134,7 @@ model Device {
   userMappings        UserDeviceMapping[]
   claimCodes          DeviceClaimCode[]
   tankState           TankState?
+  hourlyUsage         HourlyUsage[]
 
   @@index([tenantId])
   @@index([archivedAt])
@@ -175,8 +179,10 @@ model DailySummary {
   minVolumeL    Decimal? @map("min_volume_l") @db.Decimal(10, 2)
   maxVolumeL    Decimal? @map("max_volume_l") @db.Decimal(10, 2)
   avgVolumeL    Decimal? @map("avg_volume_l") @db.Decimal(10, 2)
+  totalFilledL  Decimal  @default(0) @map("total_filled_l") @db.Decimal(10, 2)
   refillEvents  Int      @default(0) @map("refill_events")
   leakSuspected Boolean  @default(false) @map("leak_suspected")
+  readings      Int      @default(0)
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
@@ -366,4 +372,28 @@ model TankState {
   device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
 
   @@map("tank_states")
+}
+
+// One row per device per local hour, rebuilt from measurements by
+// rollup.service. A cache, not a record: it is recomputed whenever its inputs
+// change (new readings, tank profile, timezone), so the litres here always
+// match what the current profile says.
+model HourlyUsage {
+  id        String   @id @default(uuid()) @db.Char(36)
+  deviceId  String   @map("device_id") @db.Char(36)
+  // The instant the local hour starts. Not a UTC hour: in India the hours
+  // begin at :30 UTC.
+  hourStart DateTime @map("hour_start")
+  usedL     Decimal  @default(0) @map("used_l") @db.Decimal(10, 2)
+  filledL   Decimal  @default(0) @map("filled_l") @db.Decimal(10, 2)
+  minL      Decimal? @map("min_l") @db.Decimal(10, 2)
+  maxL      Decimal? @map("max_l") @db.Decimal(10, 2)
+  avgL      Decimal? @map("avg_l") @db.Decimal(10, 2)
+  readings  Int      @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceId, hourStart])
+  @@map("hourly_usage")
 }

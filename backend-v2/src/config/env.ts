@@ -28,6 +28,8 @@ export const env = {
   firmwareStoragePath: process.env.FIRMWARE_STORAGE_PATH || './storage/firmware',
   alertOfflineThresholdMinutes: parseInt(process.env.ALERT_OFFLINE_THRESHOLD_MINUTES || '15', 10),
   leakThresholdLPerHour: parseFloat(process.env.LEAK_DETECTION_THRESHOLD_L_PER_HOUR || '50'),
+  // Zone a tank's days and hours are cut in until its owner sets one.
+  defaultTimezone: process.env.DEFAULT_TIMEZONE || 'Asia/Kolkata',
 
   // --- MQTT (optional) -----------------------------------------------------
   // When MQTT_URL is UNSET, MQTT is DISABLED and the app runs HTTP-only, so

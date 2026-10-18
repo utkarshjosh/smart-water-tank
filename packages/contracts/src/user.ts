@@ -229,6 +229,41 @@ export const usageResponseSchema = z.object({
 });
 export type UsageResponse = z.infer<typeof usageResponseSchema>;
 
+export const usageHourSchema = z.object({
+  /** Instant the local hour starts; in UTC+5:30 that is :30 past a UTC hour. */
+  hour_start: isoDateTime,
+  used_l: z.number().nullable(),
+  filled_l: z.number().nullable(),
+  min_l: z.number().nullable(),
+  max_l: z.number().nullable(),
+  avg_l: z.number().nullable(),
+  readings: z.number(),
+});
+export type UsageHour = z.infer<typeof usageHourSchema>;
+
+/** GET /devices/:id/usage/hourly — usage.service getHourlyUsage. */
+export const hourlyUsageResponseSchema = z.object({
+  device_id: z.string(),
+  /** IANA zone the hours and "today" are cut in. */
+  timezone: z.string(),
+  range: z.enum(['today', '24h']),
+  from: isoDateTime,
+  to: isoDateTime,
+  /** Only hours with readings; a missing hour had no data, not zero use. */
+  hours: z.array(usageHourSchema),
+  totals: z.object({ used_l: z.number().nullable(), filled_l: z.number().nullable() }),
+  today: z.object({ date: isoDate, used_l: z.number().nullable(), filled_l: z.number().nullable() }),
+});
+export type HourlyUsageResponse = z.infer<typeof hourlyUsageResponseSchema>;
+
+/** PUT /devices/:id/timezone. */
+export const deviceTimezoneResponseSchema = z.object({
+  timezone: z.string(),
+  /** true when the device has no zone of its own and uses the server default. */
+  is_default: z.boolean(),
+});
+export type DeviceTimezoneResponse = z.infer<typeof deviceTimezoneResponseSchema>;
+
 // --- Configuration -----------------------------------------------------------
 
 /**

@@ -28,6 +28,8 @@ import {
   syncModeResponseSchema,
   tankProfileResponseSchema,
   usageResponseSchema,
+  hourlyUsageResponseSchema,
+  deviceTimezoneResponseSchema,
 } from '@aquamind/contracts';
 import * as userService from '../services/user.service';
 import * as deviceService from '../services/device.service';
@@ -37,7 +39,9 @@ import * as alertRulesService from '../services/alert-rules.service';
 import { registerPushToken, removePushToken, updateUserFCMToken } from '../services/fcm.service';
 import { exportUserMeasurements } from '../services/measurement-export.service';
 import { BUCKETS, getDeviceHistorySeries } from '../services/history.service';
-import { getDeviceUsage } from '../services/usage.service';
+import { getDeviceUsage, getHourlyUsage, setDeviceTimezone } from '../services/usage.service';
+import { scheduleRebuild } from '../services/rollup.service';
+import { isValidTimeZone } from '../lib/local-time';
 
 const router = express.Router();
 
@@ -326,6 +330,39 @@ router.get(
   })
 );
 
+const hourlyUsageQuerySchema = z.object({
+  range: z.enum(['today', '24h']).default('24h'),
+});
+
+// GET /api/v1/user/devices/:deviceId/usage/hourly - Litres used and filled per
+// local hour, for the Today and Last 24 hours views, plus today's total.
+router.get(
+  '/devices/:deviceId/usage/hourly',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    const { range } = hourlyUsageQuerySchema.parse(req.query);
+    sendJson(res, hourlyUsageResponseSchema, await getHourlyUsage(req.device!, range));
+  })
+);
+
+const timezoneSchema = z.object({
+  // null goes back to the server default.
+  timezone: z.string().max(64).refine(isValidTimeZone, 'Unknown timezone').nullable(),
+});
+
+// PUT /api/v1/user/devices/:deviceId/timezone - Where the tank's days and hours
+// begin. Rebuilds the last 90 days of usage in the background.
+router.put(
+  '/devices/:deviceId/timezone',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    const { timezone } = timezoneSchema.parse(req.body);
+    const result = await setDeviceTimezone(req.device!, timezone);
+    scheduleRebuild(req.device!.id);
+    sendJson(res, deviceTimezoneResponseSchema, result);
+  })
+);
+
 // GET /api/v1/user/devices/:deviceId/tank-profile - Tank shape/dimensions setup
 router.get(
   '/devices/:deviceId/tank-profile',
@@ -353,7 +390,10 @@ router.put(
   requireDeviceAccess,
   asyncHandler(async (req: DeviceAccessRequest, res) => {
     const validated = tankProfileSchema.parse(req.body);
-    sendJson(res, tankProfileResponseSchema, { profile: await tankProfileService.upsertTankProfile(req.device!, validated) });
+    const profile = await tankProfileService.upsertTankProfile(req.device!, validated);
+    // Stored usage litres came from the old profile; recompute them.
+    scheduleRebuild(req.device!.id);
+    sendJson(res, tankProfileResponseSchema, { profile });
   })
 );
 
@@ -364,6 +404,7 @@ router.delete(
   requireDeviceAccess,
   asyncHandler(async (req: DeviceAccessRequest, res) => {
     await tankProfileService.deleteTankProfile(req.device!);
+    scheduleRebuild(req.device!.id);
     res.status(204).send();
   })
 );
