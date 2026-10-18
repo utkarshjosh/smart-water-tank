@@ -48,10 +48,36 @@ export function shouldPushConfig(outcome: Pick<TelemetryOutcome, 'stale' | 'conf
 }
 
 export class GatewayCore {
+  // Hardware ids of archived devices already logged by isArchived().
+  private readonly reportedArchived = new Set<string>();
+
   // Devices are addressed by hardware deviceId on the wire (MQTT topic / HTTP
   // token subject) but by internal UUID in the DB.
   async resolveByHardwareId(hardwareDeviceId: string): Promise<Device | null> {
     return prisma.device.findUnique({ where: { deviceId: hardwareDeviceId } });
+  }
+
+  // A decommissioned device's frames are dropped before anything is stored: no
+  // measurement, no alert, no config push. The broker checks credentials only
+  // on CONNECT, so an MQTT session opened before the device was archived keeps
+  // publishing until it reconnects. Archiving asks the broker to drop that
+  // session (disconnectDeviceSession), but only best effort; this is the
+  // backstop that keeps its traffic out of the data regardless. Logged once
+  // per device per process. Seeing the device unarchived
+  // clears its entry, so archiving it again after a restore is logged again.
+  private isArchived(device: Device, kind: 'telemetry' | 'announce'): boolean {
+    if (!device.archivedAt) {
+      this.reportedArchived.delete(device.deviceId);
+      return false;
+    }
+    if (!this.reportedArchived.has(device.deviceId)) {
+      this.reportedArchived.add(device.deviceId);
+      console.warn(
+        `[gateway] ignoring ${kind} from archived device ${device.deviceId} ` +
+          `(archived ${device.archivedAt.toISOString()}); further frames are dropped without logging`
+      );
+    }
+    return true;
   }
 
   async resolveByInternalId(internalDeviceId: string): Promise<Device | null> {
@@ -65,6 +91,9 @@ export class GatewayCore {
     const device = await this.resolveByHardwareId(hardwareDeviceId);
     if (!device) {
       return { recognized: false, stale: false, syncMode: 'piggyback', config: null, configVersion: 0 };
+    }
+    if (this.isArchived(device, 'telemetry')) {
+      return { recognized: false, archived: true, stale: false, syncMode: 'piggyback', config: null, configVersion: 0 };
     }
 
     const result = await recordMeasurement(device, telemetryToMeasurementInput(telemetry));
@@ -90,6 +119,9 @@ export class GatewayCore {
   async handleAnnounce(hardwareDeviceId: string, announce: AnnounceMessage): Promise<AnnounceOutcome> {
     const device = await this.resolveByHardwareId(hardwareDeviceId);
     if (!device) return { recognized: false, config: null };
+    // No lastSeen/status write either: an archived device must not show as
+    // online again.
+    if (this.isArchived(device, 'announce')) return { recognized: false, archived: true, config: null };
 
     await prisma.device.update({
       where: { id: device.id },

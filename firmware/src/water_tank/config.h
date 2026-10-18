@@ -299,6 +299,17 @@
 #define MIN_SLEEP_INTERVAL_MS       60000
 #define MAX_FAILURE_SLEEP_MS        3600000
 
+// Refusals of the device token in a row - each at least one backoff window
+// apart (1, 2, 4, 8 min...), and from both the broker and the device API -
+// before the device gives up on the token, clears its MQTT provisioning and
+// restarts into pairing mode. Five windows is roughly fifteen minutes of
+// sustained refusal: long enough to ride out a backend deploy, short enough
+// that a revoked device is asking to be re-paired within the hour.
+// See credential_guard.h.
+#ifndef CREDENTIAL_REFUSALS_BEFORE_REPAIR
+#define CREDENTIAL_REFUSALS_BEFORE_REPAIR 5
+#endif
+
 // Software Keep-Alive Pulsing (prevents TP4221B power bank auto-shutdown after 16s)
 #ifndef TP4221B_KEEP_ALIVE_ENABLE
 #define TP4221B_KEEP_ALIVE_ENABLE   true
