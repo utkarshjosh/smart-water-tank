@@ -5,6 +5,7 @@ import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http-error';
 import * as firebase from '../config/firebase';
 import * as deviceToken from '../lib/device-token';
+import * as registry from '../gateway/registry';
 import * as adminDevices from '../services/admin/devices';
 import * as adminTenants from '../services/admin/tenants';
 import * as adminUsers from '../services/admin/users';
@@ -661,4 +662,98 @@ test('syncFirebaseUsers: a dry run reports without writing; a real run creates t
   assert.equal(real.dry_run, false);
   assert.equal(real.stats.created, 1);
   assert.deepEqual(created[0], { firebaseUid: 'uid-b', email: 'bob@example.com', name: 'bob', tenantId: null, role: 'user' });
+});
+
+// --- archiving ends the device's live MQTT session ----------------------------
+// The broker only checks credentials on CONNECT, so archive paths ask the
+// gateway to drop any session the device already has open.
+
+type DeviceFindManyArgs = { where: { tenantId: string; archivedAt?: Date | null }; select: Record<string, true> };
+
+// Stubs for archiveTenant. previewTenantArchive lists the tenant's devices with
+// no archivedAt filter; the post-archive lookup filters on the archive stamp.
+function tenantArchiveStubs(t: TestContext, afterArchive: (args: DeviceFindManyArgs) => Promise<unknown>) {
+  const seen: { stamp?: Date } = {};
+  stubModel(t, 'tenant', {
+    findUnique: async () => tenantRow(),
+    update: async (args: { data: { archivedAt: Date } }) => {
+      seen.stamp = args.data.archivedAt;
+      return tenantRow();
+    },
+  });
+  stubModel(t, 'device', {
+    findMany: async (args: DeviceFindManyArgs) => ('archivedAt' in args.where ? afterArchive(args) : [{ id: 'd1' }, { id: 'd2' }]),
+    updateMany: async () => ({ count: 2 }),
+  });
+  stubModel(t, 'user', { count: async () => 0, updateMany: async () => ({ count: 0 }) });
+  stubModel(t, 'measurement', { count: async () => 0 });
+  arrayTransaction(t);
+  return seen;
+}
+
+test('archiveDevice ends the live MQTT session, after the archive is written', async (t) => {
+  const events: string[] = [];
+  stubModel(t, 'device', {
+    findUnique: async () => deviceRow(),
+    update: async () => {
+      events.push('archived');
+      return deviceRow();
+    },
+  });
+  stubModel(t, 'measurement', { count: async () => 0 });
+  t.mock.method(registry, 'disconnectDeviceSession', async (id: string) => {
+    events.push(`disconnect ${id}`);
+  });
+
+  await admin.archiveDevice('AQM-0042');
+
+  assert.deepEqual(events, ['archived', 'disconnect AQM-0042']);
+});
+
+test('archiveDevice: a refused archive disconnects nothing', async (t) => {
+  stubModel(t, 'device', { findUnique: async () => deviceRow({ archivedAt: T }) });
+  const disconnect = t.mock.method(registry, 'disconnectDeviceSession', async () => {});
+
+  await rejectsWith(admin.archiveDevice('AQM-0042'), 409);
+  assert.equal(disconnect.mock.callCount(), 0);
+});
+
+test('archiveTenant ends the sessions of exactly the devices it archived', async (t) => {
+  let lookup: DeviceFindManyArgs | undefined;
+  const seen = tenantArchiveStubs(t, async (args) => {
+    lookup = args;
+    return [{ deviceId: 'AQM-1' }, { deviceId: 'AQM-2' }];
+  });
+  let disconnected: string[] | undefined;
+  const done = new Promise<void>((resolve) => {
+    t.mock.method(registry, 'disconnectDeviceSessions', async (ids: string[]) => {
+      disconnected = ids;
+      resolve();
+    });
+  });
+
+  await admin.archiveTenant('tenant-1');
+  await done;
+
+  assert.deepEqual(disconnected, ['AQM-1', 'AQM-2']);
+  // Same timestamp the archive wrote, so devices archived earlier are left alone.
+  assert.ok(seen.stamp instanceof Date);
+  assert.deepEqual(lookup, { where: { tenantId: 'tenant-1', archivedAt: seen.stamp }, select: { deviceId: true } });
+});
+
+test('archiveTenant: a failed session lookup is logged and the archive still succeeds', async (t) => {
+  tenantArchiveStubs(t, async () => {
+    throw new Error('db gone');
+  });
+  const disconnect = t.mock.method(registry, 'disconnectDeviceSessions', async () => {});
+  const logged = new Promise<unknown[]>((resolve) => {
+    t.mock.method(console, 'error', (...args: unknown[]) => resolve(args));
+  });
+
+  const summary = await admin.archiveTenant('tenant-1');
+  const args = await logged;
+
+  assert.equal(summary.tenants, 1);
+  assert.match(String(args[0]), /tenant archive failed/);
+  assert.equal(disconnect.mock.callCount(), 0);
 });

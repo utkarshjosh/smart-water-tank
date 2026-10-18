@@ -1,5 +1,6 @@
 import { prisma } from '../../lib/prisma';
 import { HttpError } from '../../lib/http-error';
+import { disconnectDeviceSessions } from '../../gateway/registry';
 import { toTenantDto } from './shared';
 
 // Tenant administration. A tenant is a customer organisation; archiving one
@@ -106,6 +107,14 @@ export async function archiveTenant(tenantId: string): Promise<ArchiveSummary> {
     prisma.device.updateMany({ where: { tenantId, archivedAt: null }, data: { archivedAt } }),
     prisma.user.updateMany({ where: { tenantId, archivedAt: null }, data: { archivedAt } }),
   ]);
+
+  // End the live MQTT session of every device this call archived: exactly the
+  // ones carrying its timestamp. After the commit and off the request path, so
+  // a broker or lookup failure can't turn a completed archive into an error.
+  void prisma.device
+    .findMany({ where: { tenantId, archivedAt }, select: { deviceId: true } })
+    .then((devices) => disconnectDeviceSessions(devices.map((d) => d.deviceId)))
+    .catch((err) => console.error('[admin] ending device sessions after tenant archive failed', tenantId, err));
 
   return summary;
 }

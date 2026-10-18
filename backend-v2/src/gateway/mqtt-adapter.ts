@@ -3,6 +3,10 @@ import { GatewayCore, shouldPushConfig } from './core';
 import { DeviceGateway } from './types';
 import { parseDeviceMessage, buildConfigMessage, TOPIC_PREFIX, TOPIC } from '../protocol';
 
+// How long a session takeover may take (TCP + TLS + CONNACK) before it is
+// abandoned. Short: it runs after an admin action and the broker is local.
+const TAKEOVER_TIMEOUT_MS = 10_000;
+
 export interface MqttAdapterOptions {
   url: string;
   // The BACKEND's own broker credentials (a privileged/static account),
@@ -26,21 +30,30 @@ export interface MqttAdapterOptions {
 // HTTP auth hook that calls verifyDeviceCredentials (same hash + DeviceToken
 // lookup as HTTP deviceAuth). As defense in depth the adapter still (a) drops
 // frames whose payload id disagrees with the topic's deviceId, and (b) drops
-// telemetry/announce from a deviceId that does not resolve to a known Device.
+// telemetry/announce from a deviceId that does not resolve to a known Device
+// or whose Device is archived (the core logs that once per device).
 export class MqttAdapter implements DeviceGateway {
   private client: MqttClient | null = null;
 
   constructor(private readonly core: GatewayCore, private readonly opts: MqttAdapterOptions) {}
 
-  async start(): Promise<void> {
-    const options: IClientOptions = {
+  // Credentials and TLS, shared by the long-lived client and the short-lived
+  // takeover connections of disconnectDevice.
+  private connectionOptions(): IClientOptions {
+    return {
       username: this.opts.username,
       password: this.opts.password,
+      ...(this.opts.ca ? { ca: this.opts.ca } : {}),
+      ...(this.opts.rejectUnauthorized !== undefined ? { rejectUnauthorized: this.opts.rejectUnauthorized } : {}),
+    };
+  }
+
+  async start(): Promise<void> {
+    const options: IClientOptions = {
+      ...this.connectionOptions(),
       // Reconnect forever; a down broker must never take the process down.
       reconnectPeriod: 5000,
       connectTimeout: 30_000,
-      ...(this.opts.ca ? { ca: this.opts.ca } : {}),
-      ...(this.opts.rejectUnauthorized !== undefined ? { rejectUnauthorized: this.opts.rejectUnauthorized } : {}),
     };
 
     const client = mqtt.connect(this.opts.url, options);
@@ -105,6 +118,7 @@ export class MqttAdapter implements DeviceGateway {
     switch (msg.type) {
       case 'telemetry': {
         const outcome = await this.core.handleTelemetry(parsedTopic.deviceId, msg);
+        if (outcome.archived) return;
         if (!outcome.recognized) {
           console.warn('[mqtt] dropping telemetry from unknown device', parsedTopic.deviceId);
           return;
@@ -119,6 +133,7 @@ export class MqttAdapter implements DeviceGateway {
       }
       case 'announce': {
         const outcome = await this.core.handleAnnounce(parsedTopic.deviceId, msg);
+        if (outcome.archived) return;
         if (!outcome.recognized) {
           console.warn('[mqtt] dropping announce from unknown device', parsedTopic.deviceId);
           return;
@@ -168,5 +183,38 @@ export class MqttAdapter implements DeviceGateway {
       return;
     }
     await this.publishConfig(message.id, message.config);
+  }
+
+  // Ends a device's live session by taking over its client id: when a second
+  // connection arrives with the same client id, the broker must drop the first
+  // (MQTT 3.1.1 section 3.1.4). Firmware uses its hardware deviceId as client
+  // id. The device reconnects within seconds, and that CONNECT goes through the
+  // auth hook, which refuses an archived device or a revoked token. A separate
+  // connection is needed because this adapter's own client must keep its id.
+  //
+  // Best effort, never rejects: if the broker can't be reached the session
+  // stays up until the device reconnects on its own, and GatewayCore still
+  // drops an archived device's frames in the meantime.
+  disconnectDevice(hardwareDeviceId: string): Promise<void> {
+    return new Promise((resolve) => {
+      const takeover = mqtt.connect(this.opts.url, {
+        ...this.connectionOptions(),
+        clientId: hardwareDeviceId,
+        // Discard whatever session state the broker held for the device.
+        clean: true,
+        reconnectPeriod: 0,
+        connectTimeout: TAKEOVER_TIMEOUT_MS,
+      });
+      takeover.on('connect', () => {
+        console.log('[mqtt] took over client id', hardwareDeviceId, 'to end its session');
+        takeover.end();
+      });
+      takeover.on('error', (err) => {
+        console.error('[mqtt] could not end the session of', hardwareDeviceId, err.message);
+        takeover.end(true);
+      });
+      // Fires on every path: after end(), after a refused or timed-out connect.
+      takeover.on('close', () => resolve());
+    });
   }
 }
