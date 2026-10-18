@@ -95,32 +95,19 @@ export interface DayRollup {
 }
 
 /**
- * A day's summary from its hours.
- *
- * A refill is a run of consecutive hours each adding at least
- * `refillMinL` - a tank that fills from 6:40 to 7:20 is one refill, not two.
- * (Step 3's event detector will replace this with real fill episodes.)
+ * A day's summary from its hours and the number of fill episodes that started
+ * that day (from detectEpisodes - a tank that fills from 6:40 to 7:20 is one
+ * refill, not two).
  *
  * The leak rule is the one the nightly job always used: average draw across
  * the hours with readings above `leakLPerHour`, on a day with no refill.
  */
-export function rollupDay(hours: HourRollup[], opts: { refillMinL: number; leakLPerHour: number }): DayRollup {
+export function rollupDay(hours: HourRollup[], opts: { fillEvents: number; leakLPerHour: number }): DayRollup {
   const withReadings = hours.filter((h) => h.readings > 0);
   const readings = withReadings.reduce((n, h) => n + h.readings, 0);
   const usedL = hours.reduce((sum, h) => sum + h.usedL, 0);
   const filledL = hours.reduce((sum, h) => sum + h.filledL, 0);
-
-  let refillEvents = 0;
-  let previous: HourRollup | null = null;
-  for (const h of [...hours].sort((a, b) => a.hourStart.getTime() - b.hourStart.getTime())) {
-    const filling = h.filledL >= opts.refillMinL;
-    const continues =
-      previous != null &&
-      previous.filledL >= opts.refillMinL &&
-      h.hourStart.getTime() - previous.hourStart.getTime() <= 60 * 60 * 1000;
-    if (filling && !continues) refillEvents += 1;
-    previous = h;
-  }
+  const refillEvents = opts.fillEvents;
 
   const mins = withReadings.map((h) => h.minL!).filter((v) => v != null);
   const maxs = withReadings.map((h) => h.maxL!).filter((v) => v != null);

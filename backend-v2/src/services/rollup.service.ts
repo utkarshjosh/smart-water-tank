@@ -3,11 +3,12 @@ import { prisma } from '../lib/prisma';
 import { env } from '../config/env';
 import { addDays, localDate, startOfLocalDay } from '../lib/local-time';
 import { HourRollup, Reading, noiseFloorL, rollupDay, rollupHours } from '../lib/rollup';
+import { Episode, detectEpisodes, episodeOptions } from '../lib/episodes';
 import { computeTotalCapacityL, volumeLForProfile } from './tank-profile.service';
 import { createLeakAlert } from './alert.service';
 
 /**
- * Builds hourly_usage and daily_summaries from measurements.
+ * Builds hourly_usage, tank_events and daily_summaries from measurements.
  *
  * Both tables are a cache of what the readings plus the *current* tank profile
  * say, the same rule every other volume in the app follows. They are rebuilt,
@@ -20,6 +21,8 @@ import { createLeakAlert } from './alert.service';
 export const REBUILD_DAYS = 90;
 /** Devices seen this recently get their rollups refreshed by the job. */
 const ACTIVE_WINDOW_MS = 2 * 60 * 60 * 1000;
+/** How far past a day's edges episode detection looks, to see episodes whole. */
+const EPISODE_LOOKAROUND_MS = 6 * 60 * 60 * 1000;
 
 export function timeZoneOf(device: Pick<Device, 'timezone'>): string {
   return device.timezone ?? env.defaultTimezone;
@@ -82,17 +85,54 @@ export async function rebuildDeviceDays(deviceId: string, dates: string[], now =
 
     // Unreadable cycles (no echo) aren't data points; drop them before they
     // can read as a drained tank.
-    const readings = rows.map((r) => toReading(profile, r)).filter((r): r is Reading => r != null);
+    const toReadings = (list: Row[]) => list.map((r) => toReading(profile, r)).filter((r): r is Reading => r != null);
+    const readings = toReadings(rows);
     const before = beforeRow ? toReading(profile, beforeRow) : null;
     const hours = rollupHours(readings, before, timeZone, noiseL);
+
+    // Episodes cross midnight, so detect over a wider window and keep the ones
+    // that start inside this day. One that started yesterday belongs to
+    // yesterday's rebuild, which runs until 02:00 to catch exactly that.
+    const episodeRows = await prisma.measurement.findMany({
+      where: {
+        deviceId,
+        timestamp: { gte: new Date(start.getTime() - EPISODE_LOOKAROUND_MS), lt: new Date(end.getTime() + EPISODE_LOOKAROUND_MS) },
+      },
+      orderBy: { timestamp: 'asc' },
+      select,
+    });
+    const episodes = detectEpisodes(toReadings(episodeRows), null, episodeOptions(capacityL, noiseL), now).filter(
+      (e) => e.startedAt >= start && e.startedAt < end
+    );
 
     await prisma.$transaction([
       prisma.hourlyUsage.deleteMany({ where: { deviceId, hourStart: { gte: start, lt: end } } }),
       prisma.hourlyUsage.createMany({ data: hours.map((h) => toHourRow(deviceId, h)) }),
+      prisma.tankEvent.deleteMany({ where: { deviceId, startedAt: { gte: start, lt: end } } }),
+      prisma.tankEvent.createMany({ data: episodes.map((e) => toEventRow(deviceId, e)) }),
     ]);
 
-    await saveDay(device, date, hours, { complete: end <= now, alertable: date >= alertFrom, capacityL });
+    await saveDay(device, date, hours, {
+      complete: end <= now,
+      alertable: date >= alertFrom,
+      fillEvents: episodes.filter((e) => e.kind === 'fill').length,
+    });
   }
+}
+
+function toEventRow(deviceId: string, e: Episode) {
+  return {
+    deviceId,
+    kind: e.kind,
+    startedAt: e.startedAt,
+    endedAt: e.endedAt,
+    startL: round2(e.startL)!,
+    endL: round2(e.endL)!,
+    volumeL: round2(e.volumeL)!,
+    rateLPerMin: round2(e.rateLPerMin)!,
+    readings: e.readings,
+    ongoing: e.ongoing,
+  };
 }
 
 function toHourRow(deviceId: string, h: HourRollup) {
@@ -112,7 +152,7 @@ async function saveDay(
   device: Device,
   date: string,
   hours: HourRollup[],
-  opts: { complete: boolean; alertable: boolean; capacityL: number | null }
+  opts: { complete: boolean; alertable: boolean; fillEvents: number }
 ): Promise<void> {
   // DailySummary.date is a DATE column; Prisma writes it from a UTC-midnight
   // Date, so the local date string goes in as-is.
@@ -124,12 +164,7 @@ async function saveDay(
     return;
   }
 
-  const day = rollupDay(hours, {
-    // A tenth of the tank in an hour is a refill, not a drip; 50 L without a
-    // profile to scale by.
-    refillMinL: opts.capacityL == null ? 50 : opts.capacityL * 0.1,
-    leakLPerHour: env.leakThresholdLPerHour,
-  });
+  const day = rollupDay(hours, { fillEvents: opts.fillEvents, leakLPerHour: env.leakThresholdLPerHour });
   // A day still in progress can't be judged for leaks yet.
   const leakSuspected = opts.complete && day.leakSuspected;
 
@@ -193,7 +228,11 @@ export async function rebuildRecentRollups(deviceId: string, days = REBUILD_DAYS
   // A timezone change moves where every hour starts, so old rows would sit at
   // the wrong offsets beside the rebuilt ones. Clear the whole window first.
   const from = startOfLocalDay(addDays(today, -(days - 1)), timeZone);
-  await prisma.hourlyUsage.deleteMany({ where: { deviceId, hourStart: { gte: new Date(from.getTime() - 86_400_000) } } });
+  const clearFrom = new Date(from.getTime() - 86_400_000);
+  await prisma.$transaction([
+    prisma.hourlyUsage.deleteMany({ where: { deviceId, hourStart: { gte: clearFrom } } }),
+    prisma.tankEvent.deleteMany({ where: { deviceId, startedAt: { gte: clearFrom } } }),
+  ]);
 
   const dates = Array.from({ length: days }, (_, i) => addDays(today, -(days - 1) + i));
   await rebuildDeviceDays(deviceId, dates, now);

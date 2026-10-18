@@ -98,10 +98,10 @@ const hour = (hh: number, usedL: number, filledL = 0, readings = 4) => ({
   avgL: 500,
   readings,
 });
-const opts = { refillMinL: 100, leakLPerHour: 50 };
+const opts = { fillEvents: 0, leakLPerHour: 50 };
 
-test('a refill spanning two hours is one refill; separate fills count separately', () => {
-  const day = rollupDay([hour(6, 0, 300), hour(7, 0, 200), hour(8, 40), hour(18, 0, 400)], opts);
+test('a day adds up its hours and takes its refill count from fill episodes', () => {
+  const day = rollupDay([hour(6, 0, 300), hour(7, 0, 200), hour(8, 40), hour(18, 0, 400)], { ...opts, fillEvents: 2 });
   assert.equal(day.refillEvents, 2);
   assert.equal(day.usedL, 40);
   assert.equal(day.filledL, 900);
@@ -111,6 +111,6 @@ test('a refill spanning two hours is one refill; separate fills count separately
 test('a steady heavy draw with no refill is a suspected leak', () => {
   assert.equal(rollupDay([hour(1, 60), hour(2, 70), hour(3, 55)], opts).leakSuspected, true);
   // Same draw on a day the tank was refilled: normal use.
-  assert.equal(rollupDay([hour(1, 60), hour(2, 70, 300), hour(3, 55)], opts).leakSuspected, false);
+  assert.equal(rollupDay([hour(1, 60), hour(2, 70), hour(3, 55)], { ...opts, fillEvents: 1 }).leakSuspected, false);
   assert.equal(rollupDay([hour(1, 10), hour(2, 20)], opts).leakSuspected, false);
 });

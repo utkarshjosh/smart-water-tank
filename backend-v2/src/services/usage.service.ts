@@ -140,6 +140,57 @@ export async function getHourlyUsage(device: Device, range: HourlyRange, now = n
   };
 }
 
+export type EventRange = 'today' | '24h' | '7d';
+
+/** Fill and draw episodes, newest first, for the activity timeline. */
+export async function getTankEvents(device: Device, range: EventRange, now = new Date()) {
+  const timeZone = timeZoneOf(device);
+  const today = localDate(now, timeZone);
+  const from =
+    range === 'today'
+      ? startOfLocalDay(today, timeZone)
+      : range === '7d'
+        ? startOfLocalDay(addDays(today, -6), timeZone)
+        : new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+  // An episode that started before the window but was still running into it
+  // belongs in the timeline too.
+  const rows = await prisma.tankEvent.findMany({
+    where: { deviceId: device.id, endedAt: { gte: from }, startedAt: { lte: now } },
+    orderBy: { startedAt: 'desc' },
+  });
+
+  const events = rows.map((e) => ({
+    id: e.id,
+    kind: e.kind,
+    started_at: e.startedAt.toISOString(),
+    ended_at: e.endedAt.toISOString(),
+    start_l: round(e.startL.toNumber()),
+    end_l: round(e.endL.toNumber()),
+    volume_l: round(e.volumeL.toNumber()),
+    rate_l_per_min: round(e.rateLPerMin.toNumber(), 2),
+    readings: e.readings,
+    ongoing: e.ongoing,
+  }));
+  const sum = (kind: 'fill' | 'draw') =>
+    round(events.filter((e) => e.kind === kind).reduce((total, e) => total + (e.volume_l ?? 0), 0));
+
+  return {
+    device_id: device.deviceId,
+    timezone: timeZone,
+    range,
+    from: from.toISOString(),
+    to: now.toISOString(),
+    events,
+    totals: {
+      fills: events.filter((e) => e.kind === 'fill').length,
+      draws: events.filter((e) => e.kind === 'draw').length,
+      filled_l: sum('fill'),
+      drawn_l: sum('draw'),
+    },
+  };
+}
+
 /** Sets the zone a tank's days and hours are cut in, then rebuilds its rollups. */
 export async function setDeviceTimezone(device: Device, timezone: string | null) {
   await prisma.device.update({ where: { id: device.id }, data: { timezone } });

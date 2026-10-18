@@ -30,6 +30,7 @@ import {
   usageResponseSchema,
   hourlyUsageResponseSchema,
   deviceTimezoneResponseSchema,
+  tankEventsResponseSchema,
 } from '@aquamind/contracts';
 import * as userService from '../services/user.service';
 import * as deviceService from '../services/device.service';
@@ -39,7 +40,7 @@ import * as alertRulesService from '../services/alert-rules.service';
 import { registerPushToken, removePushToken, updateUserFCMToken } from '../services/fcm.service';
 import { exportUserMeasurements } from '../services/measurement-export.service';
 import { BUCKETS, getDeviceHistorySeries } from '../services/history.service';
-import { getDeviceUsage, getHourlyUsage, setDeviceTimezone } from '../services/usage.service';
+import { getDeviceUsage, getHourlyUsage, getTankEvents, setDeviceTimezone } from '../services/usage.service';
 import { scheduleRebuild } from '../services/rollup.service';
 import { isValidTimeZone } from '../lib/local-time';
 
@@ -342,6 +343,21 @@ router.get(
   asyncHandler(async (req: DeviceAccessRequest, res) => {
     const { range } = hourlyUsageQuerySchema.parse(req.query);
     sendJson(res, hourlyUsageResponseSchema, await getHourlyUsage(req.device!, range));
+  })
+);
+
+const eventsQuerySchema = z.object({
+  range: z.enum(['today', '24h', '7d']).default('24h'),
+});
+
+// GET /api/v1/user/devices/:deviceId/events - Fill and draw episodes, newest
+// first ("filled 480 L, 06:10-06:42"), with totals for the range.
+router.get(
+  '/devices/:deviceId/events',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    const { range } = eventsQuerySchema.parse(req.query);
+    sendJson(res, tankEventsResponseSchema, await getTankEvents(req.device!, range));
   })
 );
 

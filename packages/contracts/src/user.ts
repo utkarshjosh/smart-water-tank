@@ -256,6 +256,39 @@ export const hourlyUsageResponseSchema = z.object({
 });
 export type HourlyUsageResponse = z.infer<typeof hourlyUsageResponseSchema>;
 
+export const tankEventSchema = z.object({
+  id: z.string(),
+  kind: z.enum(['fill', 'draw']),
+  started_at: isoDateTime,
+  ended_at: isoDateTime,
+  start_l: z.number().nullable(),
+  end_l: z.number().nullable(),
+  /** Litres moved, always positive; kind says which way. */
+  volume_l: z.number().nullable(),
+  rate_l_per_min: z.number().nullable(),
+  readings: z.number(),
+  /** The newest reading was part of it; it may still be going. */
+  ongoing: z.boolean(),
+});
+export type TankEvent = z.infer<typeof tankEventSchema>;
+
+/** GET /devices/:id/events — usage.service getTankEvents. Newest first. */
+export const tankEventsResponseSchema = z.object({
+  device_id: z.string(),
+  timezone: z.string(),
+  range: z.enum(['today', '24h', '7d']),
+  from: isoDateTime,
+  to: isoDateTime,
+  events: z.array(tankEventSchema),
+  totals: z.object({
+    fills: z.number(),
+    draws: z.number(),
+    filled_l: z.number().nullable(),
+    drawn_l: z.number().nullable(),
+  }),
+});
+export type TankEventsResponse = z.infer<typeof tankEventsResponseSchema>;
+
 /** PUT /devices/:id/timezone. */
 export const deviceTimezoneResponseSchema = z.object({
   timezone: z.string(),
