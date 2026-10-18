@@ -6,9 +6,10 @@ import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SegmentedControl } from '@/components/ui/segmented-control';
-import { HourlyUsageBars } from '@/components/charts/HourlyUsageBars';
+import { UsageBarChart, type UsageSlot } from '@/components/charts/UsageBarChart';
 import { viewerTimeZone } from '@/lib/metrics';
-import { describeEvent, formatLitres, formatTimeRange, zoneDiffers } from '@/lib/usage-format';
+import { describeEvent, formatClock, formatLitres, formatTimeRange, hourSlots, zoneDiffers } from '@/lib/usage-format';
+import type { HourlyUsageResponse } from './useDevice';
 import { useHourlyUsage, useTankEvents } from './useDevice';
 
 type Range = 'today' | '24h';
@@ -23,6 +24,7 @@ export function UsagePanel({ deviceId }: { deviceId?: string }) {
   const hourly = useHourlyUsage(deviceId, range);
   const events = useTankEvents(deviceId, range);
   const data = hourly.data;
+  const fills = events.data?.totals.fills ?? null;
 
   return (
     <div className="device-chart-grid">
@@ -51,18 +53,23 @@ export function UsagePanel({ deviceId }: { deviceId?: string }) {
             <p className="py-8 text-caption text-ink-3">Loading hourly usage…</p>
           ) : (
             <>
-              <p className="mb-3 text-body text-ink-2">
-                <strong className="tnum text-ink-1">{formatLitres(data.totals.used_l)}</strong> used
-                {range === '24h' ? ' in the last 24 hours' : ' today'}
-                {data.totals.filled_l ? (
-                  <>
-                    {' · '}
-                    <strong className="tnum text-ink-1">{formatLitres(data.totals.filled_l)}</strong> filled
-                  </>
-                ) : null}
-              </p>
+              <div className="mb-4 flex flex-wrap gap-x-8 gap-y-2">
+                <div>
+                  <p className="text-caption text-ink-3">{range === '24h' ? 'Used in the last 24 hours' : 'Used today'}</p>
+                  <p className="text-[1.5rem] font-semibold leading-tight text-ink-1 tnum">{formatLitres(data.totals.used_l)}</p>
+                </div>
+                <div>
+                  <p className="text-caption text-ink-3">Tank filled</p>
+                  <p className="text-[1.5rem] font-semibold leading-tight text-ink-1 tnum">
+                    {fills == null ? '—' : `${fills} time${fills === 1 ? '' : 's'}`}
+                    {data.totals.filled_l ? (
+                      <span className="ml-2 text-body font-normal text-ink-3">{formatLitres(data.totals.filled_l)} added</span>
+                    ) : null}
+                  </p>
+                </div>
+              </div>
               {data.hours.length ? (
-                <HourlyUsageBars hours={data.hours} from={data.from} to={data.to} timeZone={data.timezone} />
+                <UsageBarChart slots={toSlots(data)} ariaLabel="Water used and added per hour" />
               ) : (
                 <p className="py-6 text-caption text-ink-3">No readings in this window yet.</p>
               )}
@@ -126,6 +133,22 @@ export function UsagePanel({ deviceId }: { deviceId?: string }) {
       </Card>
     </div>
   );
+}
+
+/** Every hour in the window, including ones with no readings. */
+function toSlots(data: HourlyUsageResponse): UsageSlot[] {
+  const byStart = new Map(data.hours.map((h) => [Date.parse(h.hour_start), h]));
+  return hourSlots(Date.parse(data.from), Date.parse(data.to)).map((start) => {
+    const hour = byStart.get(start);
+    const label = formatClock(start, data.timezone, { hourOnly: true });
+    return {
+      key: String(start),
+      tick: label,
+      title: `${label} – ${formatClock(start + 3_600_000, data.timezone, { hourOnly: true })}`,
+      usedL: hour ? (hour.used_l ?? 0) : null,
+      filledL: hour?.filled_l ?? 0,
+    };
+  });
 }
 
 /**

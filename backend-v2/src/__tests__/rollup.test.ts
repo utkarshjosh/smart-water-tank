@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addDays, isValidTimeZone, localDate, localHourStart, offsetMs, startOfLocalDay } from '../lib/local-time';
-import { noiseFloorL, rollupDay, rollupHours } from '../lib/rollup';
+import { despike, noiseFloorL, rollupDay, rollupHours } from '../lib/rollup';
 
 const IST = 'Asia/Kolkata';
 const at = (iso: string) => new Date(iso);
@@ -82,9 +82,9 @@ test('min, max and average per hour', () => {
 });
 
 test('noise floor scales with the tank', () => {
-  assert.equal(noiseFloorL(null), 2);
-  assert.equal(noiseFloorL(100), 1);
-  assert.equal(noiseFloorL(1000), 5);
+  assert.equal(noiseFloorL(null), 5);
+  assert.equal(noiseFloorL(100), 2);
+  assert.equal(noiseFloorL(1000), 15);
 });
 
 // --- daily rollup ------------------------------------------------------------
@@ -113,4 +113,25 @@ test('a steady heavy draw with no refill is a suspected leak', () => {
   // Same draw on a day the tank was refilled: normal use.
   assert.equal(rollupDay([hour(1, 60), hour(2, 70), hour(3, 55)], { ...opts, fillEvents: 1 }).leakSuspected, false);
   assert.equal(rollupDay([hour(1, 10), hour(2, 20)], opts).leakSuspected, false);
+});
+
+// --- spikes ------------------------------------------------------------------
+
+test('a one-reading glitch is not booked as water used and then refilled', () => {
+  // What the live tank showed at 1:27 PM: one bad echo 115 L low, then back.
+  const raw = [ist('13:20', 1000), ist('13:22', 1001), ist('13:24', 999), ist('13:27', 885), ist('13:29', 1000), ist('13:31', 1000), ist('13:33', 998)];
+  const [glitchy] = rollupHours(raw, null, IST, 15);
+  assert.equal(glitchy.usedL, 115);
+  assert.equal(glitchy.filledL, 115);
+
+  const [clean] = rollupHours(despike(raw), null, IST, 15);
+  assert.equal(clean.usedL, 0);
+  assert.equal(clean.filledL, 0);
+});
+
+test('despike keeps a real change: the level stays at its new value', () => {
+  const raw = [ist('06:00', 400), ist('06:02', 400), ist('06:04', 400), ist('06:06', 900), ist('06:08', 900), ist('06:10', 900), ist('06:12', 900)];
+  const [hour] = rollupHours(despike(raw), null, IST, 15);
+  assert.equal(hour.filledL, 500);
+  assert.deepEqual(despike(raw).map((r) => r.litres), [400, 400, 400, 900, 900, 900, 900]);
 });

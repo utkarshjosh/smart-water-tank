@@ -2,7 +2,7 @@ import { Device, TankProfile } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { env } from '../config/env';
 import { addDays, localDate, startOfLocalDay } from '../lib/local-time';
-import { HourRollup, Reading, noiseFloorL, rollupDay, rollupHours } from '../lib/rollup';
+import { HourRollup, Reading, despike, noiseFloorL, rollupDay, rollupHours } from '../lib/rollup';
 import { Episode, detectEpisodes, episodeOptions } from '../lib/episodes';
 import { computeTotalCapacityL, volumeLForProfile } from './tank-profile.service';
 import { createLeakAlert } from './alert.service';
@@ -86,7 +86,7 @@ export async function rebuildDeviceDays(deviceId: string, dates: string[], now =
     // Unreadable cycles (no echo) aren't data points; drop them before they
     // can read as a drained tank.
     const toReadings = (list: Row[]) => list.map((r) => toReading(profile, r)).filter((r): r is Reading => r != null);
-    const readings = toReadings(rows);
+    const readings = despike(toReadings(rows));
     const before = beforeRow ? toReading(profile, beforeRow) : null;
     const hours = rollupHours(readings, before, timeZone, noiseL);
 
@@ -101,7 +101,7 @@ export async function rebuildDeviceDays(deviceId: string, dates: string[], now =
       orderBy: { timestamp: 'asc' },
       select,
     });
-    const episodes = detectEpisodes(toReadings(episodeRows), null, episodeOptions(capacityL, noiseL), now).filter(
+    const episodes = detectEpisodes(despike(toReadings(episodeRows)), null, episodeOptions(capacityL, noiseL), now).filter(
       (e) => e.startedAt >= start && e.startedAt < end
     );
 
