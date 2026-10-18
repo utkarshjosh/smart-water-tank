@@ -98,6 +98,15 @@ namespace PowerManager {
         return state.networkFailures >= 2;
     }
 
+    unsigned long failureBackoffMs(uint8_t failures) {
+        if (failures == 0) return 0;
+        const uint8_t exponent = failures - 1;
+        // Long past the cap already; keeps the shift well inside 64 bits.
+        if (exponent >= 16) return MAX_FAILURE_SLEEP_MS;
+        const uint64_t backedOff = static_cast<uint64_t>(MIN_SLEEP_INTERVAL_MS) << exponent;
+        return backedOff > MAX_FAILURE_SLEEP_MS ? MAX_FAILURE_SLEEP_MS : static_cast<unsigned long>(backedOff);
+    }
+
     bool getWifiBssidAndChannel(uint8_t &channel, uint8_t* bssid) {
         if (state.wifiChannel > 0 && state.wifiChannel <= 13 && bssid != nullptr) {
             channel = state.wifiChannel;
@@ -182,9 +191,7 @@ namespace PowerManager {
         if (state.networkFailures == 0) {
             delayMs = clampSleep(static_cast<unsigned long>(normalIntervalMs * intervalMultiplier));
         } else {
-            const uint8_t exponent = state.networkFailures - 1;
-            uint64_t backedOff = static_cast<uint64_t>(MIN_SLEEP_INTERVAL_MS) << exponent;
-            delayMs = clampSleep(backedOff > MAX_FAILURE_SLEEP_MS ? MAX_FAILURE_SLEEP_MS : static_cast<unsigned long>(backedOff));
+            delayMs = clampSleep(failureBackoffMs(state.networkFailures));
         }
 #endif
 

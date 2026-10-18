@@ -168,6 +168,11 @@ Reading is replaced by `PAIRING MODE` when unclaimed, and by `SENSOR FAULT` when
 the ultrasonic returns no echo — a dead sensor reads as 0cm, which the tank math
 would otherwise render as a full tank.
 
+A device that was paired before but has lost its provisioning, usually because
+the server kept refusing its token (see "Refused device token" in README.md),
+shows `RE-PAIR NEEDED` and the setup SSID instead of `PAIRING MODE` while the
+portal is open.
+
 The two status glyphs are signal strength and a server-link arrow. **They are
 deliberately separate**: a device joined to WiFi with a dead broker looks
 perfectly healthy otherwise, and that's a failure someone at the tank needs to
