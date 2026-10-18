@@ -8,7 +8,7 @@ const r = (hhmm: string, litres: number) => ({ at: t(hhmm), litres });
 const later = t('23:59');
 
 const summary = (readings: ReturnType<typeof r>[], now = later) =>
-  detectEpisodes(readings, null, opts, now).map((e) => `${e.kind} ${e.volumeL} ${e.startedAt.toTimeString().slice(0, 5)}`);
+  detectEpisodes(readings, null, opts, now).map((e) => `${e.kind} ${e.volumeL} ${e.startedAt.toISOString().slice(11, 16)}`);
 
 test('a fill is one episode from the last reading at the old level to the top', () => {
   const [fill] = detectEpisodes(
@@ -67,9 +67,10 @@ test('an episode still moving at the newest reading is ongoing', () => {
 
 test('a slow draw adds up across readings that each move less than the noise floor', () => {
   const readings = Array.from({ length: 13 }, (_, i) => r(`10:${String(i * 2).padStart(2, '0')}`, 500 - i * 1.5));
-  // Dated from 10:02: that reading (498.5 L) is still inside the noise floor
-  // of the starting level, so it's the last one that looked unchanged.
-  assert.deepEqual(summary(readings), ['draw 18 10:02']);
+  // Dated from 10:02 IST (04:32 UTC): that reading (498.5 L) is still inside
+  // the noise floor of the starting level, so it's the last one that looked
+  // unchanged. Compared in UTC so the test passes in any machine timezone.
+  assert.deepEqual(summary(readings), ['draw 18 04:32']);
 });
 
 test('thresholds scale with the tank', () => {

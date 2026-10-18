@@ -5,6 +5,7 @@ import * as userService from '../services/user.service';
 import * as tankProfileService from '../services/tank-profile.service';
 import * as historyService from '../services/history.service';
 import * as deviceService from '../services/device.service';
+import * as rollupService from '../services/rollup.service';
 import { callArgs, claimCodeDto, deviceConfigPayloadDto, deviceInfoDto, deviceLookupReturns, deviceRow, deviceSummaryDto, historySeriesDto, http, signInAs, userRow } from './helpers/http';
 
 // Tenant routes: request validation, what each handler passes to its service,
@@ -132,10 +133,13 @@ test('DELETE /devices/:id/tank-profile -> 204; 404 when there is none', async (t
   const headers = signInAs(t, userRow());
   deviceLookupReturns(t, deviceRow());
   const del = t.mock.method(tankProfileService, 'deleteTankProfile', async () => undefined);
+  // Litres in the usage rollups came from the old profile, so they're rebuilt.
+  const rebuild = t.mock.method(rollupService, 'scheduleRebuild', () => undefined);
 
   const res = await http().delete('/api/v1/user/devices/AQM-0042/tank-profile').set(headers);
   assert.equal(res.status, 204);
   assert.equal(callArgs<typeof tankProfileService.deleteTankProfile>(del)[0].id, 'dev-uuid');
+  assert.equal(rebuild.mock.calls[0]?.arguments[0], 'dev-uuid');
 
   t.mock.method(tankProfileService, 'deleteTankProfile', async () => {
     throw new HttpError(404, 'This device has no tank profile');
