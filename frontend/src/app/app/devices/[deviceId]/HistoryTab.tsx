@@ -10,6 +10,7 @@ import type { Range } from '@/components/charts/gestures';
 import {
   METRICS,
   METRIC_BY_VALUE,
+  DEFAULT_RANGE,
   RANGES,
   rangeToWindow,
   useHistorySeries,
@@ -35,7 +36,7 @@ const localInput = (iso: string) => {
 export default function HistoryTab() {
   const { deviceId } = useParams<{ deviceId: string }>();
   const [params, setParams] = useSearchParams();
-  const range = RANGES.find((r) => r.value === params.get('range'))?.value ?? '7d';
+  const range = RANGES.find((r) => r.value === params.get('range'))?.value ?? DEFAULT_RANGE;
   const metric: Metric =
     METRICS.find((m) => m.value === params.get('metric'))?.value ?? 'level_percent';
   const fromParam = params.get('from');

@@ -1,4 +1,4 @@
-import notifee, { EventType } from '@notifee/react-native';
+import notifee from '@notifee/react-native';
 import { getApp } from '@react-native-firebase/app';
 import { getMessaging, onMessage } from '@react-native-firebase/messaging';
 import { useEffect } from 'react';
@@ -6,7 +6,7 @@ import { useEffect } from 'react';
 import { queryClient } from '@/api/queryClient';
 import { queryKeys } from '@/api/queries';
 import { haptics } from '@/feedback/haptics';
-import { ACK_ACTION_ID, acknowledgeFromNotification, applyAlertToWidget } from '@/push/background';
+import { applyAlertToWidget } from '@/push/background';
 import { CHANNELS } from '@/push/channels';
 import { parseAlertPayload } from '@/push/payload';
 
@@ -14,8 +14,8 @@ import { parseAlertPayload } from '@/push/payload';
  * Foreground push handling.
  *
  * Android does not draw a notification while the app is in the foreground, so
- * we display it ourselves — with the Acknowledge action, so the same gesture
- * works whether or not the app happened to be open.
+ * we display it ourselves. There is no action button: an alert fires once per
+ * crossing now, so there is nothing to silence, and a tap opens the app.
  */
 export function usePushMessages(enabled: boolean): void {
   useEffect(() => {
@@ -41,23 +41,11 @@ export function usePushMessages(enabled: boolean): void {
         android: {
           channelId: payload.channel_id || CHANNELS.info,
           pressAction: { id: 'default' },
-          actions: [{ title: 'Acknowledge', pressAction: { id: ACK_ACTION_ID } }],
         },
       });
     });
 
-    const unsubscribeEvents = notifee.onForegroundEvent(async ({ type, detail }) => {
-      if (type === EventType.ACTION_PRESS && detail.pressAction?.id === ACK_ACTION_ID) {
-        haptics.selection();
-        await acknowledgeFromNotification(detail.notification?.data);
-        if (detail.notification?.id) await notifee.cancelNotification(detail.notification.id);
-        await queryClient.invalidateQueries({ queryKey: queryKeys.alerts });
-      }
-    });
 
-    return () => {
-      unsubscribeMessages();
-      unsubscribeEvents();
-    };
+    return unsubscribeMessages;
   }, [enabled]);
 }

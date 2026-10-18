@@ -33,7 +33,8 @@ and migrating, not editing `src/push/channels.ts`.
 
 Every alert push carries the tank's level, so the background handler repaints
 the home-screen widget without making a request — the primary freshness tier in
-plan §4. Acknowledge works straight from the notification, in every app state.
+plan §4. Notifications carry no action buttons; opening an alert in Activity
+marks it read.
 
 ## Setup
 

@@ -117,6 +117,9 @@ model Device {
   // queryable and the hardware ID stays claimed, so a retired sensor cannot
   // silently re-pair itself.
   archivedAt      DateTime?    @map("archived_at")
+  // IANA zone (e.g. "Asia/Kolkata") the tank's days and hours are cut in.
+  // null = the server default (DEFAULT_TIMEZONE).
+  timezone        String?      @db.VarChar(64)
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt @map("updated_at")
 
@@ -130,6 +133,9 @@ model Device {
   firmwareAssignments DeviceFirmwareAssignment[]
   userMappings        UserDeviceMapping[]
   claimCodes          DeviceClaimCode[]
+  tankState           TankState?
+  hourlyUsage         HourlyUsage[]
+  tankEvents          TankEvent[]
 
   @@index([tenantId])
   @@index([archivedAt])
@@ -174,8 +180,10 @@ model DailySummary {
   minVolumeL    Decimal? @map("min_volume_l") @db.Decimal(10, 2)
   maxVolumeL    Decimal? @map("max_volume_l") @db.Decimal(10, 2)
   avgVolumeL    Decimal? @map("avg_volume_l") @db.Decimal(10, 2)
+  totalFilledL  Decimal  @default(0) @map("total_filled_l") @db.Decimal(10, 2)
   refillEvents  Int      @default(0) @map("refill_events")
   leakSuspected Boolean  @default(false) @map("leak_suspected")
+  readings      Int      @default(0)
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
@@ -342,4 +350,82 @@ model DeviceClaimCode {
   @@index([codeHash])
   @@index([tenantId])
   @@map("device_claim_codes")
+}
+
+enum TankBand {
+  low
+  normal
+  full
+}
+
+// What the server last concluded about a tank, so alerts fire when the tank
+// crosses a threshold rather than on every reading that sits past it. One row
+// per device, written on each reading; the first reading only seeds it.
+model TankState {
+  deviceId          String   @id @map("device_id") @db.Char(36)
+  band              TankBand
+  inBlindZone       Boolean  @default(false) @map("in_blind_zone")
+  levelPercent      Decimal? @map("level_percent") @db.Decimal(5, 2)
+  batteryLow        Boolean  @default(false) @map("battery_low")
+  bandChangedAt     DateTime @default(now()) @map("band_changed_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@map("tank_states")
+}
+
+// One row per device per local hour, rebuilt from measurements by
+// rollup.service. A cache, not a record: it is recomputed whenever its inputs
+// change (new readings, tank profile, timezone), so the litres here always
+// match what the current profile says.
+model HourlyUsage {
+  id        String   @id @default(uuid()) @db.Char(36)
+  deviceId  String   @map("device_id") @db.Char(36)
+  // The instant the local hour starts. Not a UTC hour: in India the hours
+  // begin at :30 UTC.
+  hourStart DateTime @map("hour_start")
+  usedL     Decimal  @default(0) @map("used_l") @db.Decimal(10, 2)
+  filledL   Decimal  @default(0) @map("filled_l") @db.Decimal(10, 2)
+  minL      Decimal? @map("min_l") @db.Decimal(10, 2)
+  maxL      Decimal? @map("max_l") @db.Decimal(10, 2)
+  avgL      Decimal? @map("avg_l") @db.Decimal(10, 2)
+  readings  Int      @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceId, hourStart])
+  @@map("hourly_usage")
+}
+
+enum TankEventKind {
+  fill
+  draw
+}
+
+// A fill or draw episode: the tank level moving one way, steadily, from
+// startedAt to endedAt. Detected from measurements by rollup.service and,
+// like hourly_usage, rebuilt rather than patched - a day's episodes are
+// recomputed whole whenever its readings or the tank profile change.
+model TankEvent {
+  id           String        @id @default(uuid()) @db.Char(36)
+  deviceId     String        @map("device_id") @db.Char(36)
+  kind         TankEventKind
+  startedAt    DateTime      @map("started_at")
+  endedAt      DateTime      @map("ended_at")
+  startL       Decimal       @map("start_l") @db.Decimal(10, 2)
+  endL         Decimal       @map("end_l") @db.Decimal(10, 2)
+  // Litres moved, always positive; kind says which way.
+  volumeL      Decimal       @map("volume_l") @db.Decimal(10, 2)
+  rateLPerMin  Decimal       @map("rate_l_per_min") @db.Decimal(10, 2)
+  readings     Int
+  // Still going as of the last rebuild: the most recent reading was part of it.
+  ongoing      Boolean       @default(false)
+  createdAt    DateTime      @default(now()) @map("created_at")
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId, startedAt(sort: Desc)])
+  @@map("tank_events")
 }

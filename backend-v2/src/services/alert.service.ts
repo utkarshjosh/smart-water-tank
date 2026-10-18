@@ -1,5 +1,14 @@
-import { AlertSeverity, AlertType } from '@prisma/client';
+import { AlertSeverity, AlertType, TankState } from '@prisma/client';
 import { prisma } from '../lib/prisma';
+import { isUniqueConstraintError as isUniqueViolation } from '../lib/prisma-errors';
+import {
+  REARM_MARGIN_PCT,
+  REARM_MARGIN_V,
+  TankBand,
+  alertForTransition,
+  isInBlindZone,
+  nextBand,
+} from '../lib/tank-band';
 import { PushData, sendNotificationToTenant } from './fcm.service';
 import { computeLevelPercent } from './tank-profile.service';
 import { effectiveThreshold, isAlertRuleEnabled, severityFor } from './alert-rules.service';
@@ -53,92 +62,147 @@ export async function processAlertsForMeasurement(
 ): Promise<void> {
   const device = await prisma.device.findUnique({
     where: { id: deviceId },
-    include: { config: true, tankProfile: true },
+    include: { config: true, tankProfile: true, tankState: true },
   });
   if (!device || !device.tenantId) return;
 
   const config = device.config;
   const profile = device.tankProfile;
+  const state = device.tankState;
   const { levelCm, volumeL, batteryV } = measurement;
 
   // Read once, as plain numbers. null means that threshold is not set, which
   // is one of two ways an alert is off for this device - the other is the
   // rule's enabled flag (issue #13). Both come from the same catalog the
   // settings screen renders, so what the user sees is what fires.
-  const tankLowOn = isAlertRuleEnabled(config, 'tank_low');
-  const tankFullOn = isAlertRuleEnabled(config, 'tank_full');
   const fullPct = num(config?.tankFullThresholdPct);
   const lowPct = num(config?.tankLowThresholdPct);
   const fullL = num(config?.tankFullThresholdL);
   const lowL = num(config?.tankLowThresholdL);
   const batteryMinV = effectiveThreshold(config, 'battery_low');
 
+  // Work out the band this reading puts the tank in. Bands are tracked even
+  // while a rule is switched off, so turning it back on doesn't alert for a
+  // crossing that happened while it was off.
+  let band: TankBand | null = null;
+  let inBlindZone = false;
+  let levelPercent: number | null = null;
+  let message: Record<'tank_full' | 'tank_low', string> | null = null;
+  let detail: Record<string, unknown> = {};
+  let extras: PushData = {};
+
   // A null reading means the sensor couldn't be read this cycle - there's
-  // nothing to alert on, and it must not be treated as "tank is empty".
+  // nothing to decide on, and it must not be treated as "tank is empty". The
+  // band stays where it was.
   if (levelCm != null && volumeL != null) {
     // With a tank profile, thresholds are percentage-based (device-agnostic,
     // works for parallel-plumbed tanks). Without one yet, fall back to the
     // legacy liter thresholds so existing devices keep alerting unchanged.
     if (profile && (fullPct != null || lowPct != null)) {
-      const levelPercent = computeLevelPercent(levelCm, {
+      const geometry = {
         heightCm: profile.heightCm.toNumber(),
         sensorOffsetCm: profile.sensorOffsetCm.toNumber(),
         deadZoneCm: profile.deadZoneCm.toNumber(),
+      };
+      levelPercent = computeLevelPercent(levelCm, geometry)!;
+      inBlindZone = isInBlindZone(levelCm, geometry);
+      band = nextBand(state?.band ?? null, {
+        value: levelPercent,
+        fullAt: fullPct,
+        lowAt: lowPct,
+        margin: REARM_MARGIN_PCT,
+        inBlindZone,
       });
-
-      if (tankFullOn && thresholdCrossed(levelPercent, fullPct, 'at-or-above')) {
-        await createAndSendAlert(
-          device.id,
-          device.tenantId,
-          'tank_full',
-          `Tank is full (${levelPercent.toFixed(0)}%)`,
-          { level_percent: levelPercent, threshold_pct: fullPct },
-          { level_percent: levelPercent.toFixed(1) }
-        );
-      }
-
-      if (tankLowOn && thresholdCrossed(levelPercent, lowPct, 'at-or-below')) {
-        await createAndSendAlert(
-          device.id,
-          device.tenantId,
-          'tank_low',
-          `Tank is low (${levelPercent.toFixed(0)}%)`,
-          { level_percent: levelPercent, threshold_pct: lowPct },
-          { level_percent: levelPercent.toFixed(1) }
-        );
-      }
-    } else {
-      if (tankFullOn && thresholdCrossed(volumeL, fullL, 'at-or-above')) {
-        await createAndSendAlert(
-          device.id,
-          device.tenantId,
-          'tank_full',
-          `Tank is full (${volumeL.toFixed(1)}L)`,
-          { volume_l: volumeL, threshold: fullL }
-        );
-      }
-
-      if (tankLowOn && thresholdCrossed(volumeL, lowL, 'at-or-below')) {
-        await createAndSendAlert(
-          device.id,
-          device.tenantId,
-          'tank_low',
-          `Tank is low (${volumeL.toFixed(1)}L)`,
-          { volume_l: volumeL, threshold: lowL }
-        );
-      }
+      message = {
+        tank_full: `Tank is full (${levelPercent.toFixed(0)}%)`,
+        tank_low: `Tank is low (${levelPercent.toFixed(0)}%)`,
+      };
+      detail = { level_percent: levelPercent, in_blind_zone: inBlindZone, full_pct: fullPct, low_pct: lowPct };
+      extras = { level_percent: levelPercent.toFixed(1) };
+    } else if (fullL != null || lowL != null) {
+      // No capacity to take a percentage of, so the margin is 10% of the
+      // larger threshold - about what REARM_MARGIN_PCT is on a profiled tank.
+      band = nextBand(state?.band ?? null, {
+        value: volumeL,
+        fullAt: fullL,
+        lowAt: lowL,
+        margin: Math.max(fullL ?? 0, lowL ?? 0) * 0.1,
+      });
+      message = {
+        tank_full: `Tank is full (${volumeL.toFixed(1)}L)`,
+        tank_low: `Tank is low (${volumeL.toFixed(1)}L)`,
+      };
+      detail = { volume_l: volumeL, full_l: fullL, low_l: lowL };
     }
   }
 
-  if (isAlertRuleEnabled(config, 'battery_low') && thresholdCrossed(batteryV, batteryMinV, 'below')) {
+  // Battery has one threshold, so it's a flag rather than a band: low below
+  // the minimum, and not low again until it recovers past the margin.
+  let batteryLow = state?.batteryLow ?? false;
+  if (batteryV != null && batteryMinV != null) {
+    batteryLow = batteryLow ? batteryV < batteryMinV + REARM_MARGIN_V : batteryV < batteryMinV;
+  }
+
+  const won = await saveTankState(deviceId, state, {
+    band: band ?? state?.band ?? 'normal',
+    inBlindZone: band != null ? inBlindZone : (state?.inBlindZone ?? false),
+    levelPercent: levelPercent ?? num(state?.levelPercent),
+    batteryLow,
+  });
+  // Another reading for this device got there first and has already acted on
+  // the same change; alerting here too would send it twice.
+  if (!won) return;
+
+  const tankAlert = band != null ? alertForTransition(state?.band ?? null, band) : null;
+  if (tankAlert && message && isAlertRuleEnabled(config, tankAlert)) {
+    await createAndSendAlert(device.id, device.tenantId, tankAlert, message[tankAlert], detail, extras, {
+      transition: true,
+    });
+  }
+
+  // Seeding (no state yet) never alerts, as with the tank bands.
+  if (state && !state.batteryLow && batteryLow && isAlertRuleEnabled(config, 'battery_low')) {
     await createAndSendAlert(
       device.id,
       device.tenantId,
       'battery_low',
-      `Battery is low (${batteryV.toFixed(2)}V)`,
-      { battery_v: batteryV, threshold: batteryMinV }
+      `Battery is low (${batteryV!.toFixed(2)}V)`,
+      { battery_v: batteryV, threshold: batteryMinV },
+      {},
+      { transition: true }
     );
   }
+}
+
+/**
+ * Writes the tank's new state, and reports whether this reading's view of the
+ * previous state was still current. Two readings processed at once would
+ * otherwise both see "normal -> full" and both alert; the conditional update
+ * lets exactly one of them through.
+ */
+async function saveTankState(
+  deviceId: string,
+  previous: TankState | null,
+  next: { band: TankBand; inBlindZone: boolean; levelPercent: number | null; batteryLow: boolean }
+): Promise<boolean> {
+  const bandChanged = !previous || previous.band !== next.band;
+  const data = { ...next, ...(bandChanged ? { bandChangedAt: new Date() } : {}) };
+
+  if (!previous) {
+    try {
+      await prisma.tankState.create({ data: { deviceId, ...data } });
+      return true;
+    } catch (error) {
+      if (isUniqueViolation(error)) return false;
+      throw error;
+    }
+  }
+
+  const { count } = await prisma.tankState.updateMany({
+    where: { deviceId, band: previous.band, batteryLow: previous.batteryLow },
+    data,
+  });
+  return count === 1;
 }
 
 export async function checkDeviceOfflineAlerts(): Promise<void> {
@@ -203,19 +267,21 @@ async function createAndSendAlert(
   payload: unknown,
   // Extras the app reads straight off the push: enough to update the
   // home-screen widget without opening a connection.
-  extras: PushData = {}
+  extras: PushData = {},
+  // transition: the caller already knows this is a new crossing (tank state
+  // changed band), so the time window below would only swallow real events -
+  // a tank refilled twice in an hour is two refills.
+  opts: { transition?: boolean } = {}
 ): Promise<void> {
-  // Don't create duplicate alerts of the same type for the same device
-  // within an hour.
-  const existing = await prisma.alert.findFirst({
-    where: {
-      deviceId,
-      type,
-      acknowledged: false,
-      createdAt: { gt: new Date(Date.now() - 60 * 60 * 1000) },
-    },
-  });
-  if (existing) return;
+  // Everything else - offline, leak - keeps a one-hour guard against repeats.
+  // It no longer looks at `acknowledged`: acknowledging used to clear the
+  // guard, so the next reading alerted again straight away.
+  if (!opts.transition) {
+    const existing = await prisma.alert.findFirst({
+      where: { deviceId, type, createdAt: { gt: new Date(Date.now() - 60 * 60 * 1000) } },
+    });
+    if (existing) return;
+  }
 
   // Severity is owned by the rule catalog, so the alert a user receives and
   // the rule they see in settings can never disagree.

@@ -21,7 +21,8 @@
     "mqtt:smoke": "ts-node --transpile-only scripts/mqtt-e2e-smoke.ts",
     "send-measurement": "ts-node --transpile-only scripts/send-measurement.ts",
     "verify:history": "ts-node --transpile-only scripts/verify-history-series.ts",
-    "verify:crud": "ts-node --transpile-only scripts/verify-crud.ts"
+    "verify:crud": "ts-node --transpile-only scripts/verify-crud.ts",
+    "rollups:rebuild": "ts-node --transpile-only scripts/rebuild-rollups.ts"
   },
   "keywords": [],
   "author": "",

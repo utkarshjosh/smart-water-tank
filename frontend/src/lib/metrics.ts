@@ -33,6 +33,8 @@ export const METRIC_SLUG: Record<Metric, string> = {
 };
 
 export const RANGES = [
+  // hours: null = since local midnight.
+  { value: 'today', label: 'Today', hours: null },
   { value: '24h', label: '24h', hours: 24 },
   { value: '7d', label: '7d', hours: 24 * 7 },
   { value: '30d', label: '30d', hours: 24 * 30 },
@@ -42,7 +44,20 @@ export const RANGES = [
 
 export type RangeKey = (typeof RANGES)[number]['value'];
 
+export const DEFAULT_RANGE: RangeKey = '24h';
+
 export const rangeToWindow = (key: RangeKey, now = Date.now()) => {
   const hours = RANGES.find((r) => r.value === key)!.hours;
-  return { from: new Date(now - hours * 3_600_000).toISOString(), to: new Date(now).toISOString() };
+  const from = hours == null ? startOfToday(now) : now - hours * 3_600_000;
+  return { from: new Date(from).toISOString(), to: new Date(now).toISOString() };
 };
+
+/** Local midnight, in the browser's zone. */
+export const startOfToday = (now = Date.now()) => {
+  const d = new Date(now);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+};
+
+/** The browser's IANA zone, e.g. "Asia/Kolkata". */
+export const viewerTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;

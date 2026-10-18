@@ -1,17 +1,18 @@
 import * as cron from 'node-cron';
-import { aggregateDailySummaries } from '../services/aggregation.service';
+import { refreshActiveRollups } from '../services/rollup.service';
 import { checkDeviceOfflineAlerts } from '../services/alert.service';
 
 export function startCronJobs(): void {
   console.log('Starting cron jobs...');
 
-  // Daily aggregation at 1 AM.
-  cron.schedule('0 1 * * *', async () => {
-    console.log('Running daily aggregation job...');
+  // Hourly and daily usage, every 5 minutes, for devices that reported in
+  // the last two hours. Replaces the 1 AM job, which cut days in the server's
+  // timezone and stored nothing finer than a day.
+  cron.schedule('*/5 * * * *', async () => {
     try {
-      await aggregateDailySummaries();
+      await refreshActiveRollups();
     } catch (error) {
-      console.error('Error in daily aggregation job:', error);
+      console.error('Error in usage rollup job:', error);
     }
   });
 
