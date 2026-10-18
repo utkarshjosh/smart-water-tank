@@ -25,7 +25,11 @@ export async function deviceAuth(req: DeviceAuthRequest, res: Response, next: Ne
     req.device = device;
     next();
   } catch (error) {
+    // 401 must only ever mean "this token is not valid": firmware that sees
+    // enough of them wipes its credentials and waits for a human to re-pair.
+    // A lookup that threw (database down, pool exhausted) says nothing about
+    // the token, so answer 503 and let the device retry with what it has.
     console.error('Device authentication error:', error);
-    res.status(401).json({ error: 'Device authentication failed' });
+    next(new HttpError(503, 'Device authentication temporarily unavailable'));
   }
 }
