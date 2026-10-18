@@ -280,11 +280,24 @@ namespace WifiManager {
                     break;
                 }
 
-                Config::deviceId = oldDeviceId;
-                Config::deviceToken = oldDeviceToken;
-                Config::claimed = oldClaimed;
-                Config::mqttProvisioned = false;
-                Serial.println(F("[WiFi] MQTT proof failed; keeping legacy credentials"));
+                if (MqttReporter::credentialsAccepted()) {
+                    // The broker took the new token, and on a re-claim the
+                    // backend retires the previous one the first time the new
+                    // one authenticates. Falling back would leave flash
+                    // holding a dead token, which the portal-timeout paths
+                    // below restart or sleep into without saving. Keep the new
+                    // identity, unprovisioned so the next boot pairs again,
+                    // and persist it now.
+                    Config::mqttProvisioned = false;
+                    Config::save();
+                    Serial.println(F("[WiFi] New token accepted but MQTT proof incomplete; keeping it, unprovisioned"));
+                } else {
+                    Config::deviceId = oldDeviceId;
+                    Config::deviceToken = oldDeviceToken;
+                    Config::claimed = oldClaimed;
+                    Config::mqttProvisioned = false;
+                    Serial.println(F("[WiFi] MQTT proof failed; keeping legacy credentials"));
+                }
             }
 
             Serial.printf("[WiFi] Pairing failed (attempt %d/%d)\n", attempt, MAX_CLAIM_ATTEMPTS);

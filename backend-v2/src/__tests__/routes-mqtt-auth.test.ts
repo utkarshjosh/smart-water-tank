@@ -103,6 +103,21 @@ test("POST /user with another device's valid token -> 403 (username must match)"
   assert.deepEqual(res.body, { Ok: false, Error: 'invalid credentials' });
 });
 
+// go-auth reads a 403 as "refuse this device" (CONNACK not authorized) but any
+// status >= 500 as "backend error" (connection dropped, no refusal). Devices
+// treat refusals as a revoked token, so a database failure must be a 5xx.
+test('POST /user when the token lookup throws -> 500, not 403', async (t) => {
+  stubModel(t, 'deviceToken', {
+    findFirst: async () => {
+      throw new Error("Can't reach database server");
+    },
+  });
+  t.mock.method(console, 'error', () => {});
+  const res = await login('AQM-0042', 'valid');
+  assert.equal(res.status, 500);
+  assert.deepEqual(res.body, { error: 'Internal server error' });
+});
+
 test('POST /user with matching username and token -> 200', async (t) => {
   tokenBelongsTo(t, deviceRow({ deviceId: 'AQM-0042' }));
   const res = await login('AQM-0042', 'valid');

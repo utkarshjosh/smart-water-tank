@@ -57,6 +57,12 @@ export function deviceRow(overrides: Partial<Device> = {}): Device {
   } as Device;
 }
 
+// Shaped like firebase-admin's FirebaseAuthError, whose constructor is not
+// public. firebaseAuth tells a rejected token from a server fault by `code`.
+export function firebaseError(code: string, message = code): Error {
+  return Object.assign(new Error(message), { code });
+}
+
 // Makes `Authorization: Bearer GOOD_TOKEN` resolve to `user` for one test:
 // Firebase verifies the token to `user.firebaseUid`, and the users table lookup
 // returns the row. Pass `null` to simulate a Firebase account with no user row
@@ -65,7 +71,7 @@ export function signInAs(t: TestContext, user: User | null, opts: { uid?: string
   const uid = opts.uid ?? user?.firebaseUid ?? 'uid-unknown';
   t.mock.method(firebase, 'getAuth', () => ({
     verifyIdToken: async (token: string) => {
-      if (token !== GOOD_TOKEN) throw new Error('auth/invalid-id-token');
+      if (token !== GOOD_TOKEN) throw firebaseError('auth/argument-error', 'Firebase ID token has invalid signature.');
       return { uid };
     },
     getUser: async () => ({ uid, displayName: 'New Person', email: 'new@example.com' }),

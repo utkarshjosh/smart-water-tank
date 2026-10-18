@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as deviceService from '../services/device.service';
-import { callArgs, deviceConfigPayloadDto, deviceRow, deviceTokenResolvesTo, http } from './helpers/http';
+import { callArgs, deviceConfigPayloadDto, deviceRow, deviceTokenResolvesTo, http, stubModel } from './helpers/http';
 
 // Device-facing routes: the unauthenticated claim exchange and the
 // bearer-token routes a provisioned device calls from firmware.
@@ -40,6 +40,23 @@ test('POST /measurements with a token no device holds -> 401', async (t) => {
   const res = await http().post('/api/v1/measurements').set(headers).send({ level_cm: 10, volume_l: 100 });
   assert.equal(res.status, 401);
   assert.deepEqual(res.body, { error: 'Invalid device token' });
+});
+
+// Firmware treats a run of 401s as "my token was revoked" and wipes itself back
+// to pairing mode, so a database failure must not look like one.
+test('POST /measurements when the token lookup throws -> 503, not 401', async (t) => {
+  stubModel(t, 'deviceToken', {
+    findFirst: async () => {
+      throw new Error("Can't reach database server");
+    },
+  });
+  t.mock.method(console, 'error', () => {});
+  const res = await http()
+    .post('/api/v1/measurements')
+    .set('Authorization', 'Bearer any-device-token')
+    .send({ level_cm: 10, volume_l: 100 });
+  assert.equal(res.status, 503);
+  assert.deepEqual(res.body, { error: 'Device authentication temporarily unavailable' });
 });
 
 test('POST /measurements requires level_cm and volume_l (null allowed, absent not)', async (t) => {
