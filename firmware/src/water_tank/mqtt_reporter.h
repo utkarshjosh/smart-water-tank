@@ -34,6 +34,12 @@ namespace MqttReporter {
     // the retained config before Config::markMqttProvisioned() is allowed.
     bool verifyProvisioning();
 
+    // True when the broker accepted the current credentials (CONNACK 0) on
+    // the most recent connect attempt, even if the session failed after that.
+    // On a re-claim the backend retires the previous token at exactly that
+    // moment, so the portal must not fall back to it.
+    bool credentialsAccepted();
+
     // Service the client and reconnect if the link dropped. Call every loop().
     void loop();
 

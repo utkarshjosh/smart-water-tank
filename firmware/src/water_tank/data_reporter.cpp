@@ -4,6 +4,7 @@
 
 #include "data_reporter.h"
 #include "config.h"
+#include "credential_guard.h"
 #include "tls_client.h"
 #include <ESP8266HTTPClient.h>
 #include <WiFiClientSecure.h>
@@ -88,6 +89,7 @@ namespace DataReporter {
         http.addHeader("Authorization", "Bearer " + Config::deviceToken);
         
         int httpCode = http.POST(payload);
+        CredentialGuard::noteHttpStatus(httpCode);
         
         if (httpCode > 0) {
             Serial.printf("[Reporter] Response: %d\n", httpCode);
@@ -142,6 +144,7 @@ namespace DataReporter {
         
         int httpCode = http.POST(jsonData);
         http.end();
+        CredentialGuard::noteHttpStatus(httpCode);
         
         return (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_CREATED);
     }
@@ -166,6 +169,7 @@ namespace DataReporter {
         http.addHeader("Authorization", "Bearer " + Config::deviceToken);
         
         int httpCode = http.GET();
+        CredentialGuard::noteHttpStatus(httpCode);
         
         if (httpCode == HTTP_CODE_OK) {
             String response = http.getString();

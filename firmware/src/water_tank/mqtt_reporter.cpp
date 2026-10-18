@@ -4,6 +4,7 @@
 
 #include "mqtt_reporter.h"
 #include "config.h"
+#include "credential_guard.h"
 #include "tls_client.h"
 #include <ESP8266WiFi.h>
 #include <WiFiClientSecure.h>
@@ -31,6 +32,8 @@ static unsigned long lastConnectAttempt = 0;
 static bool tlsReady = false;
 static bool receivedRetainedConfig = false;
 static bool provisioningAttempt = false;
+// CONNACK accepted the current credentials on the latest connect attempt.
+static bool tokenAccepted = false;
 
 static String topicBase() { return String(MQTT_TOPIC_BASE) + "/" + Config::deviceId; }
 static String topicTelemetry() { return topicBase() + "/telemetry"; }
@@ -158,6 +161,7 @@ namespace MqttReporter {
 
     bool connect(bool publishPresence) {
         if (mqtt.connected()) return true;
+        tokenAccepted = false;
         if (Config::deviceId.length() == 0) return false;
         if (MQTT_USE_TLS && !tlsReady) {
             // NTP/DNS may recover after a transient boot-time failure.
@@ -173,15 +177,29 @@ namespace MqttReporter {
 
         const bool ok = mqtt.connect(MQTT_BROKER, MQTT_PORT);
         if (!ok) {
-            Serial.printf("[MQTT] Connect failed, state=%d\n", mqtt.connectError());
+            const int connectError = mqtt.connectError();
+            Serial.printf("[MQTT] Connect failed, state=%d\n", connectError);
             if (MQTT_USE_TLS) {
                 char error[128] = {0};
                 const int code = secureClient.getLastSSLError(error, sizeof(error));
                 Serial.printf("[TLS] connect error=%d: %s\n", code, error);
             }
+            // Only a CONNACK that names the credentials is a verdict on the
+            // token. Despite its name MQTT_CONNECTION_REFUSED (-2) is the
+            // TCP/TLS connect failing; -1 means no CONNACK arrived and 3 that
+            // the CONNECT could not be sent or the broker is unavailable.
+            // A provisioning attempt is the portal's to judge: a refused new
+            // token falls back to the previous identity instead of counting
+            // against it.
+            if (!provisioningAttempt &&
+                (connectError == MQTT_BAD_USER_NAME_OR_PASSWORD || connectError == MQTT_NOT_AUTHORIZED)) {
+                CredentialGuard::refused(CredentialGuard::Transport::Mqtt);
+            }
             return false;
         }
 
+        tokenAccepted = true;
+        CredentialGuard::accepted();
         Serial.println(F("[MQTT] Connected"));
         // subscribe() waits for SUBACK. Retained config may be handled before
         // it returns, which is precisely what provisioning needs.
@@ -194,6 +212,11 @@ namespace MqttReporter {
     }
 
     bool verifyProvisioning() {
+        // The proof has to come from a session opened with the new
+        // credentials. A re-pair starts on a running device whose old session
+        // can outlive a quick portal visit, and connect() would then report
+        // success without the new token ever reaching the broker.
+        disconnect();
         receivedRetainedConfig = false;
         provisioningAttempt = true;
         if (!connect(false)) {
@@ -219,13 +242,20 @@ namespace MqttReporter {
 
     void loop() {
         if (!mqtt.connected()) {
-            if (millis() - lastConnectAttempt >= MQTT_RECONNECT_INTERVAL_MS) connect();
+            // After a refusal, wait out the backoff it earned rather than run
+            // a TLS handshake every five seconds that will be refused again.
+            if (millis() - lastConnectAttempt >= MQTT_RECONNECT_INTERVAL_MS &&
+                !CredentialGuard::holdOff(CredentialGuard::Transport::Mqtt)) {
+                connect();
+            }
             return;
         }
         mqtt.poll();
     }
 
     bool connected() { return mqtt.connected(); }
+
+    bool credentialsAccepted() { return tokenAccepted; }
 
     void disconnect() {
         if (mqtt.connected()) mqtt.stop();

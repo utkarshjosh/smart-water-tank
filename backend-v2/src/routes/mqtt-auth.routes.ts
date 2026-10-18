@@ -14,8 +14,15 @@ import { verifyDeviceCredentials } from '../lib/device-token';
 // the plan calls for: the backend is an MQTT client and can't inspect other
 // connections' credentials, so the broker delegates that check here.
 //
-// Response contract: 200 => allow, 403 => deny. (Compatible with mosquitto-go-
-// auth "status" response mode; the {Ok, Error} body also suits "json" mode.)
+// Response contract: 200 => allow, 403 => deny, 5xx => could not decide.
+// (Compatible with mosquitto-go-auth "status" response mode; the {Ok, Error}
+// body also suits "json" mode.) go-auth's HTTP backend turns any status >= 500
+// into a backend error rather than a denial; after auth_opt_retry_count it
+// reports MOSQ_ERR_UNKNOWN and Mosquitto drops the connection with no CONNACK,
+// where a 403 becomes CONNACK "not authorized". Devices treat that refusal as
+// a revoked token, so a thrown lookup (database down) must stay a 5xx: the
+// handlers here run under asyncHandler, which hands the error to the shared
+// handler in app.ts and that answers 500.
 // ---------------------------------------------------------------------------
 
 const router = express.Router();
