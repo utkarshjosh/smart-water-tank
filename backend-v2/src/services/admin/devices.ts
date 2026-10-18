@@ -3,6 +3,7 @@ import { prisma } from '../../lib/prisma';
 import { HttpError } from '../../lib/http-error';
 import { isUniqueConstraintError } from '../../lib/prisma-errors';
 import { createDeviceToken } from '../../lib/device-token';
+import { disconnectDeviceSession } from '../../gateway/registry';
 import { toConfigDto } from '../device.service';
 import { getTankProfileRaw, volumeLForProfile } from '../tank-profile.service';
 import { toAdminAlertDto } from './shared';
@@ -222,6 +223,9 @@ export async function archiveDevice(deviceIdString: string) {
 
   const measurements = await prisma.measurement.count({ where: { deviceId: device.id } });
   await prisma.device.update({ where: { id: device.id }, data: { archivedAt: new Date() } });
+  // Auth refuses an archived device from here on, but an MQTT session it
+  // opened earlier stays up until it reconnects. End it now.
+  void disconnectDeviceSession(device.deviceId);
   return { device_id: device.deviceId, measurements_retained: measurements };
 }
 
@@ -240,6 +244,9 @@ export async function restoreDevice(deviceIdString: string) {
   return { device_id: device.deviceId };
 }
 
+// Mints an extra token; earlier ones stay valid. If this starts revoking them,
+// end the live session afterwards too (disconnectDeviceSession), as
+// archiveDevice does, or the old token's session keeps publishing.
 export async function reissueDeviceToken(deviceId: string): Promise<string> {
   return createDeviceToken(deviceId);
 }

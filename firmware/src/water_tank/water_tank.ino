@@ -25,6 +25,7 @@
 // Project modules (flattened for arduino-cli)
 #include "types.h"
 #include "config.h"
+#include "credential_guard.h"
 #include "wifi_manager.h"
 #include "sensor.h"
 #include "alerts.h"
@@ -170,7 +171,11 @@ void setup() {
         if (!Config::isMqttProvisioned()) {
             Serial.println(F("[WiFi] MQTT provisioning proof missing, entering config portal..."));
             #if DISPLAY_ENABLED
-            Display::showMessage("PAIRING MODE", AP_SSID);
+            // This screen stays up for the whole portal. A device that was
+            // paired before is here because the server stopped accepting its
+            // token, or it predates MQTT provisioning - either way it needs a
+            // fresh pairing code, and the screen should say so.
+            Display::showMessage(Config::claimed ? "RE-PAIR NEEDED" : "PAIRING MODE", AP_SSID);
             #endif
             WifiManager::connect(true); // blocks; always restarts the device when it returns
             return;
@@ -381,14 +386,16 @@ static bool reportData() {
 
     // HTTP remains a deliberately bounded recovery transport for Part I. It
     // is attempted once only after repeated normal MQTT failures, never as a
-    // second permanently active ingestion path.
-    if (!success && (mqttPublishFailures >= MQTT_FAILURES_BEFORE_HTTP_FALLBACK || PowerManager::httpRecoveryDue())) {
+    // second permanently active ingestion path. A token the device API just
+    // refused waits out its backoff, as the MQTT reconnect does.
+    if (!success && (mqttPublishFailures >= MQTT_FAILURES_BEFORE_HTTP_FALLBACK || PowerManager::httpRecoveryDue()) &&
+        !CredentialGuard::holdOff(CredentialGuard::Transport::Http)) {
         Serial.println(F("[Report] MQTT failure threshold reached; trying one HTTP recovery send"));
         success = DataReporter::send(state);
         mqttPublishFailures = 0;
     }
 #else
-    bool success = DataReporter::send(state);
+    bool success = !CredentialGuard::holdOff(CredentialGuard::Transport::Http) && DataReporter::send(state);
 #endif
 
     if (success) {
