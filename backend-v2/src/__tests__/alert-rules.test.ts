@@ -64,6 +64,18 @@ function stubModel(t: TestContext, model: keyof typeof prisma, impl: Record<stri
 }
 
 // Alert creation and push delivery, stubbed. Returns the alerts "raised".
+// A tank the tracker has seen before, sitting in the normal band. Without a
+// stored state, a reading only seeds the tracker and never alerts.
+const settled = {
+  deviceId: 'dev-1',
+  band: 'normal' as const,
+  inBlindZone: false,
+  levelPercent: null,
+  batteryLow: false,
+  bandChangedAt: new Date(0),
+  updatedAt: new Date(0),
+};
+
 function stubAlertSink(t: TestContext): { created: Array<{ type: string; severity: string }> } {
   const created: Array<{ type: string; severity: string }> = [];
   stubModel(t, 'alert', {
@@ -73,6 +85,11 @@ function stubAlertSink(t: TestContext): { created: Array<{ type: string; severit
       return { id: `alert-${created.length}`, ...data };
     },
     update: async () => ({}),
+  });
+  // Every write to tank state wins; the race is covered in tank-band tests.
+  stubModel(t, 'tankState', {
+    create: async () => ({}),
+    updateMany: async () => ({ count: 1 }),
   });
   t.mock.method(fcm, 'sendNotificationToTenant', async () => 0);
   return { created };
@@ -147,7 +164,7 @@ test('PUT disables battery_low, and a reading below threshold then raises nothin
   });
   stubModel(t, 'device', {
     update: async () => device, // bumpConfigVersion
-    findUnique: async () => ({ ...device, config: stored, tankProfile: null }),
+    findUnique: async () => ({ ...device, config: stored, tankProfile: null, tankState: settled }),
   });
   const sink = stubAlertSink(t);
 
@@ -220,7 +237,7 @@ test('PUT rejects a threshold on a rule that has none, and one out of range', ()
 test('a litre threshold of 0 is a real setting, not "off"', async (t) => {
   const stored = configRow({ tankLowThresholdL: new Prisma.Decimal(0) });
   stubModel(t, 'device', {
-    findUnique: async () => ({ ...device, config: stored, tankProfile: null }),
+    findUnique: async () => ({ ...device, config: stored, tankProfile: null, tankState: settled }),
   });
   const sink = stubAlertSink(t);
 
@@ -293,4 +310,42 @@ test('unpair: a plain member or a share recipient is refused', async () => {
     unpairDevice(device, { id: 'u-other', role: 'tenant_owner', tenantId: 'tenant-2' }),
     (err: unknown) => err instanceof HttpError && err.status === 403
   );
+});
+
+test('a full tank alerts once per crossing, with the blind zone counted as full', async (t) => {
+  // 100 cm tank, sensor at the rim, 20 cm blind zone: 28 cm away is 90%, and
+  // anything nearer than 20 cm is in the blind zone.
+  const tankProfile = {
+    heightCm: new Prisma.Decimal(100),
+    sensorOffsetCm: new Prisma.Decimal(0),
+    deadZoneCm: new Prisma.Decimal(20),
+  };
+  const config = configRow({ tankFullThresholdPct: new Prisma.Decimal(90) });
+  let state: typeof settled | null = null;
+  stubModel(t, 'device', {
+    findUnique: async () => ({ ...device, config, tankProfile, tankState: state }),
+  });
+  const sink = stubAlertSink(t);
+  // Replace the sink's always-wins stub with one that remembers, and refuses
+  // a write whose view of the previous band is stale.
+  stubModel(t, 'tankState', {
+    create: async ({ data }: { data: typeof settled }) => (state = { ...settled, ...data }),
+    updateMany: async ({ where, data }: { where: { band: string }; data: Partial<typeof settled> }) => {
+      if (state?.band !== where.band) return { count: 0 };
+      state = { ...state, ...data };
+      return { count: 1 };
+    },
+  });
+
+  const read = (levelCm: number) => processAlertsForMeasurement(device.id, { levelCm, volumeL: 1, batteryV: null });
+
+  await read(60); // seeds at 50%
+  await read(25); // 93%: crosses into full
+  await read(10); // blind zone: still full
+  await read(30); // 88%: inside the re-arm margin, still full
+  assert.deepEqual(sink.created.map((a) => a.type), ['tank_full']);
+
+  await read(40); // 75%: re-armed
+  await read(5); // blind zone from normal: full again
+  assert.deepEqual(sink.created.map((a) => a.type), ['tank_full', 'tank_full']);
 });

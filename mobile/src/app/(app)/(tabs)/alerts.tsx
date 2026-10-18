@@ -7,11 +7,10 @@ import { api } from '@/api/endpoints';
 import { queryClient } from '@/api/queryClient';
 import { queryKeys, useAlertFeed } from '@/api/queries';
 import type { FeedAlert } from '@/api/schemas';
-import { haptics } from '@/feedback/haptics';
 import { formatAge, formatAlertType } from '@/lib/format';
 import { Button, Card, Label, Text } from '@/ui/components';
 import { Screen } from '@/ui/Screen';
-import { space, useTheme, type Colors } from '@/ui/theme';
+import { space, type Colors } from '@/ui/theme';
 
 /**
  * Activity — one feed across every tank, grouped by day.
@@ -23,11 +22,13 @@ export default function AlertsScreen() {
   const router = useRouter();
   const feed = useAlertFeed();
 
-  const acknowledge = useMutation({
+  // Opening an alert marks it read. There's no separate button: alerts fire
+  // once per crossing now, so there's nothing to silence by acknowledging.
+  // (The endpoint is still called acknowledge; the field is the read flag.)
+  const markRead = useMutation({
     mutationFn: (alertId: string) => api.acknowledgeAlertById(alertId),
     // Optimistic: the row settles instantly and reverts if the call fails.
     onMutate: async (alertId) => {
-      haptics.selection();
       await queryClient.cancelQueries({ queryKey: queryKeys.alerts });
       const previous = queryClient.getQueryData(queryKeys.alerts);
       queryClient.setQueryData(queryKeys.alerts, (old: unknown) => {
@@ -70,7 +71,7 @@ export default function AlertsScreen() {
   return (
     <Screen
       title="Activity"
-      subtitle={unacknowledged > 0 ? `${unacknowledged} unacknowledged` : 'All caught up'}
+      subtitle={unacknowledged > 0 ? `${unacknowledged} new` : 'All caught up'}
       onRefresh={() => void feed.refetch()}
       refreshing={feed.isRefetching}
     >
@@ -92,8 +93,10 @@ export default function AlertsScreen() {
             <AlertRow
               key={alert.id}
               alert={alert}
-              onAcknowledge={() => acknowledge.mutate(alert.id)}
-              onOpen={() => router.push(`/device/${alert.device_id}`)}
+              onOpen={() => {
+                if (!alert.acknowledged) markRead.mutate(alert.id);
+                router.push(`/device/${alert.device_id}`);
+              }}
             />
           ))}
         </View>
@@ -126,16 +129,7 @@ const TONE: Record<string, keyof Colors> = {
   low: 'mutedForeground',
 };
 
-function AlertRow({
-  alert,
-  onAcknowledge,
-  onOpen,
-}: {
-  alert: FeedAlert;
-  onAcknowledge: () => void;
-  onOpen: () => void;
-}) {
-  const { colors } = useTheme();
+function AlertRow({ alert, onOpen }: { alert: FeedAlert; onOpen: () => void }) {
   const tone = TONE[alert.severity] ?? 'mutedForeground';
 
   return (
@@ -156,23 +150,6 @@ function AlertRow({
           <Text variant="caption" color="mutedForeground">
             {alert.device_name}
           </Text>
-          {alert.acknowledged ? (
-            <Text variant="label" color="ok" style={styles.upper}>
-              Acknowledged
-            </Text>
-          ) : (
-            <Pressable
-              onPress={onAcknowledge}
-              hitSlop={10}
-              accessibilityRole="button"
-              accessibilityLabel={`Acknowledge ${formatAlertType(alert.type)}`}
-              style={[styles.ack, { borderColor: colors.border }]}
-            >
-              <Text variant="caption" color="primary">
-                Acknowledge
-              </Text>
-            </Pressable>
-          )}
         </View>
       </Card>
     </Pressable>
@@ -184,6 +161,4 @@ const styles = StyleSheet.create({
   acked: { opacity: 0.62 },
   rowTop: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   rowBottom: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  upper: { textTransform: 'uppercase' },
-  ack: { borderRadius: 999, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: space.md, paddingVertical: 5 },
 });

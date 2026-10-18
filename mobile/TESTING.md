@@ -213,17 +213,18 @@ thresholds → **tank low** to something like 30%.
 
 **Expect, with the app closed:**
 - A notification: **"Tank low · <your tank>"** with the body naming a percentage.
-- It has an **Acknowledge** action.
+- It has no action buttons.
 - Tapping the notification opens the app *on that tank's detail screen*.
-- Tapping **Acknowledge** dismisses it without opening the app, and the alert
-  shows as acknowledged in Activity afterwards.
 
-**Then with the app open**, send another (change `--level` so it is a fresh
-reading): the notification still appears, drawn by the app itself, with the same
-Acknowledge action, and a single haptic buzz for a critical alert.
+**Then with the app open**, send a reading that takes the tank back above the
+re-arm line (10 points above the low threshold, e.g. `--level 40`), then low
+again (`--level 80`): the notification appears again, drawn by the app itself,
+with a single haptic buzz for a critical alert.
 
-> Alerts de-duplicate: the backend suppresses a repeat of the same type on the
-> same device within an hour. To retest sooner, acknowledge the alert first.
+> Alerts fire once per crossing. Another low reading while the tank is already
+> low sends nothing; it has to recover past the re-arm line first. The very
+> first reading a device sends after the backend is deployed only records the
+> tank's state and never alerts.
 
 ### 5. Widget — the reason for all of this
 
@@ -245,8 +246,9 @@ widget-freshness design rests on.
 From Tanks, tap the **Activity** card.
 
 **Expect:** every alert across every tank in one list, grouped by Today /
-Yesterday / date. Tap **Acknowledge** — the row dims instantly, and stays
-acknowledged after a pull-to-refresh.
+Yesterday / date, with a "N new" count. Tap an unread alert — it opens that
+tank, and back in Activity the row is dimmed and stays read after a
+pull-to-refresh.
 
 ### 7. Sign-out hygiene
 

@@ -7,7 +7,7 @@
  *   - the home-screen widget's task handler, which renders in its own headless
  *     JS context;
  *   - the push background handlers, which keep widget state fresh from an
- *     alert push and let Acknowledge work straight from the notification.
+ *     alert push.
  *
  * Everything after that is expo-router's normal entry.
  */
