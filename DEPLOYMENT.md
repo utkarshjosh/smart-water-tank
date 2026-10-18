@@ -679,6 +679,34 @@ After deployment, run `npm run mqtt:smoke` locally on the server and verify the
 measurement through the authenticated API. The broker must retain config across
 both a Mosquitto restart and a backend restart.
 
+### 11.5 Ending a decommissioned device's session
+
+Mosquitto checks device credentials only when a device connects, so a device
+that was already connected when it was decommissioned would otherwise keep its
+session until it next reconnects. When a device is decommissioned (on its own,
+or with its tenant), the backend connects once with the device's client id (its
+`deviceId`) using the backend account. MQTT requires the broker to drop the
+older connection with that id, and the auth hook then refuses the device's
+automatic reconnect. This is best effort: if it fails, the backend still
+discards everything an archived device sends.
+
+After installing or upgrading Mosquitto, confirm on staging that this takeover
+works across usernames:
+
+```bash
+# A test device, connected with its own token (any machine):
+mosquitto_sub -h <broker-host> -p 8883 --capath /etc/ssl/certs \
+  -i AQM-TEST -u AQM-TEST -P '<device token>' -t devices/AQM-TEST/config -v
+
+# Decommission AQM-TEST in the admin console, then on the server:
+sudo journalctl -u mosquitto -n 20 --no-pager
+```
+
+The test device should lose its connection and its reconnect should be refused
+(`not authorised`), and the log should show
+`Client AQM-TEST already connected, closing old connection.` Restore the device
+afterwards.
+
 ---
 
 ## Additional Considerations
