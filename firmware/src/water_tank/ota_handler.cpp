@@ -4,6 +4,7 @@
 
 #include "ota_handler.h"
 #include "config.h"
+#include "credential_guard.h"
 #include "progress.h"
 #include "tls_client.h"
 #include <ArduinoJson.h>
@@ -75,6 +76,9 @@ namespace OTAHandler {
             http.addHeader("X-Firmware-Version", FIRMWARE_VERSION);
             
             int httpCode = http.GET();
+            // Only the manifest request counts: it is always our API with our
+            // token, whereas download_url is whatever the manifest names.
+            CredentialGuard::noteHttpStatus(httpCode);
             
             if (httpCode == HTTP_CODE_OK) {
                 String response = http.getString();

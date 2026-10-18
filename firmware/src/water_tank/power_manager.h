@@ -17,6 +17,10 @@ namespace PowerManager {
     bool otaCheckDue();
     void markOtaCheckAttempted();
     bool httpRecoveryDue();
+    // Retry spacing after `failures` consecutive failures: one minute,
+    // doubling, capped at an hour; 0 when there are none. The duty-cycle sleep
+    // and CredentialGuard's always-on retry spacing share it.
+    unsigned long failureBackoffMs(uint8_t failures);
     bool getWifiBssidAndChannel(uint8_t &channel, uint8_t* bssid);
     void saveWifiBssidAndChannel(uint8_t channel, const uint8_t* bssid);
     void finishCycle(bool deliverySucceeded);

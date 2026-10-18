@@ -102,6 +102,34 @@ the device unconfigured and sleeps with the same backoff rather than restarting
 into another indefinite setup cycle. The default always-on build retains the
 restart behavior for USB-powered bench setup.
 
+### Refused device token
+
+The backend stops accepting a token when an admin re-issues it or revokes all
+of a device's tokens, when the device is re-claimed, or when it is
+decommissioned. Only two answers count as a refusal: an MQTT CONNACK of "bad
+username or password" (4) or "not authorized" (5), and HTTP 401 from the
+device API. DNS, TCP and TLS failures, timeouts and 5xx never count, and any
+accepted MQTT connection or HTTP 2xx clears the count. `credential_guard.h`
+has the details.
+
+After a refusal the always-on build stops retrying every few seconds: the MQTT
+reconnect and the HTTP recovery send each wait out the same backoff a failed
+duty cycle sleeps through (1 minute, doubling, capped at 1 hour). Refusals
+count at most once per backoff window, and the count lives in RTC memory so
+deep sleep does not reset it.
+
+After `CREDENTIAL_REFUSALS_BEFORE_REPAIR` (5) windows in a row, about fifteen
+minutes, the device clears its MQTT provisioning and restarts into the pairing
+portal. A display build first shows `Re-pair needed`, then `RE-PAIR NEEDED`
+for as long as the portal is open. This only happens if both the broker and the
+device API refused during that run. The broker refuses every device if its auth
+hook is misconfigured, and the API's `deviceAuth` answers 401 when its database
+lookup throws, so neither one alone is enough.
+
+A re-pair whose new token authenticates but never receives retained config now
+keeps that new token, unprovisioned, instead of falling back to the old one. On
+a re-claim the backend has already retired the old token at that point.
+
 ## Commands
 
 | Command | Description |
