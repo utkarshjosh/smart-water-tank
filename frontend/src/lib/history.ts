@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { historySeriesSchema, type HistorySeries } from '@aquamind/contracts';
 import type * as contracts from '@aquamind/contracts';
 import { get } from '@/lib/api';
-import type { Bucket, Metric, RequestedBucket, SeriesPoint } from '@/lib/metrics';
+import { viewerTimeZone, type Bucket, type Metric, type RequestedBucket, type SeriesPoint } from '@/lib/metrics';
 
 export * from '@/lib/metrics';
 
@@ -43,7 +43,9 @@ export function useHistorySeries({
     placeholderData: (previous) => previous,
     queryFn: () =>
       get(`/api/v1/user/devices/${deviceId}/history/series`, historySeriesSchema, {
-        params: { from, to, bucket, ...(metrics ? { metrics: metrics.join(',') } : {}) },
+        // The viewer's zone, so hourly and daily buckets start on their local
+        // hours and midnight rather than UTC's.
+        params: { from, to, bucket, tz: viewerTimeZone(), ...(metrics ? { metrics: metrics.join(',') } : {}) },
       }),
   });
 }

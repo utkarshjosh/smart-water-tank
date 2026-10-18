@@ -267,6 +267,7 @@ const historySeriesQuerySchema = z.object({
   days: z.coerce.number().positive().optional(),
   bucket: z.enum(['auto', ...BUCKETS]).default('auto'),
   metrics: z.string().optional(),
+  tz: z.string().max(64).optional(),
 });
 
 // GET /api/v1/user/devices/:deviceId/history/series - Bucketed history for

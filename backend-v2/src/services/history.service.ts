@@ -2,6 +2,8 @@ import { Device, Prisma, TankProfile } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http-error';
 import { computeLevelPercent, computeTotalCapacityL, getTankProfileRaw } from './tank-profile.service';
+import { isValidTimeZone, offsetMs } from '../lib/local-time';
+import { timeZoneOf } from './rollup.service';
 
 // Bucketed history for browsable charts. The old `/history` endpoint returns
 // raw rows newest-first capped at 10k, which cannot answer "show me a year" -
@@ -293,7 +295,8 @@ async function fetchBucketed(
   from: Date,
   to: Date,
   seconds: number,
-  profile: TankProfile | null
+  profile: TankProfile | null,
+  offsetSeconds = 0
 ): Promise<NormalizedBucket[]> {
   // Clamp inside SQL so AVG matches what computeLevelPercent would produce
   // per-reading: averaging unclamped distances first would let readings inside
@@ -307,10 +310,13 @@ async function fetchBucketed(
 
   // TIMESTAMPDIFF against a fixed epoch is plain datetime arithmetic - unlike
   // UNIX_TIMESTAMP it does not depend on the session time zone, so bucket
-  // boundaries are stable wherever this runs.
+  // boundaries are stable wherever this runs. Flooring against the epoch
+  // alone lines buckets up with UTC, which in India puts every hour at :30
+  // and every day at 05:30; shifting by the viewer's offset first puts them
+  // on local hours and local midnight.
   const rows = await prisma.$queryRaw<BucketRow[]>`
     SELECT
-      FLOOR(TIMESTAMPDIFF(SECOND, '1970-01-01 00:00:00', \`timestamp\`) / ${seconds}) * ${seconds} AS bucket_start,
+      FLOOR((TIMESTAMPDIFF(SECOND, '1970-01-01 00:00:00', \`timestamp\`) + ${offsetSeconds}) / ${seconds}) * ${seconds} - ${offsetSeconds} AS bucket_start,
       MIN(${levelExpr}) AS level_min,
       AVG(${levelExpr}) AS level_avg,
       MAX(${levelExpr}) AS level_max,
@@ -385,9 +391,21 @@ async function fetchRaw(deviceRowId: string, from: Date, to: Date) {
   return { buckets, truncated };
 }
 
+/**
+ * Seconds to shift the bucket grid so buckets start on local hours and local
+ * midnight. Taken at the window's start; a DST change inside the window moves
+ * the later buckets by an hour, which is the price of one SQL grid.
+ */
+export function bucketOffsetSeconds(device: Pick<Device, 'timezone'>, tz: string | undefined, from: Date): number {
+  const zone = tz && isValidTimeZone(tz) ? tz : timeZoneOf(device);
+  return offsetMs(from, zone) / 1000;
+}
+
 export interface HistorySeriesOptions extends RangeInput {
   bucket?: RequestedBucket;
   metrics?: string;
+  /** IANA zone to align buckets to; the device's zone when absent or unknown. */
+  tz?: string;
 }
 
 export async function getDeviceHistorySeries(device: Device, options: HistorySeriesOptions) {
@@ -405,7 +423,10 @@ export async function getDeviceHistorySeries(device: Device, options: HistorySer
   const { buckets, truncated } =
     seconds == null
       ? await fetchRaw(device.id, from, to)
-      : { buckets: await fetchBucketed(device.id, from, to, seconds, profile), truncated: false };
+      : {
+          buckets: await fetchBucketed(device.id, from, to, seconds, profile, bucketOffsetSeconds(device, options.tz, from)),
+          truncated: false,
+        };
 
   // In raw mode a gap is judged against how often this device actually
   // reports; in bucketed mode a single empty bucket already is the gap.

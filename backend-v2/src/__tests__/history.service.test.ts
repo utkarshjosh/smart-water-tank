@@ -173,3 +173,12 @@ test('withGapBreaks handles a series too short to have a gap', () => {
   assert.deepEqual(withGapBreaks([], 5000), []);
   assert.deepEqual(withGapBreaks([[1000, 1, 1, 1]], 5000), [[1000, 1, 1, 1]]);
 });
+
+test('buckets line up with local hours and midnight, not UTC', async () => {
+  const { bucketOffsetSeconds } = await import('../services/history.service');
+  const from = new Date('2026-10-18T00:00:00Z');
+  assert.equal(bucketOffsetSeconds({ timezone: null }, 'Asia/Kolkata', from), 19_800);
+  // An unknown zone falls back to the device's own.
+  assert.equal(bucketOffsetSeconds({ timezone: 'UTC' }, 'Not/AZone', from), 0);
+  assert.equal(bucketOffsetSeconds({ timezone: 'America/New_York' }, undefined, from), -4 * 3600);
+});

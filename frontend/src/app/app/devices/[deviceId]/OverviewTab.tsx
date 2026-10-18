@@ -6,15 +6,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatTile } from '@/components/ui/stat-tile';
 import TankLevel from '@/components/TankLevel';
 import { UsageBars } from '@/components/charts/UsageBars';
-import { useHistorySeries } from '@/lib/history';
-import { estimateUsage } from '@/lib/usage-estimate';
 import { LiveIndicator } from './LiveIndicator';
 import { MiniHistory } from './MiniHistory';
+import { UsagePanel } from './UsagePanel';
 import {
   formatReading,
   useAlerts,
   useCurrent,
   useDevice,
+  useHourlyUsage,
   useTankProfile,
   useUsage,
 } from './useDevice';
@@ -26,21 +26,10 @@ export default function OverviewTab() {
   const profile = useTankProfile(deviceId);
   const alerts = useAlerts(deviceId);
   const usage = useUsage(deviceId, 30);
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  // Minute precision avoids refetching an entire day on every live reading.
-  const today = useHistorySeries({
-    deviceId,
-    from: start.toISOString(),
-    to: new Date(Math.max(+start + 1000, Math.floor(Date.now() / 60000) * 60000)).toISOString(),
-    metrics: ['volume_l'],
-    bucket: 'raw',
-    enabled: Boolean(profile.data),
-  });
-  const todayUsed =
-    today.isError || today.isPlaceholderData
-      ? null
-      : estimateUsage(today.data?.series.volume_l?.points ?? [], today.data?.truncated);
+  // Today's total from the server's hourly rollup, cut at the tank's local
+  // midnight - shares its query with the panel's Today view.
+  const today = useHourlyUsage(deviceId, 'today');
+  const todayUsed = today.isError ? null : formatReading(today.data?.today.used_l);
   const active = alerts.data?.find(
     (a) => !a.acknowledged && (a.type === 'leak_detected' || a.type === 'tank_low')
   );
@@ -116,16 +105,14 @@ export default function OverviewTab() {
           label="Today’s usage"
           value={todayUsed}
           unit="L"
-          hint={
-            todayUsed == null ? 'Not enough complete readings' : 'Estimate · since local midnight'
-          }
+          hint={todayUsed == null ? 'No readings yet today' : 'Since midnight · updates every 5 min'}
           loading={today.isLoading}
         />
         <StatTile
           label="Daily average"
           value={formatReading(usageSummary?.totals.daily_average_l)}
           unit="L"
-          hint="Completed daily summaries"
+          hint="Last 30 days, not counting today"
           loading={usage.isLoading}
         />
       </div>
@@ -156,7 +143,7 @@ export default function OverviewTab() {
         <Card>
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle>Daily usage</CardTitle>
-            <span className="text-caption text-ink-3">Last 30 days · UTC</span>
+            <span className="text-caption text-ink-3">Last 30 days</span>
           </CardHeader>
           <CardContent>
             {usage.isError ? (
@@ -174,9 +161,8 @@ export default function OverviewTab() {
                   <span>{usageSummary.days[usageSummary.days.length - 1].date}</span>
                 </div>
                 <p className="mt-2 text-caption text-ink-3">
-                  {usageSummary.totals.refill_events} refills ·{' '}
-                  {usageSummary.totals.days_aggregated} completed days. Dashed bars await overnight
-                  totals.
+                  {usageSummary.totals.refill_events} refills · {usageSummary.totals.days_with_data} days
+                  with readings. The last bar is today so far.
                 </p>
               </>
             ) : (
@@ -189,6 +175,7 @@ export default function OverviewTab() {
           </CardContent>
         </Card>
       </div>
+      <UsagePanel deviceId={deviceId} />
       <div className="device-secondary-readings">
         <span>
           Temperature <strong>{formatReading(reading?.temperature_c, 1) ?? '—'} °C</strong>

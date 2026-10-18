@@ -5,7 +5,9 @@ import {
   deviceConfigPayloadSchema,
   deviceInfoSchema,
   firmwareStatusSchema,
+  hourlyUsageResponseSchema,
   sharesResponseSchema,
+  tankEventsResponseSchema,
   tankProfileResponseSchema,
   usageResponseSchema,
 } from '@aquamind/contracts';
@@ -20,7 +22,10 @@ export type {
   DeviceInfo,
   DeviceShare,
   FirmwareStatus,
+  HourlyUsageResponse,
+  TankEvent,
   UsageDay,
+  UsageHour,
   UsageResponse,
 } from '@aquamind/contracts';
 
@@ -97,4 +102,29 @@ export const useDeviceShares = (id?: string) =>
     queryKey: ['device', id, 'shares'],
     enabled: Boolean(id),
     queryFn: () => get(`/api/v1/user/devices/${id}/shares`, sharesResponseSchema),
+  });
+
+// Rollups refresh on the server every 5 minutes; polling faster than once a
+// minute would only re-read the same rows.
+const ROLLUP_POLL_MS = 60_000;
+const whileVisible = () => (document.visibilityState === 'visible' ? ROLLUP_POLL_MS : false);
+
+/** Litres used and filled per local hour, plus today's total. */
+export const useHourlyUsage = (id?: string, range: 'today' | '24h' = '24h') =>
+  useQuery({
+    queryKey: ['device', id, 'usage-hourly', range],
+    enabled: Boolean(id),
+    queryFn: () => get(`/api/v1/user/devices/${id}/usage/hourly?range=${range}`, hourlyUsageResponseSchema),
+    refetchInterval: whileVisible,
+    placeholderData: (previous) => previous,
+  });
+
+/** Fill and draw episodes, newest first. */
+export const useTankEvents = (id?: string, range: 'today' | '24h' | '7d' = '24h') =>
+  useQuery({
+    queryKey: ['device', id, 'events', range],
+    enabled: Boolean(id),
+    queryFn: () => get(`/api/v1/user/devices/${id}/events?range=${range}`, tankEventsResponseSchema),
+    refetchInterval: whileVisible,
+    placeholderData: (previous) => previous,
   });
