@@ -32,6 +32,9 @@ import {
   deviceTimezoneResponseSchema,
   tankEventsResponseSchema,
   usageHistoryResponseSchema,
+  insightSettingsSchema,
+  insightsResponseSchema,
+  insightPreviewSchema,
 } from '@aquamind/contracts';
 import * as userService from '../services/user.service';
 import * as deviceService from '../services/device.service';
@@ -44,6 +47,7 @@ import { BUCKETS, getDeviceHistorySeries } from '../services/history.service';
 import { getDeviceUsage, getHourlyUsage, getTankEvents, getUsageHistory, setDeviceTimezone } from '../services/usage.service';
 import { scheduleRebuild } from '../services/rollup.service';
 import { isValidTimeZone } from '../lib/local-time';
+import * as insightService from '../services/insight.service';
 
 const router = express.Router();
 
@@ -656,6 +660,53 @@ router.delete(
   asyncHandler(async (req: AuthRequest, res) => {
     await userService.clearFCMToken(req.user!.id);
     res.status(204).send();
+  })
+);
+
+// --- Daily insight (experimental, opt-in) ------------------------------------
+
+// GET /api/v1/user/me/insight-settings - Whether the daily insight push is on. Off by default.
+router.get(
+  '/me/insight-settings',
+  asyncHandler(async (req: AuthRequest, res) => {
+    sendJson(res, insightSettingsSchema, await insightService.getInsightSettings(req.user!.id));
+  })
+);
+
+// PUT /api/v1/user/me/insight-settings - { enabled }
+router.put(
+  '/me/insight-settings',
+  asyncHandler(async (req: AuthRequest, res) => {
+    const { enabled } = insightSettingsSchema.parse(req.body);
+    sendJson(res, insightSettingsSchema, await insightService.setInsightSettings(req.user!.id, enabled));
+  })
+);
+
+// GET /api/v1/user/me/insights - Insights sent to the caller, newest first.
+router.get(
+  '/me/insights',
+  asyncHandler(async (req: AuthRequest, res) => {
+    sendJson(res, insightsResponseSchema, await insightService.listInsights(req.user!.id));
+  })
+);
+
+// POST /api/v1/user/me/insights/:id/feedback - { useful: boolean }
+router.post(
+  '/me/insights/:id/feedback',
+  asyncHandler(async (req: AuthRequest, res) => {
+    const { useful } = z.object({ useful: z.boolean() }).parse(req.body);
+    sendJson(res, okSchema, await insightService.setInsightFeedback(req.user!.id, req.params.id, useful));
+  })
+);
+
+// GET /api/v1/user/devices/:deviceId/insight-preview - Dry run of today's
+// insight for this tank, with every candidate. Sends and stores nothing.
+router.get(
+  '/devices/:deviceId/insight-preview',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    const rephrase = req.query.rephrase === '1';
+    sendJson(res, insightPreviewSchema, await insightService.previewInsight(req.device!, { userId: req.user!.id, rephrase }));
   })
 );
 

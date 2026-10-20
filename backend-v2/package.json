@@ -22,7 +22,8 @@
     "send-measurement": "ts-node --transpile-only scripts/send-measurement.ts",
     "verify:history": "ts-node --transpile-only scripts/verify-history-series.ts",
     "verify:crud": "ts-node --transpile-only scripts/verify-crud.ts",
-    "rollups:rebuild": "ts-node --transpile-only scripts/rebuild-rollups.ts"
+    "rollups:rebuild": "ts-node --transpile-only scripts/rebuild-rollups.ts",
+    "insights:preview": "ts-node --transpile-only scripts/preview-insight.ts"
   },
   "keywords": [],
   "author": "",

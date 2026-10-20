@@ -409,3 +409,49 @@ export const firmwareStatusSchema = z.object({
   last_checked_at: nullableIsoDateTime,
 });
 export type FirmwareStatus = z.infer<typeof firmwareStatusSchema>;
+
+// --- Daily insight (experimental) --------------------------------------------
+
+/** GET/PUT /me/insight-settings — opt-in, off by default. */
+export const insightSettingsSchema = z.object({ enabled: z.boolean() });
+export type InsightSettings = z.infer<typeof insightSettingsSchema>;
+
+const insightFactsSchema = z.record(z.string(), z.union([z.number(), z.string()]));
+
+/** GET /me/insights — every insight sent to the caller, newest first. */
+export const insightsResponseSchema = z.object({
+  insights: z.array(
+    z.object({
+      id: z.string(),
+      device_id: z.string(),
+      device_name: z.string().nullable(),
+      local_date: isoDate,
+      kind: z.string(),
+      text: z.string(),
+      facts: insightFactsSchema,
+      source: z.enum(['template', 'llm']),
+      sent_at: isoDateTime,
+      useful: z.boolean().nullable(),
+    })
+  ),
+});
+export type InsightsResponse = z.infer<typeof insightsResponseSchema>;
+
+/** GET /devices/:id/insight-preview — dry run: what today's insight would be. Sends nothing. */
+export const insightPreviewSchema = z.object({
+  device_id: z.string(),
+  timezone: z.string(),
+  local_date: isoDate,
+  picked: z
+    .object({
+      kind: z.string(),
+      score: z.number(),
+      facts: insightFactsSchema,
+      text: z.string(),
+      template: z.string(),
+      source: z.enum(['template', 'llm']),
+    })
+    .nullable(),
+  candidates: z.array(z.object({ kind: z.string(), score: z.number(), facts: insightFactsSchema, text: z.string() })),
+});
+export type InsightPreview = z.infer<typeof insightPreviewSchema>;
