@@ -289,6 +289,52 @@ export const tankEventsResponseSchema = z.object({
 });
 export type TankEventsResponse = z.infer<typeof tankEventsResponseSchema>;
 
+const usageDayRefSchema = z.object({ date: isoDate, used_l: z.number() });
+
+/** GET /devices/:id/usage/history — usage.service getUsageHistory. */
+export const usageHistoryResponseSchema = z.object({
+  device_id: z.string(),
+  timezone: z.string(),
+  from: isoDate,
+  to: isoDate,
+  group: z.enum(['day', 'week', 'month']),
+  today: isoDate,
+  capacity_l: z.number().nullable(),
+  /** A day needs this many hours with readings to count in averages. */
+  full_day_hours: z.number(),
+  /** Every day/week/month in the range; used_l null = no readings at all. */
+  buckets: z.array(
+    z.object({
+      key: z.string(),
+      start: isoDate,
+      end: isoDate,
+      used_l: z.number().nullable(),
+      filled_l: z.number().nullable(),
+      refills: z.number(),
+      leak_days: z.number(),
+      days_with_data: z.number(),
+      full_days: z.number(),
+    })
+  ),
+  totals: z.object({
+    used_l: z.number().nullable(),
+    filled_l: z.number().nullable(),
+    refills: z.number(),
+    days: z.number(),
+    days_with_data: z.number(),
+    full_days: z.number(),
+    /** Over full days only. */
+    daily_average_l: z.number().nullable(),
+    busiest_day: usageDayRefSchema.nullable(),
+    quietest_day: usageDayRefSchema.nullable(),
+  }),
+  /** Monday = 0. Full days only. */
+  by_weekday: z.array(z.object({ weekday: z.number(), average_l: z.number().nullable(), days: z.number() })),
+  /** Local hour 0-23; average over hours that had readings. */
+  by_hour: z.array(z.object({ hour: z.number(), average_l: z.number().nullable(), samples: z.number() })),
+});
+export type UsageHistoryResponse = z.infer<typeof usageHistoryResponseSchema>;
+
 /** PUT /devices/:id/timezone. */
 export const deviceTimezoneResponseSchema = z.object({
   timezone: z.string(),

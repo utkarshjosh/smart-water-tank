@@ -74,6 +74,11 @@ export function localHourStart(instant: Date, timeZone: string): Date {
   return new Date(instant.getTime() - intoHourMs);
 }
 
+/** The local hour of day (0-23) of `instant`. */
+export function localHour(instant: Date, timeZone: string): number {
+  return wallClock(instant, timeZone).hour;
+}
+
 /** The local calendar date of `instant`, as YYYY-MM-DD. */
 export function localDate(instant: Date, timeZone: string): string {
   const w = wallClock(instant, timeZone);
