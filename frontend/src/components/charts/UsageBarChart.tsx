@@ -3,7 +3,9 @@ import { formatLitres } from '@/lib/usage-format';
 
 /**
  * Litres per time slot as bars: water used above the baseline, water added
- * below it. Shared by the hourly and daily usage cards.
+ * below it, both on ONE scale. When fills dwarf use (an hourly view with a
+ * refill in it) they become labelled markers instead - see MARKER_RATIO.
+ * Shared by the hourly, daily and history charts.
  *
  * Reading it should need no guessing:
  * - the larger bars carry their number;
@@ -32,7 +34,32 @@ export interface UsageSlot {
   alert?: boolean;
 }
 
-const UP_SHARE = 0.68; // of the plot height, when fills are shown
+/**
+ * Above this ratio of the biggest fill to the biggest use, fills are drawn
+ * as labelled markers instead of bars. A refill pours 300-600 L into one hour
+ * while normal use is 20-90 L; on one shared scale the green bars would
+ * shrink to slivers. Days, weeks and months sit well under it - water in and
+ * out roughly balance - so they get true bars on one scale.
+ */
+const MARKER_RATIO = 2.5;
+const LABEL_PAD = 14; // room above and below the bars for their numbers
+
+type Layout = 'used-only' | 'shared' | 'markers';
+
+/** Runs of consecutive slots with water added: one fill, one marker. */
+function fillRuns(slots: UsageSlot[]): Array<{ from: number; to: number; litres: number }> {
+  const runs: Array<{ from: number; to: number; litres: number }> = [];
+  slots.forEach((s, i) => {
+    const litres = s.filledL ?? 0;
+    if (litres <= 0) return;
+    const last = runs[runs.length - 1];
+    if (last && last.to === i - 1) {
+      last.to = i;
+      last.litres += litres;
+    } else runs.push({ from: i, to: i, litres });
+  });
+  return runs;
+}
 
 export function UsageBarChart({
   slots,
@@ -62,8 +89,13 @@ export function UsageBarChart({
   const maxUp = Math.max(1, ...slots.map((s) => s.usedL ?? 0));
   const maxDown = Math.max(1, ...slots.map((s) => s.filledL ?? 0));
   const hasFills = showFills && slots.some((s) => (s.filledL ?? 0) > 0);
-  const upHeight = hasFills ? height * UP_SHARE : height;
-  const downHeight = hasFills ? height - upHeight : 0;
+  const layout: Layout = !hasFills ? 'used-only' : maxDown / maxUp > MARKER_RATIO ? 'markers' : 'shared';
+  // One ruler for both directions: the height splits in proportion to the
+  // biggest use and the biggest fill, so 100 L is the same height above and
+  // below the line and no space is held for bars that never come.
+  const upHeight = layout === 'shared' ? (height * maxUp) / (maxUp + maxDown) : height;
+  const downHeight = layout === 'shared' ? height - upHeight : 0;
+  const runs = layout === 'markers' ? fillRuns(slots) : [];
   const every = tickEvery ?? Math.max(1, Math.ceil(slots.length / 6));
   // Numbers only where they fit: on bars at least a fifth of the tallest, and
   // past 24 slots (a month of days) only on the tallest - plus, always, the
@@ -101,10 +133,10 @@ export function UsageBarChart({
         onPointerDown={pick}
         onKeyDown={onKey}
         className="relative cursor-crosshair touch-pan-y select-none outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
-        style={{ height: height + 14 }}
+        style={{ height: height + LABEL_PAD * (layout === 'shared' ? 2 : 1) }}
       >
-        {/* Room above the tallest bar for its number. */}
-        <div className="absolute inset-x-0 bottom-0 flex gap-[2px]" style={{ height }}>
+        {/* Room above the tallest bar (and below the deepest) for numbers. */}
+        <div className="absolute inset-x-0 flex gap-[2px]" style={{ height, top: LABEL_PAD }}>
           {slots.map((slot, i) => {
             const up = slot.usedL == null ? null : slot.usedL / maxUp;
             const down = (slot.filledL ?? 0) / maxDown;
@@ -130,12 +162,12 @@ export function UsageBarChart({
                     </div>
                   )}
                 </div>
-                {hasFills && (
+                {layout === 'shared' && (
                   <div className="relative border-t border-hairline" style={{ height: downHeight }}>
                     {down > 0 && (
                       <div
                         className="relative w-full rounded-b-[3px] bg-brand"
-                        style={{ height: `${Math.max(2, down * 82)}%` }}
+                        style={{ height: `${Math.max(2, down * 100)}%` }}
                       >
                         {(down >= labelFrom || isActive) && (
                           <span className="absolute inset-x-[-8px] -bottom-[13px] text-center text-[10px] leading-none text-ink-2 tnum">
@@ -151,6 +183,27 @@ export function UsageBarChart({
           })}
         </div>
       </div>
+      {layout === 'markers' && (
+        // Fills as markers: a blue line under the hours the tank was filling,
+        // with the litres added. Not a bar - its length is time, not volume.
+        <div className="relative mt-1 h-[22px]" aria-hidden>
+          {runs.map((run) => (
+            <div
+              key={run.from}
+              className="absolute top-0 flex flex-col items-center"
+              style={{
+                left: `${(run.from / slots.length) * 100}%`,
+                width: `${((run.to - run.from + 1) / slots.length) * 100}%`,
+              }}
+            >
+              <span className="h-[3px] w-full rounded-full bg-brand" />
+              <span className="mt-0.5 whitespace-nowrap text-[10px] font-medium leading-none text-brand tnum">
+                +{Math.round(run.litres)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="mt-1 flex gap-[2px] text-[11px] text-ink-3" aria-hidden>
         {slots.map((slot, i) => (
           <span key={slot.key} className="flex-1 overflow-visible whitespace-nowrap">
@@ -166,9 +219,14 @@ export function UsageBarChart({
           <span className="flex items-center gap-1.5">
             <i aria-hidden className="inline-block h-2.5 w-2.5 rounded-sm bg-series-volume" /> Used
           </span>
-          {hasFills && (
+          {layout === 'shared' && (
             <span className="flex items-center gap-1.5">
               <i aria-hidden className="inline-block h-2.5 w-2.5 rounded-sm bg-brand" /> Added (tank filling)
+            </span>
+          )}
+          {layout === 'markers' && (
+            <span className="flex items-center gap-1.5">
+              <i aria-hidden className="inline-block h-[3px] w-3 rounded-full bg-brand" /> Tank filling, litres added
             </span>
           )}
         </span>
