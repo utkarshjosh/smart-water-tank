@@ -31,6 +31,7 @@ import {
   hourlyUsageResponseSchema,
   deviceTimezoneResponseSchema,
   tankEventsResponseSchema,
+  usageHistoryResponseSchema,
 } from '@aquamind/contracts';
 import * as userService from '../services/user.service';
 import * as deviceService from '../services/device.service';
@@ -40,7 +41,7 @@ import * as alertRulesService from '../services/alert-rules.service';
 import { registerPushToken, removePushToken, updateUserFCMToken } from '../services/fcm.service';
 import { exportUserMeasurements } from '../services/measurement-export.service';
 import { BUCKETS, getDeviceHistorySeries } from '../services/history.service';
-import { getDeviceUsage, getHourlyUsage, getTankEvents, setDeviceTimezone } from '../services/usage.service';
+import { getDeviceUsage, getHourlyUsage, getTankEvents, getUsageHistory, setDeviceTimezone } from '../services/usage.service';
 import { scheduleRebuild } from '../services/rollup.service';
 import { isValidTimeZone } from '../lib/local-time';
 
@@ -329,6 +330,24 @@ router.get(
   asyncHandler(async (req: DeviceAccessRequest, res) => {
     const { days } = usageQuerySchema.parse(req.query);
     sendJson(res, usageResponseSchema, await getDeviceUsage(req.device!, days));
+  })
+);
+
+const usageHistoryQuerySchema = z.object({
+  from: z.string().optional(),
+  to: z.string().optional(),
+  group: z.enum(['day', 'week', 'month']).optional(),
+});
+
+// GET /api/v1/user/devices/:deviceId/usage/history - Usage over any range (up
+// to 400 days) by day, week or month, with daily average, busiest day and
+// weekday / hour-of-day patterns.
+router.get(
+  '/devices/:deviceId/usage/history',
+  requireDeviceAccess,
+  asyncHandler(async (req: DeviceAccessRequest, res) => {
+    const query = usageHistoryQuerySchema.parse(req.query);
+    sendJson(res, usageHistoryResponseSchema, await getUsageHistory(req.device!, query));
   })
 );
 

@@ -1,7 +1,18 @@
 import { Device } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http-error';
-import { addDays, localDate, localHourStart, startOfLocalDay } from '../lib/local-time';
+import { addDays, localDate, localHour, localHourStart, startOfLocalDay } from '../lib/local-time';
+import {
+  DayInput,
+  FULL_DAY_HOURS,
+  Group,
+  autoGroup,
+  byHourOfDay,
+  byWeekday,
+  daysBetween,
+  groupDays,
+  summarize,
+} from '../lib/usage-history';
 import { capacityOf, timeZoneOf } from './rollup.service';
 
 // Usage history, read from the rollups rollup.service maintains:
@@ -195,4 +206,99 @@ export async function getTankEvents(device: Device, range: EventRange, now = new
 export async function setDeviceTimezone(device: Device, timezone: string | null) {
   await prisma.device.update({ where: { id: device.id }, data: { timezone } });
   return { timezone: timezone ?? timeZoneOf({ timezone: null }), is_default: timezone == null };
+}
+
+const MAX_HISTORY_DAYS = 400;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Usage over any range, grouped by day, week or month, with the patterns
+ * that make it readable: daily average, busiest and quietest day, average by
+ * weekday and by hour of the day. Built from the rollups, so it costs two
+ * indexed queries whatever the range.
+ */
+export async function getUsageHistory(
+  device: Device,
+  opts: { from?: string; to?: string; group?: Group },
+  now = new Date()
+) {
+  const timeZone = timeZoneOf(device);
+  const today = localDate(now, timeZone);
+  const to = opts.to ?? today;
+  const from = opts.from ?? addDays(to, -29);
+  if (!ISO_DATE.test(from) || !ISO_DATE.test(to)) throw new HttpError(400, 'from and to must be YYYY-MM-DD');
+  const span = daysBetween(from, to);
+  if (span < 1) throw new HttpError(400, 'to must be on or after from');
+  if (span > MAX_HISTORY_DAYS) throw new HttpError(400, `Choose at most ${MAX_HISTORY_DAYS} days`);
+  const group = opts.group ?? autoGroup(span);
+
+  const start = startOfLocalDay(from, timeZone);
+  const end = startOfLocalDay(addDays(to, 1), timeZone);
+  const [profile, summaries, hourRows] = await Promise.all([
+    prisma.tankProfile.findUnique({ where: { deviceId: device.id } }),
+    prisma.dailySummary.findMany({
+      where: { deviceId: device.id, date: { gte: new Date(`${from}T00:00:00Z`), lte: new Date(`${to}T00:00:00Z`) } },
+      orderBy: { date: 'asc' },
+    }),
+    prisma.hourlyUsage.findMany({
+      where: { deviceId: device.id, hourStart: { gte: start, lt: end }, readings: { gt: 0 } },
+      select: { hourStart: true, usedL: true },
+    }),
+  ]);
+
+  // Hours with readings per local day: how much of each day the device saw.
+  const hoursByDate = new Map<string, number>();
+  for (const h of hourRows) {
+    const date = localDate(h.hourStart, timeZone);
+    hoursByDate.set(date, (hoursByDate.get(date) ?? 0) + 1);
+  }
+  const days: DayInput[] = summaries.map((s) => {
+    const date = s.date.toISOString().slice(0, 10);
+    return {
+      date,
+      usedL: s.totalUsageL.toNumber(),
+      filledL: s.totalFilledL.toNumber(),
+      refills: s.refillEvents,
+      leak: s.leakSuspected,
+      hoursWithData: hoursByDate.get(date) ?? 0,
+    };
+  });
+
+  const summary = summarize(days);
+  return {
+    device_id: device.deviceId,
+    timezone: timeZone,
+    from,
+    to,
+    group,
+    today,
+    capacity_l: round(capacityOf(profile)),
+    full_day_hours: FULL_DAY_HOURS,
+    buckets: groupDays(days, from, to, group).map((b) => ({
+      key: b.key,
+      start: b.start,
+      end: b.end,
+      used_l: round(b.usedL),
+      filled_l: round(b.filledL),
+      refills: b.refills,
+      leak_days: b.leakDays,
+      days_with_data: b.daysWithData,
+      full_days: b.fullDays,
+    })),
+    totals: {
+      used_l: round(summary.usedL),
+      filled_l: round(summary.filledL),
+      refills: summary.refills,
+      days: span,
+      days_with_data: summary.daysWithData,
+      full_days: summary.fullDays,
+      daily_average_l: round(summary.dailyAverageL),
+      busiest_day: summary.busiestDay && { date: summary.busiestDay.date, used_l: round(summary.busiestDay.usedL)! },
+      quietest_day: summary.quietestDay && { date: summary.quietestDay.date, used_l: round(summary.quietestDay.usedL)! },
+    },
+    by_weekday: byWeekday(days).map((w) => ({ weekday: w.weekday, average_l: round(w.averageL), days: w.days })),
+    by_hour: byHourOfDay(hourRows.map((h) => ({ hour: localHour(h.hourStart, timeZone), usedL: h.usedL.toNumber() }))).map(
+      (h) => ({ hour: h.hour, average_l: round(h.averageL), samples: h.samples })
+    ),
+  };
 }
