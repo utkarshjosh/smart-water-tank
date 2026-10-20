@@ -112,3 +112,24 @@ export const historySeriesSchema = contracts.historySeriesSchema.extend({
 export type HistorySeries = z.infer<typeof historySeriesSchema>;
 
 export const claimCodeSchema = contracts.claimCodeSchema.extend({ expires_at: isoDate });
+
+// --- Usage (rollups) -------------------------------------------------------------
+//
+// Hour and event timestamps stay ISO strings here, unlike the rest of the file:
+// they are only ever bucket keys and labels formatted in the TANK's timezone
+// (which the response carries), so a Date in the phone's zone would invite
+// formatting them in the wrong one. History dates are calendar days (YYYY-MM-DD).
+
+/** GET /devices/:id/usage/hourly — litres used and filled per local hour. */
+export const hourlyUsageSchema = contracts.hourlyUsageResponseSchema;
+/** GET /devices/:id/events — fill and draw episodes, newest first. */
+export const tankEventsSchema = contracts.tankEventsResponseSchema;
+/** GET /devices/:id/usage/history — usage by day/week/month with patterns. */
+export const usageHistorySchema = contracts.usageHistoryResponseSchema;
+
+export type HourlyUsage = contracts.HourlyUsageResponse;
+export type UsageHour = contracts.UsageHour;
+export type TankEvents = contracts.TankEventsResponse;
+export type TankEvent = contracts.TankEvent;
+export type UsageHistory = contracts.UsageHistoryResponse;
+export type UsageGroup = UsageHistory['group'];

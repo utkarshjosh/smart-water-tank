@@ -7,7 +7,7 @@ import { useTheme } from '@/ui/theme';
  *
  * The four primary destinations live in `(tabs)` and cost one thumb tap each,
  * mirroring the webapp's bottom tab bar. Everything that is *about* one tank —
- * detail, pairing, alert rules — pushes over the tabs with the Screen chrome's
+ * detail, usage history, pairing, alert rules — pushes over the tabs with the Screen chrome's
  * own back control, so the native header stays hidden throughout.
  */
 export default function AppLayout() {
@@ -24,6 +24,7 @@ export default function AppLayout() {
     >
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="device/[id]" />
+      <Stack.Screen name="usage/[id]" />
       <Stack.Screen name="alert-rules" />
       <Stack.Screen name="pair" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
     </Stack>

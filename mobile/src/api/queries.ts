@@ -9,7 +9,7 @@ import {
 
 import { api } from '@/api/endpoints';
 import { ApiError } from '@/api/client';
-import type { CurrentReading, DeviceSummary, HistoryMetric } from '@/api/schemas';
+import type { CurrentReading, DeviceSummary, HistoryMetric, UsageGroup } from '@/api/schemas';
 
 /**
  * Query keys and hooks. Stale times are chosen against the device's reporting
@@ -27,6 +27,10 @@ export const queryKeys = {
     ['device', deviceId, 'series', from, to, metric] as const,
   deviceAlerts: (deviceId: string) => ['device', deviceId, 'alerts'] as const,
   tankProfile: (deviceId: string) => ['device', deviceId, 'tank-profile'] as const,
+  hourlyUsage: (deviceId: string, range: 'today' | '24h') => ['device', deviceId, 'usage-hourly', range] as const,
+  tankEvents: (deviceId: string, range: 'today' | '24h' | '7d') => ['device', deviceId, 'events', range] as const,
+  usageHistory: (deviceId: string, from: string, to: string, group: UsageGroup | 'auto') =>
+    ['device', deviceId, 'usage-history', from, to, group] as const,
 };
 
 export function useDevices(): UseQueryResult<DeviceSummary[], Error> {
@@ -155,5 +159,48 @@ export function useRemoveDevice() {
       void client.invalidateQueries({ queryKey: queryKeys.devices });
       void client.invalidateQueries({ queryKey: queryKeys.alerts });
     },
+  });
+}
+
+// The server rebuilds usage rollups every 5 minutes; anything fresher than
+// that would only re-read the same rows.
+const ROLLUP_STALE_MS = 5 * 60_000;
+
+/** Litres used and filled per local hour, and today's total. */
+export function useHourlyUsage(deviceId: string | undefined, range: 'today' | '24h') {
+  return useQuery({
+    queryKey: queryKeys.hourlyUsage(deviceId ?? '', range),
+    enabled: !!deviceId,
+    staleTime: ROLLUP_STALE_MS,
+    refetchInterval: ROLLUP_STALE_MS,
+    placeholderData: keepPreviousData,
+    queryFn: () => api.getHourlyUsage(deviceId!, range),
+  });
+}
+
+/** Fill and draw episodes, newest first. */
+export function useTankEvents(deviceId: string | undefined, range: 'today' | '24h' | '7d') {
+  return useQuery({
+    queryKey: queryKeys.tankEvents(deviceId ?? '', range),
+    enabled: !!deviceId,
+    staleTime: ROLLUP_STALE_MS,
+    refetchInterval: ROLLUP_STALE_MS,
+    placeholderData: keepPreviousData,
+    queryFn: () => api.getTankEvents(deviceId!, range),
+  });
+}
+
+/** Usage over local days `from`..`to`, by day/week/month (`auto`: server picks). */
+export function useUsageHistory(
+  deviceId: string | undefined,
+  window: { from: string; to: string },
+  group: UsageGroup | 'auto'
+) {
+  return useQuery({
+    queryKey: queryKeys.usageHistory(deviceId ?? '', window.from, window.to, group),
+    enabled: !!deviceId,
+    staleTime: ROLLUP_STALE_MS,
+    placeholderData: keepPreviousData,
+    queryFn: () => api.getUsageHistory(deviceId!, { ...window, group: group === 'auto' ? undefined : group }),
   });
 }
