@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addDays, isValidTimeZone, localDate, localHourStart, offsetMs, startOfLocalDay } from '../lib/local-time';
-import { despike, noiseFloorL, rollupDay, rollupHours } from '../lib/rollup';
+import { noiseFloorL, removeExcursions, rollupDay, rollupHours } from '../lib/rollup';
 
 const IST = 'Asia/Kolkata';
 const at = (iso: string) => new Date(iso);
@@ -115,23 +115,48 @@ test('a steady heavy draw with no refill is a suspected leak', () => {
   assert.equal(rollupDay([hour(1, 10), hour(2, 20)], opts).leakSuspected, false);
 });
 
-// --- spikes ------------------------------------------------------------------
+// --- sensor blips -------------------------------------------------------------
 
-test('a one-reading glitch is not booked as water used and then refilled', () => {
-  // What the live tank showed at 1:27 PM: one bad echo 115 L low, then back.
-  const raw = [ist('13:20', 1000), ist('13:22', 1001), ist('13:24', 999), ist('13:27', 885), ist('13:29', 1000), ist('13:31', 1000), ist('13:33', 998)];
-  const [glitchy] = rollupHours(raw, null, IST, 15);
-  assert.equal(glitchy.usedL, 115);
-  assert.equal(glitchy.filledL, 115);
+/** Readings at IST minutes, one per minute (the sensor's real rate). */
+const series = (from: string, litres: number[]) => {
+  const [h, m] = from.split(':').map(Number);
+  return litres.map((l, i) => {
+    const mm = m + i;
+    return ist(`${String(h + Math.floor(mm / 60)).padStart(2, '0')}:${String(mm % 60).padStart(2, '0')}`, l);
+  });
+};
 
-  const [clean] = rollupHours(despike(raw), null, IST, 15);
-  assert.equal(clean.usedL, 0);
-  assert.equal(clean.filledL, 0);
+test('the live tank at 1 PM on 18 Oct: blips at the top are not use and refill', () => {
+  // Real readings, 13:10-13:33, after the tank filled at 13:07 and nothing
+  // was drawn. The sensor wandered into 26-32 cm for one to four minutes.
+  const raw = series('13:10', [
+    1145, 1145, 1145, 1063, 1129, 1145, 1145, 1129, 1145, 1145, 1145, 1145,
+    1145, 1145, 1145, 1145, 1096, 1145, 1080, 1031, 1047, 1047, 1145, 1145,
+  ]);
+  const [before] = rollupHours(raw, null, IST, 17);
+  assert.ok(before.usedL > 150 && before.filledL > 150, 'the raw readings book phantom water');
+
+  const [after] = rollupHours(removeExcursions(raw, 17), null, IST, 17);
+  assert.equal(after.usedL, 0);
+  assert.equal(after.filledL, 0);
 });
 
-test('despike keeps a real change: the level stays at its new value', () => {
-  const raw = [ist('06:00', 400), ist('06:02', 400), ist('06:04', 400), ist('06:06', 900), ist('06:08', 900), ist('06:10', 900), ist('06:12', 900)];
-  const [hour] = rollupHours(despike(raw), null, IST, 15);
-  assert.equal(hour.filledL, 500);
-  assert.deepEqual(despike(raw).map((r) => r.litres), [400, 400, 400, 900, 900, 900, 900]);
+test('a real draw stays drawn and a real fill stays filled', () => {
+  const drawn = removeExcursions(series('07:00', [900, 900, 870, 840, 800, 800, 800, 800]), 17);
+  assert.deepEqual(drawn.map((r) => r.litres), [900, 900, 870, 840, 800, 800, 800, 800]);
+  const filled = removeExcursions(series('12:51', [491, 507, 540, 589, 638, 671, 720, 769, 802, 834, 883]), 17);
+  assert.deepEqual(filled.map((r) => r.litres), [491, 507, 540, 589, 638, 671, 720, 769, 802, 834, 883]);
+});
+
+test('a slow draw is kept, even in steps smaller than the noise floor', () => {
+  const slow = series('10:00', Array.from({ length: 31 }, (_, i) => 1000 - i * 2));
+  const [hour] = rollupHours(removeExcursions(slow, 17), null, IST, 17);
+  assert.ok(hour.usedL >= 40 && hour.usedL <= 60, `usedL ${hour.usedL}`);
+});
+
+test('a draw that is refilled more than ten minutes later is real', () => {
+  const readings = series('08:00', [1000, 1000, ...Array(14).fill(900), 1000, 1000]);
+  const [hour] = rollupHours(removeExcursions(readings, 17), null, IST, 17);
+  assert.equal(hour.usedL, 100);
+  assert.equal(hour.filledL, 100);
 });
