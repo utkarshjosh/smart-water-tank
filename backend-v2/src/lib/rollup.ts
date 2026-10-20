@@ -27,7 +27,28 @@ export interface HourRollup {
  * add up to tens of phantom litres a day.
  */
 export function noiseFloorL(capacityL: number | null): number {
-  return capacityL == null ? 2 : Math.max(1, capacityL * 0.005);
+  // 1.5% of the tank: about 1.5 cm on a 1 m tank, which is what an ultrasonic
+  // sensor wobbles by from reading to reading. 0.5% counted that wobble as
+  // use and fill.
+  return capacityL == null ? 5 : Math.max(2, capacityL * 0.015);
+}
+
+/**
+ * Removes one- and two-reading spikes: each reading becomes the median of
+ * itself and its two neighbours either side.
+ *
+ * Ultrasonic sensors throw occasional wild readings (an echo off the wall, a
+ * splash). Taken at face value, one bad reading 115 L low books 115 L used
+ * and then 115 L filled a minute later - water that never moved. A real
+ * change persists across readings, so the median keeps it (its edge just
+ * lands a reading or two later); a spike doesn't, so the median drops it.
+ */
+export function despike(readings: Reading[], radius = 2): Reading[] {
+  return readings.map((r, i) => {
+    const window = readings.slice(Math.max(0, i - radius), i + radius + 1).map((w) => w.litres);
+    window.sort((a, b) => a - b);
+    return { at: r.at, litres: window[Math.floor(window.length / 2)] };
+  });
 }
 
 /**

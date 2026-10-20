@@ -74,7 +74,7 @@ test('a slow draw adds up across readings that each move less than the noise flo
 });
 
 test('thresholds scale with the tank', () => {
-  assert.deepEqual(episodeOptions(null, 2), { noiseL: 2, maxGapMs: 1_800_000, minDrawL: 5, minFillL: 20 });
-  assert.equal(episodeOptions(2000, 10).minDrawL, 20);
+  assert.deepEqual(episodeOptions(null, 2), { noiseL: 2, maxGapMs: 1_800_000, minDrawL: 10, minFillL: 20 });
+  assert.equal(episodeOptions(2000, 10).minDrawL, 40);
   assert.equal(episodeOptions(2000, 10).minFillL, 60);
 });

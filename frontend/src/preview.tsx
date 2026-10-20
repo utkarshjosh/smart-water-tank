@@ -18,7 +18,7 @@ import TankLevel from '@/components/TankLevel';
 import { METRICS, type Metric, type SeriesPoint } from '@/lib/metrics';
 import { Drop, CaretRight, Warning, Cpu } from '@phosphor-icons/react';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { UsageBars } from '@/components/charts/UsageBars';
+import { UsageBarChart } from '@/components/charts/UsageBarChart';
 import { PageHeader } from '@/components/ui/page-header';
 import { relativeTime, timeSortValue } from '@/lib/time';
 import '@/app/globals.css';
@@ -48,6 +48,15 @@ function makeSeries(): SeriesPoint[] {
 const SERIES = makeSeries();
 
 // 30 days of usage: a few refill days, one flagged day, two not yet aggregated.
+// A plausible day: morning and evening draws, two fills from the main line.
+const DEMO_HOURS = Array.from({ length: 24 }, (_, h) => {
+  const used = [0, 0, 0, 0, 0, 4, 38, 92, 61, 24, 18, 12, 30, 22, 8, 6, 10, 28, 64, 55, 31, 12, 4, 0][h];
+  const filled = h === 7 ? 380 : h === 19 ? 260 : 0;
+  const label = new Date(2026, 9, 18, h).toLocaleTimeString(undefined, { hour: 'numeric' });
+  const next = new Date(2026, 9, 18, h + 1).toLocaleTimeString(undefined, { hour: 'numeric' });
+  return { key: String(h), tick: label, title: `${label} – ${next}`, usedL: h === 3 ? null : used, filledL: filled };
+});
+
 const DEMO_USAGE = Array.from({ length: 30 }, (_, i) => {
   const d = new Date(Date.now() - (29 - i) * 86_400_000);
   const pending = i >= 28;
@@ -346,7 +355,29 @@ function Preview() {
             <CardTitle className="text-label text-ink-2">Daily usage</CardTitle>
           </CardHeader>
           <CardContent>
-            <UsageBars days={DEMO_USAGE} />
+            <UsageBarChart
+              ariaLabel="Water used per day"
+              showFills={false}
+              slots={DEMO_USAGE.map((d) => ({
+                key: d.date,
+                tick: d.date.slice(5),
+                title: d.date,
+                usedL: d.used_l,
+                note: d.refill_events ? `filled ${d.refill_events}×` : undefined,
+                alert: d.leak_suspected,
+              }))}
+            />
+          </CardContent>
+        </Card>
+      </Section>
+
+      <Section title="Hourly usage">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-label text-ink-2">Water used per hour</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <UsageBarChart slots={DEMO_HOURS} ariaLabel="Water used and added per hour" />
           </CardContent>
         </Card>
       </Section>
