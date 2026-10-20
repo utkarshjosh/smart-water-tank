@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SharesCard } from './SharesCard';
+import { InsightCard } from './InsightCard';
 import {
   deviceKeys,
   useDevice,
@@ -177,6 +178,7 @@ export default function SettingsTab() {
       </Card>
 
       <SharesCard deviceId={deviceId} />
+      <InsightCard />
 
       <Card>
         <CardHeader>

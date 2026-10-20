@@ -87,6 +87,9 @@ model User {
   // parallel for one release so a v1 mobile build keeps receiving alerts;
   // drop once those are gone.
   fcmToken    String?   @map("fcm_token") @db.Text
+  // Experimental: one push a day with an insight from the user's own water
+  // data. Opt-in, off by default.
+  dailyInsightEnabled Boolean @default(false) @map("daily_insight_enabled")
   // Soft delete, so acknowledged-by references on historic alerts survive.
   archivedAt  DateTime? @map("archived_at")
   createdAt   DateTime  @default(now()) @map("created_at")
@@ -97,6 +100,7 @@ model User {
   pushTokens         PushToken[]
   acknowledgedAlerts Alert[]             @relation("AlertAcknowledgedBy")
   claimCodesCreated  DeviceClaimCode[]
+  dailyInsights      DailyInsight[]
 
   @@index([tenantId])
   @@index([archivedAt])
@@ -136,6 +140,7 @@ model Device {
   tankState           TankState?
   hourlyUsage         HourlyUsage[]
   tankEvents          TankEvent[]
+  dailyInsights       DailyInsight[]
 
   @@index([tenantId])
   @@index([archivedAt])
@@ -428,4 +433,36 @@ model TankEvent {
 
   @@index([deviceId, startedAt(sort: Desc)])
   @@map("tank_events")
+}
+
+// Experimental daily insight: every one sent, with the facts it was built
+// from, so the user can review them and we can learn which kinds are useful.
+// One per user per local day (the unique key is what makes it once a day).
+model DailyInsight {
+  id         String    @id @default(uuid()) @db.Char(36)
+  userId     String    @map("user_id") @db.Char(36)
+  deviceId   String    @map("device_id") @db.Char(36)
+  // The tank's local date it was sent on, YYYY-MM-DD.
+  localDate  String    @map("local_date") @db.VarChar(10)
+  kind       String    @db.VarChar(40)
+  facts      Json
+  // What was sent, and the server-written sentence it came from.
+  text       String    @db.Text
+  template   String    @db.Text
+  // 'template' or 'llm'.
+  source     String    @db.VarChar(16)
+  score      Float
+  // Phones the push reached (0 = no registered phone).
+  delivered  Int       @default(0)
+  sentAt     DateTime  @default(now()) @map("sent_at")
+  // null until the user says; true = useful.
+  useful     Boolean?
+  feedbackAt DateTime? @map("feedback_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, localDate])
+  @@index([deviceId])
+  @@map("daily_insights")
 }
