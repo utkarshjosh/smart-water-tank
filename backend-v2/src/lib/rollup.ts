@@ -34,21 +34,45 @@ export function noiseFloorL(capacityL: number | null): number {
 }
 
 /**
- * Removes one- and two-reading spikes: each reading becomes the median of
- * itself and its two neighbours either side.
+ * Removes readings that leave a steady level and come back to it.
  *
- * Ultrasonic sensors throw occasional wild readings (an echo off the wall, a
- * splash). Taken at face value, one bad reading 115 L low books 115 L used
- * and then 115 L filled a minute later - water that never moved. A real
- * change persists across readings, so the median keeps it (its edge just
- * lands a reading or two later); a spike doesn't, so the median drops it.
+ * Near the top of the tank the ultrasonic sensor misreads: with the water in
+ * or near its blind zone it reports 26-32 cm for a minute or four, then 20 cm
+ * again. Taken at face value each blip books 50-115 L "used" and the same
+ * again "filled" - on the live tank, 229 L used and 540 L added in one hour
+ * when the only real event was a fill finishing.
+ *
+ * The signature is the return: water that was really drawn stays drawn until
+ * a refill, and a refill isn't back at the exact old level within minutes.
+ * So a departure from the steady level by more than the noise floor that
+ * returns to within the noise floor inside `maxMs` is replaced by the steady
+ * level. A departure that doesn't come back is real, and becomes the new
+ * steady level. Filters that look only at how long a blip lasts (a median)
+ * can't tell clustered blips from a real move; this one can.
  */
-export function despike(readings: Reading[], radius = 2): Reading[] {
-  return readings.map((r, i) => {
-    const window = readings.slice(Math.max(0, i - radius), i + radius + 1).map((w) => w.litres);
-    window.sort((a, b) => a - b);
-    return { at: r.at, litres: window[Math.floor(window.length / 2)] };
-  });
+export function removeExcursions(readings: Reading[], noiseL: number, maxMs = 10 * 60 * 1000): Reading[] {
+  const out = readings.slice();
+  let level: number | null = null;
+  let i = 0;
+  while (i < out.length) {
+    if (level == null) level = out[i].litres;
+    if (Math.abs(out[i].litres - level) <= noiseL) {
+      i++;
+      continue;
+    }
+    // Left the steady level: look for a return within maxMs.
+    const leftAt = out[i].at.getTime();
+    let k = i;
+    while (k < out.length && out[k].at.getTime() - leftAt <= maxMs && Math.abs(out[k].litres - level) > noiseL) k++;
+    if (k < out.length && out[k].at.getTime() - leftAt <= maxMs) {
+      for (let j = i; j < k; j++) out[j] = { at: out[j].at, litres: level };
+      i = k;
+    } else {
+      level = out[i].litres;
+      i++;
+    }
+  }
+  return out;
 }
 
 /**
