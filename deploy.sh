@@ -53,14 +53,18 @@ backup_database() {
       local dump="$BACKUP_DIR/aquamind-mysql-$stamp.sql.gz"
       info "💾 Backing up MySQL → $dump"
       # Parse user:pass@host:port/db out of the URL.
-      local creds="${url#*://}"; local hostpart="${creds#*@}"; local userpass="${creds%%@*}"
+      # Split at the LAST @: the password may itself contain one.
+      local creds="${url#*://}"; local hostpart="${creds##*@}"; local userpass="${creds%@*}"
       local db="${hostpart##*/}"; db="${db%%\?*}"
       local hostport="${hostpart%%/*}"
       local host="${hostport%%:*}"; local port="${hostport##*:}"
       [ "$port" = "$host" ] && port=3306
+      # The app user has no RELOAD/PROCESS privilege; without these flags
+      # mysqldump asks for FLUSH TABLES and writes an empty dump.
       MYSQL_PWD="${userpass#*:}" mysqldump \
         --host="$host" --port="$port" --user="${userpass%%:*}" \
-        --single-transaction --quick --routines --triggers --events \
+        --single-transaction --set-gtid-purged=OFF --no-tablespaces \
+        --quick --routines --triggers \
         "$db" | gzip > "$dump"
       ;;
     postgres://*|postgresql://*)
