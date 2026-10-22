@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 're
 
 import { formatThreshold, levelThresholdLines, useAlertRules } from '@/api/alert-rules';
 import { useCurrentReading, useDevices, useHistorySeries, useTankProfile } from '@/api/queries';
+import { queryClient } from '@/api/queryClient';
 import { haptics } from '@/feedback/haptics';
 import {
   formatAge,
@@ -21,6 +22,7 @@ import { radius, space, useTheme, type Colors } from '@/ui/theme';
 import { GlassTank } from '@/viz/GlassTank';
 import { CloseButton, LandscapeModal } from '@/viz/LandscapeModal';
 import { SeriesChart } from '@/viz/SeriesChart';
+import { UsagePanel } from '@/usage/UsagePanel';
 
 /** Chart height in the portrait page; the modal sizes itself to the screen. */
 const CHART_HEIGHT = 300;
@@ -149,6 +151,8 @@ export default function DeviceDetailScreen() {
   const refresh = () => {
     void reading.refetch();
     void devices.refetch();
+    void queryClient.invalidateQueries({ queryKey: ['device', id, 'usage-hourly'] });
+    void queryClient.invalidateQueries({ queryKey: ['device', id, 'events'] });
     // A new anchor moves the window up to now; the old key is left to expire.
     clearRefine();
     setRefined(null);
@@ -271,6 +275,9 @@ export default function DeviceDetailScreen() {
           </Text>
         )}
       </Card>
+
+      {/* Water used comes before the level chart: it's what people check daily. */}
+      {!!id && <UsagePanel deviceId={id} />}
 
       {/* Full-bleed: the plot runs edge to edge, cancelling the Screen's padding. */}
       <View style={styles.chartSection}>

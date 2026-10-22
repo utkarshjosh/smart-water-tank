@@ -12,7 +12,11 @@ import {
   devicesSchema,
   meSchema,
   tankProfileResponseSchema,
+  hourlyUsageSchema,
+  tankEventsSchema,
+  usageHistorySchema,
   type HistoryMetric,
+  type UsageGroup,
   type RequestedBucket,
 } from '@/api/schemas';
 
@@ -85,6 +89,24 @@ export const api = {
 
   removePushToken: (token: string) =>
     request(`${BASE}/push-tokens`, okSchema, { method: 'DELETE', body: { token } }),
+
+  /** Litres used and filled per local hour (tank's zone), plus today's total. */
+  getHourlyUsage: (deviceId: string, range: 'today' | '24h') =>
+    request(`${BASE}/devices/${id(deviceId)}/usage/hourly?range=${range}`, hourlyUsageSchema),
+
+  /** Fill and draw episodes, newest first. */
+  getTankEvents: (deviceId: string, range: 'today' | '24h' | '7d') =>
+    request(`${BASE}/devices/${id(deviceId)}/events?range=${range}`, tankEventsSchema),
+
+  /**
+   * Usage over a range of local calendar days (YYYY-MM-DD, at most 400),
+   * grouped by day, week or month; omit `group` and the server picks by span.
+   */
+  getUsageHistory: (deviceId: string, options: { from: string; to: string; group?: UsageGroup }) => {
+    const params = new URLSearchParams({ from: options.from, to: options.to });
+    if (options.group) params.set('group', options.group);
+    return request(`${BASE}/devices/${id(deviceId)}/usage/history?${params.toString()}`, usageHistorySchema);
+  },
 
   getTankProfile: (deviceId: string) =>
     request(`${BASE}/devices/${id(deviceId)}/tank-profile`, tankProfileResponseSchema).then((r) => r.profile),

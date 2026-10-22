@@ -27,7 +27,52 @@ export interface HourRollup {
  * add up to tens of phantom litres a day.
  */
 export function noiseFloorL(capacityL: number | null): number {
-  return capacityL == null ? 2 : Math.max(1, capacityL * 0.005);
+  // 1.5% of the tank: about 1.5 cm on a 1 m tank, which is what an ultrasonic
+  // sensor wobbles by from reading to reading. 0.5% counted that wobble as
+  // use and fill.
+  return capacityL == null ? 5 : Math.max(2, capacityL * 0.015);
+}
+
+/**
+ * Removes readings that leave a steady level and come back to it.
+ *
+ * Near the top of the tank the ultrasonic sensor misreads: with the water in
+ * or near its blind zone it reports 26-32 cm for a minute or four, then 20 cm
+ * again. Taken at face value each blip books 50-115 L "used" and the same
+ * again "filled" - on the live tank, 229 L used and 540 L added in one hour
+ * when the only real event was a fill finishing.
+ *
+ * The signature is the return: water that was really drawn stays drawn until
+ * a refill, and a refill isn't back at the exact old level within minutes.
+ * So a departure from the steady level by more than the noise floor that
+ * returns to within the noise floor inside `maxMs` is replaced by the steady
+ * level. A departure that doesn't come back is real, and becomes the new
+ * steady level. Filters that look only at how long a blip lasts (a median)
+ * can't tell clustered blips from a real move; this one can.
+ */
+export function removeExcursions(readings: Reading[], noiseL: number, maxMs = 10 * 60 * 1000): Reading[] {
+  const out = readings.slice();
+  let level: number | null = null;
+  let i = 0;
+  while (i < out.length) {
+    if (level == null) level = out[i].litres;
+    if (Math.abs(out[i].litres - level) <= noiseL) {
+      i++;
+      continue;
+    }
+    // Left the steady level: look for a return within maxMs.
+    const leftAt = out[i].at.getTime();
+    let k = i;
+    while (k < out.length && out[k].at.getTime() - leftAt <= maxMs && Math.abs(out[k].litres - level) > noiseL) k++;
+    if (k < out.length && out[k].at.getTime() - leftAt <= maxMs) {
+      for (let j = i; j < k; j++) out[j] = { at: out[j].at, litres: level };
+      i = k;
+    } else {
+      level = out[i].litres;
+      i++;
+    }
+  }
+  return out;
 }
 
 /**

@@ -9,6 +9,7 @@ import {
   sharesResponseSchema,
   tankEventsResponseSchema,
   tankProfileResponseSchema,
+  usageHistoryResponseSchema,
   usageResponseSchema,
 } from '@aquamind/contracts';
 import { get } from '@/lib/api';
@@ -25,6 +26,7 @@ export type {
   HourlyUsageResponse,
   TankEvent,
   UsageDay,
+  UsageHistoryResponse,
   UsageHour,
   UsageResponse,
 } from '@aquamind/contracts';
@@ -126,5 +128,17 @@ export const useTankEvents = (id?: string, range: 'today' | '24h' | '7d' = '24h'
     enabled: Boolean(id),
     queryFn: () => get(`/api/v1/user/devices/${id}/events?range=${range}`, tankEventsResponseSchema),
     refetchInterval: whileVisible,
+    placeholderData: (previous) => previous,
+  });
+
+/** Usage over a date range, by day / week / month, with patterns. */
+export const useUsageHistory = (id: string | undefined, query: { from: string; to: string; group?: 'day' | 'week' | 'month' }) =>
+  useQuery({
+    queryKey: ['device', id, 'usage-history', query.from, query.to, query.group ?? 'auto'],
+    enabled: Boolean(id),
+    queryFn: () =>
+      get(`/api/v1/user/devices/${id}/usage/history`, usageHistoryResponseSchema, {
+        params: { from: query.from, to: query.to, ...(query.group ? { group: query.group } : {}) },
+      }),
     placeholderData: (previous) => previous,
   });

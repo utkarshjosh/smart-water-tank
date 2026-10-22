@@ -44,7 +44,7 @@ export function episodeOptions(capacityL: number | null, noiseL: number): Episod
   return {
     noiseL,
     maxGapMs: 30 * 60 * 1000,
-    minDrawL: Math.max(5, (capacityL ?? 0) * 0.01),
+    minDrawL: Math.max(10, (capacityL ?? 0) * 0.02),
     minFillL: Math.max(20, (capacityL ?? 0) * 0.03),
   };
 }

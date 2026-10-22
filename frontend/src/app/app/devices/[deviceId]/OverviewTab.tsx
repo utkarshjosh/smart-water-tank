@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatTile } from '@/components/ui/stat-tile';
 import TankLevel from '@/components/TankLevel';
-import { UsageBars } from '@/components/charts/UsageBars';
+import { UsageBarChart } from '@/components/charts/UsageBarChart';
 import { LiveIndicator } from './LiveIndicator';
 import { MiniHistory } from './MiniHistory';
 import { UsagePanel } from './UsagePanel';
@@ -155,15 +155,28 @@ export default function OverviewTab() {
               </p>
             ) : usageSummary ? (
               <>
-                <UsageBars days={usageSummary.days} height={120} />
-                <div className="mt-2 flex justify-between text-caption text-ink-3">
-                  <span>{usageSummary.days[0].date}</span>
-                  <span>{usageSummary.days[usageSummary.days.length - 1].date}</span>
-                </div>
-                <p className="mt-2 text-caption text-ink-3">
-                  {usageSummary.totals.refill_events} refills · {usageSummary.totals.days_with_data} days
-                  with readings. The last bar is today so far.
-                </p>
+                <UsageBarChart
+                  ariaLabel="Water used per day"
+                  showFills={false}
+                  height={120}
+                  slots={usageSummary.days.map((day, i, all) => {
+                    const date = new Date(`${day.date}T00:00:00`);
+                    const isToday = i === all.length - 1;
+                    const notes = [
+                      day.refill_events ? `filled ${day.refill_events}×` : null,
+                      day.leak_suspected ? 'possible leak' : null,
+                      isToday ? 'so far' : null,
+                    ].filter(Boolean);
+                    return {
+                      key: day.date,
+                      tick: date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }),
+                      title: date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }),
+                      usedL: day.used_l,
+                      note: notes.join(' · ') || undefined,
+                      alert: day.leak_suspected,
+                    };
+                  })}
+                />
               </>
             ) : (
               <p className="py-8 text-caption text-ink-3">

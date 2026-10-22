@@ -48,4 +48,11 @@ export const env = {
   // endpoints. When unset, the endpoints accept unauthenticated hook calls
   // (fine when the broker is the only thing that can reach them on a private net).
   mqttAuthHookSecret: process.env.MQTT_AUTH_HOOK_SECRET,
+
+  // --- Daily insight (experimental, per-user opt-in) ---------------------------
+  // Optional OpenAI-compatible chat-completions endpoint that rewords the
+  // server-written sentence. Unset = the template sentence is sent as is.
+  insightLlmUrl: process.env.INSIGHT_LLM_URL,
+  insightLlmKey: process.env.INSIGHT_LLM_KEY,
+  insightLlmModel: process.env.INSIGHT_LLM_MODEL,
 };

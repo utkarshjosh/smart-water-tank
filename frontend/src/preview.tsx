@@ -18,7 +18,8 @@ import TankLevel from '@/components/TankLevel';
 import { METRICS, type Metric, type SeriesPoint } from '@/lib/metrics';
 import { Drop, CaretRight, Warning, Cpu } from '@phosphor-icons/react';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { UsageBars } from '@/components/charts/UsageBars';
+import { UsageBarChart } from '@/components/charts/UsageBarChart';
+import { UsageHistoryBody } from '@/app/app/devices/[deviceId]/UsageHistoryBody';
 import { PageHeader } from '@/components/ui/page-header';
 import { relativeTime, timeSortValue } from '@/lib/time';
 import '@/app/globals.css';
@@ -48,6 +49,34 @@ function makeSeries(): SeriesPoint[] {
 const SERIES = makeSeries();
 
 // 30 days of usage: a few refill days, one flagged day, two not yet aggregated.
+// A plausible day: morning and evening draws, two fills from the main line.
+const DEMO_HOURS = Array.from({ length: 24 }, (_, h) => {
+  const used = [0, 0, 0, 0, 0, 4, 38, 92, 61, 24, 18, 12, 30, 22, 8, 6, 10, 28, 64, 55, 31, 12, 4, 0][h];
+  const filled = h === 7 ? 380 : h === 19 ? 260 : 0;
+  const label = new Date(2026, 9, 18, h).toLocaleTimeString(undefined, { hour: 'numeric' });
+  const next = new Date(2026, 9, 18, h + 1).toLocaleTimeString(undefined, { hour: 'numeric' });
+  return { key: String(h), tick: label, title: `${label} – ${next}`, usedL: h === 3 ? null : used, filledL: filled };
+});
+
+// The live tank's real week (14-18 Oct 2026), padded to 30 days with gaps.
+const REAL = { '2026-10-14': [802, 834, 2, 22], '2026-10-15': [540, 540, 2, 24], '2026-10-16': [425, 425, 2, 24], '2026-10-17': [638, 605, 1, 24], '2026-10-18': [720, 622, 1, 19] } as Record<string, number[]>;
+const DEMO_HISTORY = (() => {
+  const days = Array.from({ length: 30 }, (_, i) => new Date(Date.UTC(2026, 8, 21 + i)).toISOString().slice(0, 10));
+  const buckets = days.map((d) => {
+    const r = REAL[d];
+    return { key: d, start: d, end: d, used_l: r ? r[0] : null, filled_l: r ? r[1] : null, refills: r ? r[2] : 0, leak_days: 0, days_with_data: r ? 1 : 0, full_days: r && r[3] >= 20 ? 1 : 0 };
+  });
+  const hourShape = [0, 0, 0, 0, 0, 6, 22, 40, 18, 35, 42, 30, 20, 8, 4, 4, 6, 25, 30, 22, 12, 6, 2, 0];
+  return {
+    device_id: 'esp8266-e3f7f7', timezone: 'Asia/Kolkata', from: days[0], to: days[29], group: 'day' as const, today: '2026-10-20',
+    capacity_l: 1145, full_day_hours: 20, buckets,
+    totals: { used_l: 3125, filled_l: 3026, refills: 8, days: 30, days_with_data: 5, full_days: 4, daily_average_l: 601.3,
+      busiest_day: { date: '2026-10-14', used_l: 802 }, quietest_day: { date: '2026-10-16', used_l: 425 } },
+    by_weekday: [0, 1, 2, 3, 4, 5, 6].map((w) => ({ weekday: w, average_l: [null, null, 802, 540, 425, 638, null][w], days: [0, 0, 1, 1, 1, 1, 0][w] })),
+    by_hour: hourShape.map((v, h) => ({ hour: h, average_l: v, samples: 4 })),
+  };
+})();
+
 const DEMO_USAGE = Array.from({ length: 30 }, (_, i) => {
   const d = new Date(Date.now() - (29 - i) * 86_400_000);
   const pending = i >= 28;
@@ -346,7 +375,33 @@ function Preview() {
             <CardTitle className="text-label text-ink-2">Daily usage</CardTitle>
           </CardHeader>
           <CardContent>
-            <UsageBars days={DEMO_USAGE} />
+            <UsageBarChart
+              ariaLabel="Water used per day"
+              showFills={false}
+              slots={DEMO_USAGE.map((d) => ({
+                key: d.date,
+                tick: d.date.slice(5),
+                title: d.date,
+                usedL: d.used_l,
+                note: d.refill_events ? `filled ${d.refill_events}×` : undefined,
+                alert: d.leak_suspected,
+              }))}
+            />
+          </CardContent>
+        </Card>
+      </Section>
+
+      <Section title="Usage history (History tab)">
+        <UsageHistoryBody data={DEMO_HISTORY} fetching={false} />
+      </Section>
+
+      <Section title="Hourly usage">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-label text-ink-2">Water used per hour</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <UsageBarChart slots={DEMO_HOURS} ariaLabel="Water used and added per hour" />
           </CardContent>
         </Card>
       </Section>
