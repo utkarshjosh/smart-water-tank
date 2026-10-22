@@ -14,6 +14,10 @@ static NewPing* sonar = nullptr;
 // Temperature sensor
 static OneWire* oneWire = nullptr;
 static DallasTemperature* tempSensor = nullptr;
+static char tempFault = 0;   // see Sensor::lastTemperatureFault()
+
+#define TEMP_READ_ATTEMPTS  3
+#define TEMP_RETRY_DELAY_MS 50
 
 // Number of samples for averaging
 #define NUM_SAMPLES         5
@@ -167,28 +171,58 @@ namespace Sensor {
     }
 
     float readTemperature(bool &valid) {
+        valid = false;
         if (!tempSensor) {
-            valid = false;
-            return -127;
+            tempFault = 'P';
+            return DEVICE_DISCONNECTED_C;
         }
 
-        tempSensor->requestTemperatures();
-        float tempC = tempSensor->getTempCByIndex(0);
+        // A single corrupted bit fails the scratchpad CRC and the library
+        // reports -127, the same value as a missing probe. On the ESP8266 the
+        // bit-banged 1-Wire timing is easily disturbed (WiFi, a boot-strap pin
+        // like GPIO0), so a few retries recover most of those reads.
+        for (uint8_t attempt = 0; attempt < TEMP_READ_ATTEMPTS; attempt++) {
+            if (attempt > 0) delay(TEMP_RETRY_DELAY_MS);
 
-        // Check for error (-127 means no sensor or disconnected)
-        if (tempC == DEVICE_DISCONNECTED_C) {
-            reportOneWireBus();
-            // begin() caches the device list, so a probe that was absent when
-            // init() ran - a loose connector, a rail that came up late - stays
-            // invisible until the next boot unless the bus is re-enumerated.
-            // Re-scanning here lets a reseated connector recover on its own.
-            tempSensor->begin();
-            valid = false;
-            return -127;
+            if (!oneWire->reset()) {
+                tempFault = 'P';
+                continue;
+            }
+
+            tempSensor->requestTemperatures();
+            const float tempC = tempSensor->getTempCByIndex(0);
+
+            if (tempC == DEVICE_DISCONNECTED_C) {
+                tempFault = 'R';
+                // begin() caches the device list, so a probe that was absent when
+                // init() ran stays invisible until it is re-enumerated.
+                tempSensor->begin();
+                continue;
+            }
+            // 85C is the scratchpad's power-on value: the probe reset between
+            // the convert command and the read, which means its supply dipped.
+            if (tempC == 85.0f) {
+                tempFault = 'H';
+                continue;
+            }
+
+            if (attempt > 0) {
+                Serial.printf("[Sensor] Temperature read recovered on attempt %u\n",
+                    static_cast<unsigned>(attempt + 1));
+            }
+            tempFault = 0;
+            valid = true;
+            return tempC;
         }
 
-        valid = true;
-        return tempC;
+        Serial.printf("[Sensor] Temperature read failed %u times, fault '%c'\n",
+            static_cast<unsigned>(TEMP_READ_ATTEMPTS), tempFault);
+        reportOneWireBus();
+        return DEVICE_DISCONNECTED_C;
+    }
+
+    char lastTemperatureFault() {
+        return tempFault;
     }
 
     float readBatteryVoltage() {
