@@ -19,6 +19,7 @@ struct SystemState {
     float volumeLiters;
     float temperatureC;
     bool temperatureValid;   // false when the DS18B20 reports disconnected
+    char temperatureFault;   // why the last read failed, see Sensor::lastTemperatureFault()
     float batteryVoltage;
     int wifiRssi;
     unsigned long lastMeasurement;

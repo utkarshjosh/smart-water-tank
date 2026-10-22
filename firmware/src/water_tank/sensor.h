@@ -56,6 +56,15 @@ namespace Sensor {
      * @return Temperature in Celsius
      */
     float readTemperature(bool &valid);
+
+    /**
+     * Why the last readTemperature() failed, short enough for the LCD:
+     *   0   - last read was good
+     *   'P' - no presence pulse: nothing answered on the bus (wiring/pin)
+     *   'R' - sensor answered but every read was corrupt (timing/noise)
+     *   'H' - sensor returned 85C, its power-on value: it reset mid-read (power)
+     */
+    char lastTemperatureFault();
     
     /**
      * Read battery voltage
