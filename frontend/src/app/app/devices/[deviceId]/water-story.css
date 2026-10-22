@@ -1,0 +1,340 @@
+.water-overview {
+  gap: 20px;
+}
+.water-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: #38746e;
+  font-weight: 600;
+}
+.water-reserve {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 210px;
+  gap: 36px;
+  align-items: center;
+  padding: 30px 36px;
+  border: 1px solid #dce9e5;
+  border-radius: 20px;
+  background: linear-gradient(115deg, #f3f8f5, #edf6f5);
+}
+.water-reserve-copy {
+  max-width: 530px;
+}
+.water-reserve h2 {
+  margin-top: 12px;
+  font-size: clamp(18px, 2vw, 25px);
+  font-weight: 500;
+  letter-spacing: -0.7px;
+}
+.water-reserve-number {
+  margin: 14px 0 20px;
+  font-size: clamp(40px, 5vw, 60px);
+  line-height: 1.15;
+  letter-spacing: -2.5px;
+  font-weight: 600;
+}
+.water-reserve-number > span {
+  margin-left: 10px;
+  font-size: 14px;
+  letter-spacing: 0;
+  font-weight: 400;
+  color: hsl(var(--ink-2));
+}
+.water-reserve-track {
+  height: 7px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #d7e6e1;
+}
+.water-reserve-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #278c83;
+}
+.is-stale .water-reserve-track > span {
+  background: #8b9e9b;
+}
+.water-reserve-meta {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin: 9px 0 18px;
+  font-size: 11px;
+  color: hsl(var(--ink-2));
+}
+.water-reserve-art {
+  width: 170px;
+  justify-self: center;
+}
+.water-snapshot {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid hsl(var(--hairline));
+  border-radius: 16px;
+  background: hsl(var(--surface));
+  overflow: hidden;
+}
+.water-snapshot-stat {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 22px 24px;
+  border-right: 1px solid hsl(var(--hairline));
+}
+.water-snapshot-stat:nth-child(3) {
+  border-right: 0;
+}
+.water-snapshot-stat > p {
+  font-size: 12px;
+  color: hsl(var(--ink-2));
+}
+.water-snapshot-stat > strong {
+  font-size: 30px;
+  line-height: 1.25;
+  letter-spacing: -1px;
+  font-weight: 600;
+}
+.water-snapshot-stat > small {
+  font-size: 11px;
+  line-height: 1.6;
+  color: hsl(var(--ink-3));
+}
+.water-snapshot-icon {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  color: #49837b;
+}
+.water-learning-note {
+  grid-column: 1/-1;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 13px 24px;
+  border-top: 1px solid hsl(var(--hairline));
+  background: hsl(var(--surface-sunk) / 0.5);
+  font-size: 11px;
+  line-height: 1.65;
+  color: hsl(var(--ink-3));
+}
+.water-learning-note strong {
+  font-weight: 550;
+  color: hsl(var(--ink-2));
+}
+.water-learning-note > a {
+  margin-left: auto;
+  white-space: nowrap;
+  color: #38746e;
+}
+.water-learning-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #71a39a;
+  box-shadow: 0 0 0 4px #e4eeea;
+}
+.water-sensor-details {
+  border-top: 1px solid hsl(var(--hairline));
+  padding: 17px 4px;
+}
+.water-sensor-details summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 550;
+}
+.water-sensor-details summary > span {
+  margin-left: 10px;
+  font-weight: 400;
+  font-size: 11px;
+  color: hsl(var(--ink-3));
+}
+.water-usage-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(250px, 0.85fr);
+  gap: 18px;
+}
+.water-usage-layout > * {
+  min-width: 0;
+}
+.water-usage-card h3,
+.water-activity-card h3 {
+  font-size: 16px;
+  font-weight: 550;
+  letter-spacing: -0.3px;
+}
+.water-chart-heading-note {
+  font-size: 11px;
+  color: hsl(var(--ink-3));
+  margin-top: 5px;
+  line-height: 1.6;
+}
+.water-period-total {
+  font-size: 28px;
+  letter-spacing: -0.8px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.water-activity-list {
+  display: grid;
+  gap: 0;
+}
+.water-activity-list > li {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  padding: 14px 0;
+}
+.water-activity-list > li + li {
+  border-top: 1px solid hsl(var(--hairline));
+}
+.water-activity-icon {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #edf4f2;
+  color: #278c83;
+}
+.water-activity-icon.is-fill {
+  background: #edf3fb;
+  color: #397dc4;
+}
+.water-activity-title {
+  font-size: 12px;
+  font-weight: 550;
+}
+.water-activity-time {
+  margin-top: 4px;
+  font-size: 11px;
+  color: hsl(var(--ink-3));
+}
+.water-history-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 12px;
+  color: #38746e;
+  font-weight: 550;
+}
+@media (max-width: 1000px) {
+  .water-usage-layout {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 600px) {
+  .water-reserve {
+    grid-template-columns: minmax(0, 1fr) 92px;
+    padding: 22px 18px;
+    gap: 12px;
+    border-radius: 16px;
+  }
+  .water-reserve h2 {
+    font-size: 18px;
+    line-height: 1.4;
+  }
+  .water-reserve-number {
+    font-size: 40px;
+    letter-spacing: -1.7px;
+  }
+  .water-reserve-number > span {
+    display: block;
+    margin: 4px 0 0;
+    font-size: 12px;
+  }
+  .water-reserve-art {
+    width: 88px;
+  }
+  .water-snapshot-stat {
+    padding: 17px 12px;
+    gap: 7px;
+  }
+  .water-snapshot-stat > p {
+    font-size: 10px;
+  }
+  .water-snapshot-stat > strong {
+    font-size: 24px;
+    letter-spacing: -0.6px;
+  }
+  .water-snapshot-stat > small {
+    font-size: 10px;
+  }
+  .water-snapshot-icon {
+    display: none;
+  }
+  .water-learning-note {
+    padding: 12px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .water-learning-note > span:nth-child(2) {
+    flex: 1;
+    min-width: 180px;
+  }
+  .water-learning-dot {
+    margin-top: 5px;
+  }
+  .water-learning-note > a {
+    margin-left: 17px;
+  }
+  .water-sensor-details summary > span {
+    display: block;
+    margin: 5px 0 0 14px;
+  }
+}
+
+@media (max-width: 380px) {
+  .water-snapshot {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .water-snapshot-stat:nth-child(2) {
+    border-right: 0;
+  }
+  .water-snapshot-stat:nth-child(3) {
+    grid-column: 1/-1;
+    border-top: 1px solid hsl(var(--hairline));
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+  .water-snapshot-stat:nth-child(3) > small {
+    grid-column: 1/-1;
+  }
+}
+
+.water-activity-card {
+  align-self: start;
+}
+.water-activity-card .water-chart-empty {
+  padding: 12px 0 20px;
+}
+
+.water-coverage-note {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 7px 16px;
+  padding: 12px 20px;
+  border-top: 1px solid hsl(var(--hairline));
+  background: hsl(var(--surface-sunk) / 0.5);
+  color: hsl(var(--ink-3));
+  font-size: 11px;
+  line-height: 1.6;
+}
+.water-coverage-note strong {
+  color: hsl(var(--ink-2));
+  font-weight: 500;
+}
+.water-coverage-note a {
+  color: #38746e;
+  white-space: nowrap;
+}

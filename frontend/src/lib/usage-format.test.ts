@@ -17,12 +17,18 @@ describe('usage formatting', () => {
   });
 
   it('collapses a sub-minute episode to one time', () => {
-    expect(formatTimeRange('2026-10-18T00:40:00Z', '2026-10-18T00:40:20Z', 'UTC')).not.toContain('–');
+    expect(formatTimeRange('2026-10-18T00:40:00Z', '2026-10-18T00:40:20Z', 'UTC')).not.toContain(
+      '–'
+    );
   });
 
   it('describes episodes in plain words', () => {
-    expect(describeEvent({ kind: 'fill', volume_l: 480.4, ongoing: false })).toBe('Filled 480 L');
-    expect(describeEvent({ kind: 'draw', volume_l: 60, ongoing: true })).toBe('Using 60 L');
+    expect(describeEvent({ kind: 'fill', volume_l: 480.4, ongoing: false })).toBe(
+      'Refill · about 480 L'
+    );
+    expect(describeEvent({ kind: 'draw', volume_l: 60, ongoing: true })).toBe(
+      'Water drawn · about 60 L'
+    );
   });
 
   it('treats two names for the same offset as the same zone', () => {

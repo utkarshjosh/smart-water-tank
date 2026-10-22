@@ -15,13 +15,14 @@ import {
   formatTemperature,
   formatVolts,
 } from '@/lib/format';
-import { BUCKET_LABEL, METRICS, METRIC_BY_VALUE, RANGES, rangeToWindow, type Metric, type RangeKey } from '@/lib/metrics';
+import { METRICS, METRIC_BY_VALUE, RANGES, rangeToWindow, type Metric, type RangeKey } from '@/lib/metrics';
 import { Card, Divider, Label, Text } from '@/ui/components';
 import { Screen } from '@/ui/Screen';
 import { radius, space, useTheme, type Colors } from '@/ui/theme';
 import { GlassTank } from '@/viz/GlassTank';
 import { CloseButton, LandscapeModal } from '@/viz/LandscapeModal';
 import { SeriesChart } from '@/viz/SeriesChart';
+import { WaterSnapshot } from '@/usage/WaterSnapshot';
 import { UsagePanel } from '@/usage/UsagePanel';
 
 /** Chart height in the portrait page; the modal sizes itself to the screen. */
@@ -37,6 +38,7 @@ export default function DeviceDetailScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const { colors } = useTheme();
+  const [showSensors, setShowSensors] = useState(false);
   const [range, setRangeState] = useState<RangeKey>('7d');
   const [metricChoice, setMetricChoice] = useState<Metric | null>(null);
   // The window's "now". Fixed per range change / refresh so the query key is
@@ -202,8 +204,7 @@ export default function DeviceDetailScreen() {
   const caption =
     shown && hasData
       ? [
-          `${shown.point_count.toLocaleString()} points`,
-          BUCKET_LABEL[shown.bucket],
+          'Sensor history',
           shown.truncated ? 'window narrowed to the most recent readings' : null,
           refined ? 'zoomed' : widened ? 'widened range' : null,
           'drag to pan, pinch to zoom, double-tap to reset',
@@ -277,7 +278,10 @@ export default function DeviceDetailScreen() {
       </Card>
 
       {/* Water used comes before the level chart: it's what people check daily. */}
-      {!!id && <UsagePanel deviceId={id} />}
+      {!!id && <><WaterSnapshot deviceId={id} /><UsagePanel deviceId={id} /></>}
+
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: showSensors }} onPress={() => setShowSensors((v) => !v)} style={[styles.sensorToggle, { borderColor: colors.border }]}><View style={{ flex: 1, gap: 4 }}><Text variant="heading">Sensor health & technical readings</Text><Text variant="caption" color="mutedForeground">Level history, temperature and battery</Text></View><CaretRight size={18} color={colors.mutedForeground} style={{ transform: [{ rotate: showSensors ? "90deg" : "0deg" }] }} /></Pressable>
+      {showSensors && <>
 
       {/* Full-bleed: the plot runs edge to edge, cancelling the Screen's padding. */}
       <View style={styles.chartSection}>
@@ -319,6 +323,8 @@ export default function DeviceDetailScreen() {
           value={reading.data?.rssi === null || reading.data?.rssi === undefined ? '—' : `${reading.data.rssi} dBm`}
         />
       </Card>
+
+      </>}
 
       <Card>
         <Label>Alerts</Label>
@@ -453,6 +459,7 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
+  sensorToggle: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.lg, borderTopWidth: StyleSheet.hairlineWidth },
   heroRow: { alignItems: 'center', flexDirection: 'row', gap: space.lg },
   heroText: { flex: 1, gap: space.xs },
   chartSection: { gap: space.sm, marginHorizontal: -space.lg },

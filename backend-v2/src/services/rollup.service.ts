@@ -2,7 +2,15 @@ import { Device, TankProfile } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { env } from '../config/env';
 import { addDays, localDate, startOfLocalDay } from '../lib/local-time';
-import { HourRollup, Reading, noiseFloorL, removeExcursions, rollupDay, rollupHours } from '../lib/rollup';
+import {
+  HourRollup,
+  continuityGapMs,
+  prepareReadings,
+  noiseFloorL,
+  removeExcursions,
+  rollupDay,
+  rollupHours,
+} from '../lib/rollup';
 import { Episode, detectEpisodes, episodeOptions } from '../lib/episodes';
 import { computeTotalCapacityL, volumeLForProfile } from './tank-profile.service';
 import { createLeakAlert } from './alert.service';
@@ -41,26 +49,41 @@ export function capacityOf(profile: TankProfile | null): number | null {
   });
 }
 
-type Row = { timestamp: Date; levelCm: { toNumber(): number } | null; volumeL: { toNumber(): number } | null };
+type Row = {
+  timestamp: Date;
+  levelCm: { toNumber(): number } | null;
+  volumeL: { toNumber(): number } | null;
+};
 
 /** Litres from the current profile; the stored snapshot only when there is no profile. */
-function toReading(profile: TankProfile | null, row: Row): Reading | null {
+function toReading(profile: TankProfile | null, row: Row): { at: Date; litres: number | null } {
   const levelCm = row.levelCm?.toNumber() ?? null;
   const litres = profile ? volumeLForProfile(profile, levelCm) : (row.volumeL?.toNumber() ?? null);
-  return litres == null ? null : { at: row.timestamp, litres };
+  return { at: row.timestamp, litres };
 }
 
 const round2 = (v: number | null) => (v == null ? null : Math.round(v * 100) / 100);
 
 /** Recomputes the given local dates for one device. */
-export async function rebuildDeviceDays(deviceId: string, dates: string[], now = new Date()): Promise<void> {
-  const device = await prisma.device.findUnique({ where: { id: deviceId }, include: { tankProfile: true } });
+export async function rebuildDeviceDays(
+  deviceId: string,
+  dates: string[],
+  now = new Date(),
+): Promise<void> {
+  const device = await prisma.device.findUnique({
+    where: { id: deviceId },
+    include: { tankProfile: true, config: true },
+  });
   if (!device) return;
 
   const timeZone = timeZoneOf(device);
   const profile = device.tankProfile;
   const capacityL = capacityOf(profile);
   const noiseL = noiseFloorL(capacityL);
+  const maxGapMs = continuityGapMs(
+    device.config?.reportIntervalMs,
+    device.config?.offlineThresholdMin ?? env.alertOfflineThresholdMinutes,
+  );
   const select = { timestamp: true, levelCm: true, volumeL: true } as const;
   // Only yesterday and today may raise a leak alert. A 90-day rebuild after a
   // profile change would otherwise alert for every old day it re-judges.
@@ -77,18 +100,25 @@ export async function rebuildDeviceDays(deviceId: string, dates: string[], now =
         select,
       }),
       prisma.measurement.findFirst({
-        where: { deviceId, timestamp: { lt: start }, levelCm: { not: null } },
+        where: { deviceId, timestamp: { lt: start } },
         orderBy: { timestamp: 'desc' },
         select,
       }),
     ]);
 
-    // Unreadable cycles (no echo) aren't data points; drop them before they
-    // can read as a drained tank.
-    const toReadings = (list: Row[]) => list.map((r) => toReading(profile, r)).filter((r): r is Reading => r != null);
-    const readings = removeExcursions(toReadings(rows), noiseL);
-    const before = beforeRow ? toReading(profile, beforeRow) : null;
-    const hours = rollupHours(readings, before, timeZone, noiseL);
+    // Keep invalid-cycle boundaries while dropping unusable numeric values.
+    const toReadings = (list: Row[]) =>
+      prepareReadings(
+        list.map((r) => toReading(profile, r)),
+        maxGapMs,
+      );
+    const prepared = toReadings([...(beforeRow ? [beforeRow] : []), ...rows]);
+    const cleaned = removeExcursions(prepared, noiseL);
+    const before = cleaned.find((r) => r.at < start) ?? null;
+    const readings = cleaned.filter((r) => r.at >= start && r.at <= now);
+    const hours = rollupHours(readings, before, timeZone, noiseL, { maxGapMs }).filter(
+      (h) => h.hourStart >= start && h.hourStart < end,
+    );
 
     // Episodes cross midnight, so detect over a wider window and keep the ones
     // that start inside this day. One that started yesterday belongs to
@@ -96,14 +126,20 @@ export async function rebuildDeviceDays(deviceId: string, dates: string[], now =
     const episodeRows = await prisma.measurement.findMany({
       where: {
         deviceId,
-        timestamp: { gte: new Date(start.getTime() - EPISODE_LOOKAROUND_MS), lt: new Date(end.getTime() + EPISODE_LOOKAROUND_MS) },
+        timestamp: {
+          gte: new Date(start.getTime() - EPISODE_LOOKAROUND_MS),
+          lt: new Date(end.getTime() + EPISODE_LOOKAROUND_MS),
+        },
       },
       orderBy: { timestamp: 'asc' },
       select,
     });
-    const episodes = detectEpisodes(removeExcursions(toReadings(episodeRows), noiseL), null, episodeOptions(capacityL, noiseL), now).filter(
-      (e) => e.startedAt >= start && e.startedAt < end
-    );
+    const episodes = detectEpisodes(
+      removeExcursions(toReadings(episodeRows), noiseL),
+      null,
+      episodeOptions(capacityL, noiseL, maxGapMs),
+      now,
+    ).filter((e) => e.startedAt >= start && e.startedAt < end);
 
     await prisma.$transaction([
       prisma.hourlyUsage.deleteMany({ where: { deviceId, hourStart: { gte: start, lt: end } } }),
@@ -145,6 +181,7 @@ function toHourRow(deviceId: string, h: HourRollup) {
     maxL: round2(h.maxL),
     avgL: round2(h.avgL),
     readings: h.readings,
+    observedSeconds: h.observedSeconds,
   };
 }
 
@@ -152,7 +189,7 @@ async function saveDay(
   device: Device,
   date: string,
   hours: HourRollup[],
-  opts: { complete: boolean; alertable: boolean; fillEvents: number }
+  opts: { complete: boolean; alertable: boolean; fillEvents: number },
 ): Promise<void> {
   // DailySummary.date is a DATE column; Prisma writes it from a UTC-midnight
   // Date, so the local date string goes in as-is.
@@ -164,7 +201,10 @@ async function saveDay(
     return;
   }
 
-  const day = rollupDay(hours, { fillEvents: opts.fillEvents, leakLPerHour: env.leakThresholdLPerHour });
+  const day = rollupDay(hours, {
+    fillEvents: opts.fillEvents,
+    leakLPerHour: env.leakThresholdLPerHour,
+  });
   // A day still in progress can't be judged for leaks yet.
   const leakSuspected = opts.complete && day.leakSuspected;
 
@@ -179,14 +219,18 @@ async function saveDay(
     leakSuspected,
     readings: day.readings,
   };
-  await prisma.dailySummary.upsert({ where, create: { deviceId: device.id, date: dateKey, ...data }, update: data });
+  await prisma.dailySummary.upsert({
+    where,
+    create: { deviceId: device.id, date: dateKey, ...data },
+    update: data,
+  });
 
   // Alert once, when a day first turns out to look like a leak. The job
   // rebuilds yesterday after midnight; without this it would alert each time.
   if (leakSuspected && !previous?.leakSuspected && opts.alertable && device.tenantId) {
-    const hoursWithReadings = hours.filter((h) => h.readings > 0).length;
     await createLeakAlert(device.id, device.tenantId, {
-      hourly_consumption_l: day.usedL / hoursWithReadings,
+      hourly_consumption_l:
+        day.usedL / (hours.reduce((sum, h) => sum + h.observedSeconds, 0) / 3600),
       threshold_l_per_hour: env.leakThresholdLPerHour,
       date,
     });
@@ -219,8 +263,15 @@ export async function refreshActiveRollups(now = new Date()): Promise<void> {
 }
 
 /** Rebuild the recent past after the inputs changed (tank profile, timezone). */
-export async function rebuildRecentRollups(deviceId: string, days = REBUILD_DAYS, now = new Date()): Promise<void> {
-  const device = await prisma.device.findUnique({ where: { id: deviceId }, select: { timezone: true } });
+export async function rebuildRecentRollups(
+  deviceId: string,
+  days = REBUILD_DAYS,
+  now = new Date(),
+): Promise<void> {
+  const device = await prisma.device.findUnique({
+    where: { id: deviceId },
+    select: { timezone: true },
+  });
   if (!device) return;
   const timeZone = timeZoneOf(device);
   const today = localDate(now, timeZone);
@@ -240,5 +291,7 @@ export async function rebuildRecentRollups(deviceId: string, days = REBUILD_DAYS
 
 /** Fire-and-forget wrapper for request handlers: the caller shouldn't wait. */
 export function scheduleRebuild(deviceId: string): void {
-  rebuildRecentRollups(deviceId).catch((error) => console.error(`Rollup rebuild failed for ${deviceId}:`, error));
+  rebuildRecentRollups(deviceId).catch((error) =>
+    console.error(`Rollup rebuild failed for ${deviceId}:`, error),
+  );
 }

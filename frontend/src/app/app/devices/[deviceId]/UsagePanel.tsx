@@ -1,36 +1,51 @@
+import { usageObservationNote } from '@aquamind/contracts';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ArrowDown, ArrowUp, Drop } from '@phosphor-icons/react';
+import { ArrowDown, ArrowUp, ArrowRight, Drop } from '@phosphor-icons/react';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { UsageBarChart, type UsageSlot } from '@/components/charts/UsageBarChart';
 import { viewerTimeZone } from '@/lib/metrics';
-import { describeEvent, formatClock, formatLitres, formatTimeRange, hourSlots, zoneDiffers } from '@/lib/usage-format';
+import {
+  describeEvent,
+  formatClock,
+  formatLitres,
+  formatTimeRange,
+  hourSlots,
+  zoneDiffers,
+} from '@/lib/usage-format';
 import type { HourlyUsageResponse } from './useDevice';
 import { useHourlyUsage, useTankEvents } from './useDevice';
+import './water-story.css';
 
 type Range = 'today' | '24h';
 
-/**
- * Hourly usage and the fill/draw timeline. Both come from the server's
- * rollups (refreshed every 5 minutes), cut in the tank's own timezone.
- */
 export function UsagePanel({ deviceId }: { deviceId?: string }) {
-  // Last 24 hours first: at 7 AM, "today" is seven bars and says little.
-  const [range, setRange] = useState<Range>('24h');
+  const [range, setRange] = useState<Range>('today');
   const hourly = useHourlyUsage(deviceId, range);
   const events = useTankEvents(deviceId, range);
   const data = hourly.data;
-  const fills = events.data?.totals.fills ?? null;
-
+  const hours = data?.hours.filter((h) => h.used_l != null) ?? [];
+  const peak = hours.reduce<(typeof hours)[number] | null>(
+    (a, h) => ((h.used_l ?? 0) > (a?.used_l ?? 0) ? h : a),
+    null
+  );
+  const base = `/app/devices/${encodeURIComponent(deviceId ?? '')}`;
   return (
-    <div className="device-chart-grid">
-      <Card>
-        <CardHeader className="flex-row items-center justify-between gap-2">
-          <CardTitle>Water used per hour</CardTitle>
+    <div className="water-usage-layout">
+      <Card className="water-usage-card">
+        <CardHeader className="flex-row flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle>Your water use</CardTitle>
+            <p className="water-chart-heading-note">
+              {range === 'today' ? 'Today, since midnight' : 'The past 24 hours'} · updates every 5
+              min
+            </p>
+          </div>
           <SegmentedControl
             aria-label="Usage window"
             value={range}
@@ -44,90 +59,93 @@ export function UsagePanel({ deviceId }: { deviceId?: string }) {
         <CardContent>
           {hourly.isError ? (
             <p className="py-8 text-caption text-critical-text">
-              Couldn’t load hourly usage.{' '}
-              <button type="button" className="underline" onClick={() => hourly.refetch()}>
-                Retry
+              Couldn’t load usage.{' '}
+              <button className="underline" onClick={() => hourly.refetch()}>
+                Try again
               </button>
             </p>
-          ) : !data ? (
-            <p className="py-8 text-caption text-ink-3">Loading hourly usage…</p>
+          ) : !data || hourly.isPlaceholderData ? (
+            <p className="py-8 text-caption text-ink-3">Loading your water use…</p>
           ) : (
             <>
-              <div className="mb-4 flex flex-wrap gap-x-8 gap-y-2">
-                <div>
-                  <p className="text-caption text-ink-3">{range === '24h' ? 'Used in the last 24 hours' : 'Used today'}</p>
-                  <p className="text-[1.5rem] font-semibold leading-tight text-ink-1 tnum">{formatLitres(data.totals.used_l)}</p>
-                </div>
-                <div>
-                  <p className="text-caption text-ink-3">Tank filled</p>
-                  <p className="text-[1.5rem] font-semibold leading-tight text-ink-1 tnum">
-                    {fills == null ? '—' : `${fills} time${fills === 1 ? '' : 's'}`}
-                    {data.totals.filled_l ? (
-                      <span className="ml-2 text-body font-normal text-ink-3">{formatLitres(data.totals.filled_l)} added</span>
-                    ) : null}
-                  </p>
-                </div>
-              </div>
-              {data.hours.length ? (
-                <UsageBarChart slots={toSlots(data)} ariaLabel="Water used and added per hour" />
-              ) : (
-                <p className="py-6 text-caption text-ink-3">No readings in this window yet.</p>
-              )}
+              <p className="water-period-total tnum">
+                {formatLitres(data.totals.used_l)}{' '}
+                <span className="text-caption font-normal tracking-normal text-ink-3">
+                  used {range === 'today' ? 'today' : 'in 24 hours'}
+                </span>
+              </p>
+              <p className="water-chart-heading-note mb-5">
+                {peak
+                  ? `Most recorded use at ${formatClock(Date.parse(peak.hour_start), data.timezone, { hourOnly: true })} · ${formatLitres(peak.used_l)}.`
+                  : hours.length
+                    ? 'No measurable draw in the recorded stretches.'
+                    : 'Your first readings will start building this picture.'}
+              </p>
+              <UsageBarChart slots={toSlots(data)} ariaLabel="Hourly water use" height={180} />
+              <p className="water-chart-heading-note mt-3">{usageObservationNote(data)}</p>
               <ZoneNote deviceId={deviceId} tankZone={data.timezone} />
             </>
           )}
+          <Link className="water-history-link" to={`${base}/history`}>
+            Explore days, weeks &amp; months <ArrowRight size={14} aria-hidden />
+          </Link>
         </CardContent>
       </Card>
-      <Card>
-        <CardHeader className="flex-row items-center justify-between">
-          <CardTitle>Activity</CardTitle>
-          {events.data && (
-            <span className="text-caption text-ink-3">
-              {events.data.totals.fills} fill{events.data.totals.fills === 1 ? '' : 's'} · {events.data.totals.draws} draw
-              {events.data.totals.draws === 1 ? '' : 's'}
-            </span>
-          )}
+      <Card className="water-activity-card">
+        <CardHeader>
+          <CardTitle>What happened</CardTitle>
+          <p className="water-chart-heading-note">
+            Latest changes · {range === 'today' ? 'today' : 'last 24 hours'}
+          </p>
         </CardHeader>
         <CardContent>
           {events.isError ? (
             <p className="py-8 text-caption text-critical-text">
               Couldn’t load activity.{' '}
-              <button type="button" className="underline" onClick={() => events.refetch()}>
-                Retry
+              <button className="underline" onClick={() => events.refetch()}>
+                Try again
               </button>
             </p>
-          ) : !events.data ? (
+          ) : !events.data || events.isPlaceholderData ? (
             <p className="py-8 text-caption text-ink-3">Loading activity…</p>
           ) : events.data.events.length === 0 ? (
-            <p className="flex items-center gap-2 py-8 text-caption text-ink-3">
-              <Drop size={16} aria-hidden /> No fills or noticeable draws in this window.
-            </p>
+            <div className="water-chart-empty">
+              <Drop size={26} weight="duotone" aria-hidden />
+              <strong>No activity recorded yet</strong>
+              <span>Refills and noticeable water use will appear here as they happen.</span>
+            </div>
           ) : (
-            <ul className="divide-y divide-hairline">
-              {events.data.events.map((event) => {
-                const Icon = event.kind === 'fill' ? ArrowUp : ArrowDown;
-                return (
-                  <li key={event.id} className="flex items-center gap-3 py-2.5">
-                    <span
-                      className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${
-                        event.kind === 'fill' ? 'bg-brand-wash text-brand' : 'bg-surface-sunk text-ink-2'
-                      }`}
-                      aria-hidden
-                    >
-                      <Icon size={16} weight="bold" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-label text-ink-1">{describeEvent(event)}</p>
-                      <p className="text-caption text-ink-3 tnum">
-                        {formatTimeRange(event.started_at, event.ended_at, events.data.timezone)}
-                        {event.rate_l_per_min ? ` · ${event.rate_l_per_min.toFixed(1)} L/min` : ''}
-                      </p>
-                    </div>
-                    {event.ongoing && <span className="text-caption text-brand">Now</span>}
-                  </li>
-                );
-              })}
-            </ul>
+            <>
+              <ul className="water-activity-list">
+                {events.data.events.slice(0, 3).map((event) => {
+                  const fill = event.kind === 'fill';
+                  const Icon = fill ? ArrowDown : ArrowUp;
+                  return (
+                    <li key={event.id}>
+                      <span className={`water-activity-icon ${fill ? 'is-fill' : ''}`}>
+                        <Icon size={16} aria-hidden />
+                      </span>
+                      <div>
+                        <p className="water-activity-title">
+                          {describeEvent(event)}
+                          {event.ongoing && (
+                            <span className="ml-2 text-brand">· At last reading</span>
+                          )}
+                        </p>
+                        <p className="water-activity-time">
+                          {formatTimeRange(event.started_at, event.ended_at, events.data!.timezone)}
+                        </p>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+              {events.data.events.length > 3 && (
+                <p className="water-chart-heading-note">
+                  {events.data.events.length - 3} earlier changes. Showing the latest 3.
+                </p>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
@@ -145,7 +163,7 @@ function toSlots(data: HourlyUsageResponse): UsageSlot[] {
       key: String(start),
       tick: label,
       title: `${label} – ${formatClock(start + 3_600_000, data.timezone, { hourOnly: true })}`,
-      usedL: hour ? (hour.used_l ?? 0) : null,
+      usedL: hour?.used_l ?? null,
       filledL: hour?.filled_l ?? 0,
     };
   });
@@ -162,7 +180,9 @@ function ZoneNote({ deviceId, tankZone }: { deviceId?: string; tankZone: string 
   const setZone = useMutation({
     mutationFn: () => api.put(`/api/v1/user/devices/${deviceId}/timezone`, { timezone: viewer }),
     onSuccess: () => {
-      toast.success(`Times now use ${viewer}`, { description: 'Past usage is being recalculated; it can take a minute.' });
+      toast.success(`Times now use ${viewer}`, {
+        description: 'Past usage is being recalculated; it can take a minute.',
+      });
       void queryClient.invalidateQueries({ queryKey: ['device', deviceId] });
     },
     onError: () => toast.error('Couldn’t change the timezone. Please try again.'),
@@ -172,7 +192,12 @@ function ZoneNote({ deviceId, tankZone }: { deviceId?: string; tankZone: string 
   return (
     <p className="mt-3 flex flex-wrap items-center gap-2 text-caption text-ink-3">
       Times shown in {tankZone}.
-      <Button size="sm" variant="ghost" loading={setZone.isPending} onClick={() => setZone.mutate()}>
+      <Button
+        size="sm"
+        variant="ghost"
+        loading={setZone.isPending}
+        onClick={() => setZone.mutate()}
+      >
         Use {viewer}
       </Button>
     </p>

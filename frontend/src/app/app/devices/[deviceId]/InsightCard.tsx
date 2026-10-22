@@ -1,6 +1,7 @@
+import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { insightSettingsSchema, insightsResponseSchema, okSchema, type InsightSettings } from '@aquamind/contracts';
+import { insightSettingsSchema, insightPreviewSchema, insightsResponseSchema, okSchema, type InsightSettings } from '@aquamind/contracts';
 import api, { get, post } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,6 +19,11 @@ const LIST_KEY = ['insights'];
  */
 export function InsightCard() {
   const queryClient = useQueryClient();
+  const { deviceId } = useParams<{ deviceId: string }>();
+  const preview = useQuery({
+    queryKey: ['device', deviceId, 'insight-preview'], enabled: Boolean(deviceId),
+    queryFn: () => get(`/api/v1/user/devices/${deviceId}/insight-preview`, insightPreviewSchema),
+  });
   const settings = useQuery({
     queryKey: SETTINGS_KEY,
     queryFn: () => get('/api/v1/user/me/insight-settings', insightSettingsSchema),
@@ -49,10 +55,10 @@ export function InsightCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Experimental: daily insight</CardTitle>
+        <CardTitle>Daily water insight</CardTitle>
         <CardDescription>
           At most one notification a day, between 9 AM and 8 PM, with something worth knowing about your water use.
-          Off by default.
+          Optional and off by default. Quiet when there is no useful insight.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -63,8 +69,15 @@ export function InsightCard() {
             disabled={!settings.data || toggle.isPending}
             onCheckedChange={(v) => toggle.mutate(v === true)}
           />
-          <Label htmlFor="daily-insight">Experimental: daily insight</Label>
+          <Label htmlFor="daily-insight">Send me a daily water insight</Label>
         </div>
+        <div className="rounded-xl bg-surface-sunk p-4 text-caption text-ink-2" role="status">
+          <p className="font-medium">{settings.isError ? 'Couldn’t check this setting' : !settings.data ? 'Checking your preference…' : !settings.data.enabled ? 'Currently off' : sent[0]?.local_date === preview.data?.local_date ? 'Today’s insight is saved below' : preview.isError ? 'Couldn’t check today’s insight' : preview.data?.picked ? 'On · ready for the next daily check' : 'On · collecting enough readings'}</p>
+          <p className="mt-1 leading-relaxed text-ink-3">Daily comparisons use complete days of readings. After an offline period, allow time to build a reliable picture. Notifications also need to be enabled on your phone.</p>
+          {settings.isError && <button className="mt-2 text-brand underline" onClick={() => settings.refetch()}>Try again</button>}
+        </div>
+        {insights.isError && <p className="text-caption text-critical-text">Couldn’t load saved insights. <button className="underline" onClick={() => insights.refetch()}>Try again</button></p>}
+        {sent.length === 0 && settings.data?.enabled && <p className="text-caption text-ink-3">No insights saved yet. Your first useful observation will appear here.</p>}
         {sent.length > 0 && (
           <ul className="space-y-3">
             {sent.slice(0, 7).map((i) => (
@@ -75,6 +88,7 @@ export function InsightCard() {
                   <Button
                     size="sm"
                     variant={i.useful === true ? 'primary' : 'secondary'}
+                    disabled={feedback.isPending}
                     onClick={() => feedback.mutate({ id: i.id, useful: true })}
                   >
                     Useful
@@ -82,6 +96,7 @@ export function InsightCard() {
                   <Button
                     size="sm"
                     variant={i.useful === false ? 'primary' : 'secondary'}
+                    disabled={feedback.isPending}
                     onClick={() => feedback.mutate({ id: i.id, useful: false })}
                   >
                     Not useful

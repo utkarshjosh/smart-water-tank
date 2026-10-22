@@ -13,6 +13,7 @@ import { summariseRules, useAlertRules } from '@/api/alert-rules';
 import { useDevices } from '@/api/queries';
 import { lastRegisteredToken, registerForPush, unregisterForPush } from '@/push/registration';
 import { Button, Card, Divider, Label, Text } from '@/ui/components';
+import { DailyInsightSettings } from '@/usage/DailyInsightSettings';
 import { Screen } from '@/ui/Screen';
 import { radius, space, useTheme, type ThemePreference } from '@/ui/theme';
 
@@ -153,6 +154,8 @@ export default function SettingsScreen() {
           </Text>
         )}
       </Card>
+
+      <DailyInsightSettings deviceId={devices.data?.[0]?.id} notificationsEnabled={pushRegistered} />
 
       <Card>
         <Label>Feedback</Label>

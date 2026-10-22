@@ -16,7 +16,11 @@ export function hourSlots(fromMs: number, toMs: number): number[] {
 }
 
 /** "7 AM" (hourOnly) or "7:10 AM", in `timeZone`. */
-export function formatClock(ms: number, timeZone: string, opts: { hourOnly?: boolean } = {}): string {
+export function formatClock(
+  ms: number,
+  timeZone: string,
+  opts: { hourOnly?: boolean } = {},
+): string {
   return new Date(ms).toLocaleTimeString(undefined, {
     timeZone,
     hour: 'numeric',
@@ -33,8 +37,10 @@ export function formatTimeRange(startIso: string, endIso: string, timeZone: stri
 
 /** "Filled 480 L" / "Using 60 L" - one line a person can read. */
 export function describeEvent(event: Pick<TankEvent, 'kind' | 'volume_l' | 'ongoing'>): string {
-  const verb = event.kind === 'fill' ? (event.ongoing ? 'Filling' : 'Filled') : event.ongoing ? 'Using' : 'Used';
-  return `${verb} ${event.volume_l == null ? '—' : `${Math.round(event.volume_l).toLocaleString()} L`}`;
+  const label = event.kind === 'fill' ? 'Refill' : 'Water drawn';
+  return event.volume_l == null
+    ? `${label} recorded`
+    : `${label} · about ${Math.round(event.volume_l).toLocaleString()} L`;
 }
 
 /** Local calendar date `offset` days from today, as YYYY-MM-DD. */

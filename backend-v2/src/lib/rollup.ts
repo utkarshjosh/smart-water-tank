@@ -9,6 +9,65 @@ import { localHourStart } from './local-time';
 export interface Reading {
   at: Date;
   litres: number;
+  /** First usable reading after missing or invalid telemetry. */
+  breakBefore?: boolean;
+  /** The sensor became unreadable after this last usable sample. */
+  breakAfter?: boolean;
+}
+
+/** Sampling continuity is independent of a tank being quiet between draws. */
+export const DEFAULT_READING_GAP_MS = 15 * 60_000;
+export const COMPLETE_HOUR_SECONDS = 54 * 60;
+
+export function continuityGapMs(
+  reportIntervalMs = 300_000,
+  offlineThresholdMin?: number | null,
+): number {
+  const interval =
+    Number.isFinite(reportIntervalMs) && reportIntervalMs > 0 ? reportIntervalMs : 300_000;
+  const cadenceLimit = Math.max(5 * 60_000, Math.min(30 * 60_000, interval * 3));
+  return offlineThresholdMin != null &&
+    Number.isFinite(offlineThresholdMin) &&
+    offlineThresholdMin > 0
+    ? Math.min(cadenceLimit, offlineThresholdMin * 60_000)
+    : cadenceLimit;
+}
+
+/** Preserve a break when null/invalid samples are removed. Never join an outage. */
+export function prepareReadings(
+  raw: Array<{ at: Date; litres: number | null; breakBefore?: boolean; breakAfter?: boolean }>,
+  maxGapMs = DEFAULT_READING_GAP_MS,
+): Reading[] {
+  const out: Reading[] = [];
+  let broken = false;
+  for (const row of raw) {
+    const last = out[out.length - 1];
+    const at = row.at.getTime();
+    if (
+      !Number.isFinite(at) ||
+      row.litres == null ||
+      !Number.isFinite(row.litres) ||
+      row.litres < 0
+    ) {
+      broken = true;
+      if (last) out[out.length - 1] = { ...last, breakAfter: true };
+      continue;
+    }
+    // Duplicate or out-of-order timestamps cannot establish a rate or movement.
+    if (last && at <= last.at.getTime()) {
+      broken = true;
+      continue;
+    }
+    const gap = last && at - last.at.getTime() > maxGapMs;
+    out.push({
+      at: row.at,
+      litres: row.litres,
+      ...(broken || gap || row.breakBefore ? { breakBefore: true } : {}),
+      ...(row.breakAfter ? { breakAfter: true } : {}),
+    });
+    broken = false;
+  }
+  return out;
 }
 
 export interface HourRollup {
@@ -19,6 +78,8 @@ export interface HourRollup {
   maxL: number | null;
   avgL: number | null;
   readings: number;
+  /** Time bounded by consecutive valid readings, excluding telemetry gaps. */
+  observedSeconds: number;
 }
 
 /**
@@ -50,12 +111,16 @@ export function noiseFloorL(capacityL: number | null): number {
  * steady level. Filters that look only at how long a blip lasts (a median)
  * can't tell clustered blips from a real move; this one can.
  */
-export function removeExcursions(readings: Reading[], noiseL: number, maxMs = 10 * 60 * 1000): Reading[] {
+export function removeExcursions(
+  readings: Reading[],
+  noiseL: number,
+  maxMs = 10 * 60 * 1000,
+): Reading[] {
   const out = readings.slice();
   let level: number | null = null;
   let i = 0;
   while (i < out.length) {
-    if (level == null) level = out[i].litres;
+    if (level == null || out[i].breakBefore) level = out[i].litres;
     if (Math.abs(out[i].litres - level) <= noiseL) {
       i++;
       continue;
@@ -63,9 +128,15 @@ export function removeExcursions(readings: Reading[], noiseL: number, maxMs = 10
     // Left the steady level: look for a return within maxMs.
     const leftAt = out[i].at.getTime();
     let k = i;
-    while (k < out.length && out[k].at.getTime() - leftAt <= maxMs && Math.abs(out[k].litres - level) > noiseL) k++;
-    if (k < out.length && out[k].at.getTime() - leftAt <= maxMs) {
-      for (let j = i; j < k; j++) out[j] = { at: out[j].at, litres: level };
+    while (
+      k < out.length &&
+      (k === i || !out[k].breakBefore) &&
+      out[k].at.getTime() - leftAt <= maxMs &&
+      Math.abs(out[k].litres - level) > noiseL
+    )
+      k++;
+    if (k < out.length && !out[k].breakBefore && out[k].at.getTime() - leftAt <= maxMs) {
+      for (let j = i; j < k; j++) out[j] = { ...out[j], litres: level };
       i = k;
     } else {
       level = out[i].litres;
@@ -86,46 +157,76 @@ export function removeExcursions(readings: Reading[], noiseL: number, maxMs = 10
  *
  * `before` is the last reading before the window, so the first change in the
  * window is measured from where the tank actually was. Each change is booked
- * to the hour of the reading that revealed it - after a gap with no readings,
- * the water was used somewhere in the gap, and the hour the device came back
- * is the best we can say.
+ * to the hour of the reading that revealed it. The first reading after a gap
+ * establishes a new reference: neither the amount nor timing of movement
+ * during the outage is known.
  */
 export function rollupHours(
   readings: Reading[],
   before: Reading | null,
   timeZone: string,
-  noiseL: number
+  noiseL: number,
+  opts: { maxGapMs?: number } = {},
 ): HourRollup[] {
+  const maxGapMs = opts.maxGapMs ?? DEFAULT_READING_GAP_MS;
   const hours = new Map<number, HourRollup & { sumL: number }>();
+  const getHour = (at: Date) => {
+    const start = localHourStart(at, timeZone);
+    let h = hours.get(start.getTime());
+    if (!h) {
+      h = {
+        hourStart: start,
+        usedL: 0,
+        filledL: 0,
+        minL: null,
+        maxL: null,
+        avgL: null,
+        readings: 0,
+        observedSeconds: 0,
+        sumL: 0,
+      };
+      hours.set(start.getTime(), h);
+    }
+    return h;
+  };
   let reference = before?.litres ?? null;
-
-  for (const r of readings) {
-    const start = localHourStart(r.at, timeZone);
-    let hour = hours.get(start.getTime());
-    if (!hour) {
-      hour = { hourStart: start, usedL: 0, filledL: 0, minL: null, maxL: null, avgL: null, readings: 0, sumL: 0 };
-      hours.set(start.getTime(), hour);
+  let previous = before;
+  for (const point of prepareReadings(readings, maxGapMs)) {
+    const h = getHour(point.at);
+    h.readings++;
+    h.sumL += point.litres;
+    h.minL = h.minL == null ? point.litres : Math.min(h.minL, point.litres);
+    h.maxL = h.maxL == null ? point.litres : Math.max(h.maxL, point.litres);
+    const gap = previous ? point.at.getTime() - previous.at.getTime() : 0;
+    const continuous =
+      previous != null && !previous.breakAfter && !point.breakBefore && gap > 0 && gap <= maxGapMs;
+    if (!continuous) reference = point.litres;
+    else {
+      // Split observed time at local-hour boundaries, including midnight/DST.
+      let cursor = previous!.at.getTime();
+      while (cursor < point.at.getTime()) {
+        const hour = getHour(new Date(cursor));
+        const end = Math.min(point.at.getTime(), hour.hourStart.getTime() + 3_600_000);
+        hour.observedSeconds += (end - cursor) / 1000;
+        cursor = end;
+      }
+      if (reference != null && point.litres < reference - noiseL) {
+        h.usedL += reference - point.litres;
+        reference = point.litres;
+      } else if (reference != null && point.litres > reference + noiseL) {
+        h.filledL += point.litres - reference;
+        reference = point.litres;
+      }
     }
-
-    hour.readings += 1;
-    hour.sumL += r.litres;
-    hour.minL = hour.minL == null ? r.litres : Math.min(hour.minL, r.litres);
-    hour.maxL = hour.maxL == null ? r.litres : Math.max(hour.maxL, r.litres);
-
-    if (reference == null) {
-      reference = r.litres;
-    } else if (r.litres < reference - noiseL) {
-      hour.usedL += reference - r.litres;
-      reference = r.litres;
-    } else if (r.litres > reference + noiseL) {
-      hour.filledL += r.litres - reference;
-      reference = r.litres;
-    }
+    previous = point;
   }
-
   return [...hours.values()]
     .sort((a, b) => a.hourStart.getTime() - b.hourStart.getTime())
-    .map(({ sumL, ...hour }) => ({ ...hour, avgL: hour.readings ? sumL / hour.readings : null }));
+    .map(({ sumL, ...h }) => ({
+      ...h,
+      observedSeconds: Math.min(3600, Math.floor(h.observedSeconds)),
+      avgL: h.readings ? sumL / h.readings : null,
+    }));
 }
 
 export interface DayRollup {
@@ -147,7 +248,10 @@ export interface DayRollup {
  * The leak rule is the one the nightly job always used: average draw across
  * the hours with readings above `leakLPerHour`, on a day with no refill.
  */
-export function rollupDay(hours: HourRollup[], opts: { fillEvents: number; leakLPerHour: number }): DayRollup {
+export function rollupDay(
+  hours: HourRollup[],
+  opts: { fillEvents: number; leakLPerHour: number },
+): DayRollup {
   const withReadings = hours.filter((h) => h.readings > 0);
   const readings = withReadings.reduce((n, h) => n + h.readings, 0);
   const usedL = hours.reduce((sum, h) => sum + h.usedL, 0);
@@ -156,10 +260,14 @@ export function rollupDay(hours: HourRollup[], opts: { fillEvents: number; leakL
 
   const mins = withReadings.map((h) => h.minL!).filter((v) => v != null);
   const maxs = withReadings.map((h) => h.maxL!).filter((v) => v != null);
-  const avgL = readings ? withReadings.reduce((sum, h) => sum + (h.avgL ?? 0) * h.readings, 0) / readings : null;
+  const avgL = readings
+    ? withReadings.reduce((sum, h) => sum + (h.avgL ?? 0) * h.readings, 0) / readings
+    : null;
 
   const leakSuspected =
-    withReadings.length >= 2 && refillEvents === 0 && usedL / withReadings.length > opts.leakLPerHour;
+    hours.reduce((sum, h) => sum + h.observedSeconds, 0) >= 7200 &&
+    refillEvents === 0 &&
+    usedL / (hours.reduce((sum, h) => sum + h.observedSeconds, 0) / 3600) > opts.leakLPerHour;
 
   return {
     usedL,

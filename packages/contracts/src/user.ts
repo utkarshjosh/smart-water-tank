@@ -238,6 +238,8 @@ export const usageHourSchema = z.object({
   max_l: z.number().nullable(),
   avg_l: z.number().nullable(),
   readings: z.number(),
+  /** Time bounded by valid consecutive samples. Absent on older servers. */
+  observed_seconds: z.number().nonnegative().optional(),
 });
 export type UsageHour = z.infer<typeof usageHourSchema>;
 
@@ -251,8 +253,17 @@ export const hourlyUsageResponseSchema = z.object({
   to: isoDateTime,
   /** Only hours with readings; a missing hour had no data, not zero use. */
   hours: z.array(usageHourSchema),
-  totals: z.object({ used_l: z.number().nullable(), filled_l: z.number().nullable() }),
-  today: z.object({ date: isoDate, used_l: z.number().nullable(), filled_l: z.number().nullable() }),
+  totals: z.object({
+    used_l: z.number().nullable(),
+    filled_l: z.number().nullable(),
+    observed_seconds: z.number().nonnegative().optional(),
+  }),
+  today: z.object({
+    date: isoDate,
+    used_l: z.number().nullable(),
+    filled_l: z.number().nullable(),
+    observed_seconds: z.number().nonnegative().optional(),
+  }),
 });
 export type HourlyUsageResponse = z.infer<typeof hourlyUsageResponseSchema>;
 
@@ -314,7 +325,7 @@ export const usageHistoryResponseSchema = z.object({
       leak_days: z.number(),
       days_with_data: z.number(),
       full_days: z.number(),
-    })
+    }),
   ),
   totals: z.object({
     used_l: z.number().nullable(),
@@ -329,9 +340,13 @@ export const usageHistoryResponseSchema = z.object({
     quietest_day: usageDayRefSchema.nullable(),
   }),
   /** Monday = 0. Full days only. */
-  by_weekday: z.array(z.object({ weekday: z.number(), average_l: z.number().nullable(), days: z.number() })),
+  by_weekday: z.array(
+    z.object({ weekday: z.number(), average_l: z.number().nullable(), days: z.number() }),
+  ),
   /** Local hour 0-23; average over hours that had readings. */
-  by_hour: z.array(z.object({ hour: z.number(), average_l: z.number().nullable(), samples: z.number() })),
+  by_hour: z.array(
+    z.object({ hour: z.number(), average_l: z.number().nullable(), samples: z.number() }),
+  ),
 });
 export type UsageHistoryResponse = z.infer<typeof usageHistoryResponseSchema>;
 
@@ -432,7 +447,7 @@ export const insightsResponseSchema = z.object({
       source: z.enum(['template', 'llm']),
       sent_at: isoDateTime,
       useful: z.boolean().nullable(),
-    })
+    }),
   ),
 });
 export type InsightsResponse = z.infer<typeof insightsResponseSchema>;
@@ -452,6 +467,8 @@ export const insightPreviewSchema = z.object({
       source: z.enum(['template', 'llm']),
     })
     .nullable(),
-  candidates: z.array(z.object({ kind: z.string(), score: z.number(), facts: insightFactsSchema, text: z.string() })),
+  candidates: z.array(
+    z.object({ kind: z.string(), score: z.number(), facts: insightFactsSchema, text: z.string() }),
+  ),
 });
 export type InsightPreview = z.infer<typeof insightPreviewSchema>;

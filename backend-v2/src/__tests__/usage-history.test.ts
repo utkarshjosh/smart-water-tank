@@ -1,8 +1,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { autoGroup, bucketKey, byHourOfDay, byWeekday, groupDays, summarize, weekdayOf, type DayInput } from '../lib/usage-history';
+import {
+  autoGroup,
+  bucketKey,
+  byHourOfDay,
+  byWeekday,
+  groupDays,
+  summarize,
+  weekdayOf,
+  type DayInput,
+} from '../lib/usage-history';
 
-const day = (date: string, usedL: number, hoursWithData = 24, extra: Partial<DayInput> = {}): DayInput => ({
+const day = (
+  date: string,
+  usedL: number,
+  hoursWithData = 24,
+  extra: Partial<DayInput> = {},
+): DayInput => ({
   date,
   usedL,
   filledL: usedL,
@@ -26,14 +40,19 @@ test('range length picks the grouping', () => {
 });
 
 test('every bucket in the range is returned, and an empty one says "no data", not zero', () => {
-  const buckets = groupDays([day('2026-10-14', 800), day('2026-10-16', 400)], '2026-10-14', '2026-10-16', 'day');
+  const buckets = groupDays(
+    [day('2026-10-14', 800), day('2026-10-16', 400)],
+    '2026-10-14',
+    '2026-10-16',
+    'day',
+  );
   assert.deepEqual(
     buckets.map((b) => [b.key, b.usedL]),
     [
       ['2026-10-14', 800],
       ['2026-10-15', null],
       ['2026-10-16', 400],
-    ]
+    ],
   );
 });
 
@@ -45,7 +64,7 @@ test('weekly buckets add up their days and are clipped to the range', () => {
     [
       ['2026-10-12', '2026-10-14', '2026-10-18', 1340, 2],
       ['2026-10-19', '2026-10-19', '2026-10-20', 600, 1],
-    ]
+    ],
   );
 });
 
@@ -75,4 +94,22 @@ test('hour-of-day profile averages over hours that had readings', () => {
   assert.equal(h[7].averageL, 100);
   assert.equal(h[3].averageL, 0);
   assert.equal(h[12].averageL, null);
+});
+
+test('daily baselines exclude four-hour outages and respect 23/25-hour local days', () => {
+  const days = [
+    day('2026-10-12', 500, 24),
+    day('2026-10-13', 200, 20),
+    day('2026-10-14', 450, 23.75),
+    day('2026-03-08', 550, 23, { expectedHours: 23 }),
+    day('2026-11-01', 100, 24, { expectedHours: 25 }),
+  ];
+  const summary = summarize(days);
+  assert.equal(summary.fullDays, 3);
+  assert.equal(summary.dailyAverageL, 500);
+  assert.equal(
+    byWeekday([days[1]]).every((d) => d.days === 0),
+    true,
+  );
+  assert.equal(groupDays([days[1]], '2026-10-13', '2026-10-13', 'day')[0].fullDays, 0);
 });

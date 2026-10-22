@@ -12,9 +12,11 @@ export type Fetch = typeof fetch;
 
 export async function rephraseInsight(
   insight: Insight,
-  opts: { fetchImpl?: Fetch; timeoutMs?: number } = {}
+  opts: { fetchImpl?: Fetch; timeoutMs?: number } = {},
 ): Promise<{ text: string; source: 'template' | 'llm' }> {
   const fallback = { text: insight.text, source: 'template' as const };
+  // Numeric validation cannot verify that rewording preserves this qualification.
+  if (insight.kind === 'quiet_night') return fallback;
   if (!env.insightLlmUrl || !env.insightLlmModel) return fallback;
 
   const fetchImpl = opts.fetchImpl ?? fetch;
@@ -34,9 +36,13 @@ export async function rephraseInsight(
             role: 'system',
             content:
               'You reword one short push notification about household water use. Keep every number exactly as given. ' +
-              'Do not add numbers, causes, advice or facts. One sentence, under 140 characters, friendly and plain. Reply with the sentence only.',
+              'Do not add numbers, causes, advice or facts. Preserve the word estimated whenever the sentence describes an estimate. ' +
+              'One sentence, under 140 characters, friendly and plain. Reply with the sentence only.',
           },
-          { role: 'user', content: `Facts: ${JSON.stringify(insight.facts)}\nSentence: ${insight.text}` },
+          {
+            role: 'user',
+            content: `Facts: ${JSON.stringify(insight.facts)}\nSentence: ${insight.text}`,
+          },
         ],
       }),
       signal: AbortSignal.timeout(opts.timeoutMs ?? 8000),

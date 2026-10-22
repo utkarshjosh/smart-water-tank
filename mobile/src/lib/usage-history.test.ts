@@ -3,7 +3,11 @@ import type { UsageHistory } from '@/api/schemas';
 import { bucketSlots, coverageNote } from './usage-history';
 import { describeEvent, formatTimeRange, hourSlots } from './usage-format';
 
-const bucket = (date: string, used: number | null, extra: Partial<UsageHistory['buckets'][number]> = {}) => ({
+const bucket = (
+  date: string,
+  used: number | null,
+  extra: Partial<UsageHistory['buckets'][number]> = {},
+) => ({
   key: date,
   start: date,
   end: date,
@@ -16,7 +20,10 @@ const bucket = (date: string, used: number | null, extra: Partial<UsageHistory['
   ...extra,
 });
 
-const history = (buckets: UsageHistory['buckets'], totals: Partial<UsageHistory['totals']> = {}): UsageHistory => ({
+const history = (
+  buckets: UsageHistory['buckets'],
+  totals: Partial<UsageHistory['totals']> = {},
+): UsageHistory => ({
   device_id: 'esp8266-e3f7f7',
   timezone: 'Asia/Kolkata',
   from: buckets[0].start,
@@ -45,7 +52,11 @@ const history = (buckets: UsageHistory['buckets'], totals: Partial<UsageHistory[
 describe('usage history wording', () => {
   it('a day with no readings stays null (dashed), a partial day says so', () => {
     const slots = bucketSlots(
-      history([bucket('2026-10-17', 638), bucket('2026-10-18', 720, { full_days: 0 }), bucket('2026-10-19', null)])
+      history([
+        bucket('2026-10-17', 638),
+        bucket('2026-10-18', 720, { full_days: 0 }),
+        bucket('2026-10-19', null),
+      ]),
     );
     expect(slots.map((s) => s.usedL)).toEqual([638, 720, null]);
     expect(slots[1].note).toContain('sensor off part of the day');
@@ -59,8 +70,12 @@ describe('usage history wording', () => {
   });
 
   it('explains missing days only when some are missing or partial', () => {
-    expect(coverageNote(history([bucket('2026-10-15', 540), bucket('2026-10-16', 425)]))).toBeNull();
-    expect(coverageNote(history([bucket('2026-10-15', 540), bucket('2026-10-16', null)]))).toMatch(/Readings on 1 of 2 days/);
+    expect(
+      coverageNote(history([bucket('2026-10-15', 540), bucket('2026-10-16', 425)])),
+    ).toBeNull();
+    expect(coverageNote(history([bucket('2026-10-15', 540), bucket('2026-10-16', null)]))).toMatch(
+      /Readings on 1 of 2 days/,
+    );
   });
 });
 
@@ -78,7 +93,11 @@ describe('usage formatting', () => {
   });
 
   it('describes episodes in plain words', () => {
-    expect(describeEvent({ kind: 'fill', volume_l: 480.4, ongoing: false })).toBe('Filled 480 L');
-    expect(describeEvent({ kind: 'draw', volume_l: 60, ongoing: true })).toBe('Using 60 L');
+    expect(describeEvent({ kind: 'fill', volume_l: 480.4, ongoing: false })).toBe(
+      'Refill · about 480 L',
+    );
+    expect(describeEvent({ kind: 'draw', volume_l: 60, ongoing: true })).toBe(
+      'Water drawn · about 60 L',
+    );
   });
 });

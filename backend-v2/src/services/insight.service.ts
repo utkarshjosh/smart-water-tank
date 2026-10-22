@@ -1,8 +1,16 @@
 import { Device, Prisma } from '@prisma/client';
+import { COMPLETE_HOUR_SECONDS } from '../lib/rollup';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http-error';
 import { addDays, localDate, localHour, startOfLocalDay } from '../lib/local-time';
-import { generateInsights, Insight, InsightDay, InsightHour, pickInsight, shouldSendNow } from '../lib/insights';
+import {
+  generateInsights,
+  Insight,
+  InsightDay,
+  InsightHour,
+  pickInsight,
+  shouldSendNow,
+} from '../lib/insights';
 import { timeZoneOf } from './rollup.service';
 import { rephraseInsight } from './insight-llm.service';
 import { sendNotificationToUser } from './fcm.service';
@@ -21,11 +29,18 @@ async function loadInput(device: Device, now: Date) {
   const from = addDays(today, -LOOKBACK_DAYS);
   const [summaries, hourRows] = await Promise.all([
     prisma.dailySummary.findMany({
-      where: { deviceId: device.id, date: { gte: new Date(`${from}T00:00:00Z`), lte: new Date(`${today}T00:00:00Z`) } },
+      where: {
+        deviceId: device.id,
+        date: { gte: new Date(`${from}T00:00:00Z`), lte: new Date(`${today}T00:00:00Z`) },
+      },
     }),
     prisma.hourlyUsage.findMany({
-      where: { deviceId: device.id, hourStart: { gte: startOfLocalDay(from, timeZone), lt: now }, readings: { gt: 0 } },
-      select: { hourStart: true, usedL: true, readings: true },
+      where: {
+        deviceId: device.id,
+        hourStart: { gte: startOfLocalDay(from, timeZone), lt: now },
+        observedSeconds: { gt: 0 },
+      },
+      select: { hourStart: true, usedL: true, readings: true, observedSeconds: true },
     }),
   ]);
   const hoursByDate = new Map<string, number>();
@@ -33,14 +48,29 @@ async function loadInput(device: Device, now: Date) {
   const yesterday = addDays(today, -1);
   for (const h of hourRows) {
     const date = localDate(h.hourStart, timeZone);
-    hoursByDate.set(date, (hoursByDate.get(date) ?? 0) + 1);
-    if (date === today || date === yesterday) {
-      hours.push({ date, hour: localHour(h.hourStart, timeZone), usedL: h.usedL.toNumber(), readings: h.readings });
+    hoursByDate.set(date, (hoursByDate.get(date) ?? 0) + h.observedSeconds / 3600);
+    if ((date === today || date === yesterday) && h.observedSeconds >= COMPLETE_HOUR_SECONDS) {
+      hours.push({
+        date,
+        hour: localHour(h.hourStart, timeZone),
+        usedL: h.usedL.toNumber(),
+        readings: h.readings,
+        observedSeconds: h.observedSeconds,
+      });
     }
   }
   const days: InsightDay[] = summaries.map((s) => {
     const date = s.date.toISOString().slice(0, 10);
-    return { date, usedL: s.totalUsageL.toNumber(), refills: s.refillEvents, hoursWithData: hoursByDate.get(date) ?? 0 };
+    return {
+      date,
+      usedL: s.totalUsageL.toNumber(),
+      refills: s.refillEvents,
+      hoursWithData: hoursByDate.get(date) ?? 0,
+      expectedHours:
+        (startOfLocalDay(addDays(date, 1), timeZone).getTime() -
+          startOfLocalDay(date, timeZone).getTime()) /
+        3600000,
+    };
   });
   return { timeZone, today, input: { today, days, hours } };
 }
@@ -57,7 +87,10 @@ function devicesOf(user: { id: string; tenantId: string | null }) {
   return prisma.device.findMany({
     where: {
       archivedAt: null,
-      OR: [...(user.tenantId ? [{ tenantId: user.tenantId }] : []), { userMappings: { some: { userId: user.id } } }],
+      OR: [
+        ...(user.tenantId ? [{ tenantId: user.tenantId }] : []),
+        { userMappings: { some: { userId: user.id } } },
+      ],
     },
     orderBy: { deviceId: 'asc' },
   });
@@ -67,18 +100,37 @@ function devicesOf(user: { id: string; tenantId: string | null }) {
  * Dry run: what would be sent for this device today, with every candidate.
  * Sends nothing, stores nothing.
  */
-export async function previewInsight(device: Device, opts: { userId?: string; rephrase?: boolean } = {}, now = new Date()) {
+export async function previewInsight(
+  device: Device,
+  opts: { userId?: string; rephrase?: boolean } = {},
+  now = new Date(),
+) {
   const { today, timeZone, input } = await loadInput(device, now);
   const candidates = generateInsights(input);
   const recent = opts.userId ? await recentSent(opts.userId, today) : [];
   const picked = pickInsight(candidates, recent, today);
-  const final = picked && opts.rephrase ? await rephraseInsight(picked) : picked && { text: picked.text, source: 'template' as const };
+  const final =
+    picked && opts.rephrase
+      ? await rephraseInsight(picked)
+      : picked && { text: picked.text, source: 'template' as const };
   return {
     device_id: device.deviceId,
     timezone: timeZone,
     local_date: today,
-    picked: picked && { kind: picked.kind, score: round3(picked.score), facts: picked.facts, text: final!.text, template: picked.text, source: final!.source },
-    candidates: candidates.map((c) => ({ kind: c.kind, score: round3(c.score), facts: c.facts, text: c.text })),
+    picked: picked && {
+      kind: picked.kind,
+      score: round3(picked.score),
+      facts: picked.facts,
+      text: final!.text,
+      template: picked.text,
+      source: final!.source,
+    },
+    candidates: candidates.map((c) => ({
+      kind: c.kind,
+      score: round3(c.score),
+      facts: c.facts,
+      text: c.text,
+    })),
   };
 }
 
@@ -105,13 +157,18 @@ export async function sendDueInsights(now = new Date()): Promise<number> {
   return sent;
 }
 
-async function sendInsightForUser(user: { id: string; tenantId: string | null }, now: Date): Promise<boolean> {
+async function sendInsightForUser(
+  user: { id: string; tenantId: string | null },
+  now: Date,
+): Promise<boolean> {
   const devices = await devicesOf(user);
   if (devices.length === 0) return false;
   // The first tank's zone decides the user's day and waking hours.
   const timeZone = timeZoneOf(devices[0]);
   const today = localDate(now, timeZone);
-  const already = await prisma.dailyInsight.findUnique({ where: { userId_localDate: { userId: user.id, localDate: today } } });
+  const already = await prisma.dailyInsight.findUnique({
+    where: { userId_localDate: { userId: user.id, localDate: today } },
+  });
   if (!shouldSendNow(localHour(now, timeZone), already != null)) return false;
 
   const recent = await recentSent(user.id, today);
@@ -144,7 +201,8 @@ async function sendInsightForUser(user: { id: string; tenantId: string | null },
       },
     });
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return false;
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
+      return false;
     throw error;
   }
 
@@ -158,7 +216,10 @@ async function sendInsightForUser(user: { id: string; tenantId: string | null },
     channel_id: 'aquamind_info_v1',
     as_of: now.toISOString(),
   });
-  await prisma.dailyInsight.update({ where: { id: row.id }, data: { delivered: delivered ? 1 : 0 } });
+  await prisma.dailyInsight.update({
+    where: { id: row.id },
+    data: { delivered: delivered ? 1 : 0 },
+  });
   console.log(`[insights] ${insight.kind} for user ${user.id} (${source}), delivered=${delivered}`);
   return true;
 }
@@ -166,7 +227,10 @@ async function sendInsightForUser(user: { id: string; tenantId: string | null },
 // --- Settings, history, feedback (tenant routes) -------------------------------
 
 export async function getInsightSettings(userId: string) {
-  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { dailyInsightEnabled: true } });
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { id: userId },
+    select: { dailyInsightEnabled: true },
+  });
   return { enabled: user.dailyInsightEnabled };
 }
 

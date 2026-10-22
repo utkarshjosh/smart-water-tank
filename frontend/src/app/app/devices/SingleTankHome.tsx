@@ -3,6 +3,8 @@ import { ArrowUpRight, Bell, ChartLine, GearSix, Warning } from '@phosphor-icons
 import TankLevel from '@/components/TankLevel';
 import { Button } from '@/components/ui/button';
 import { StatusDot } from '@/components/ui/status-dot';
+import { WaterSnapshot } from './[deviceId]/WaterSnapshot';
+import { UsagePanel } from './[deviceId]/UsagePanel';
 import { relativeTime } from '@/lib/time';
 
 interface HomeDevice {
@@ -26,7 +28,7 @@ export function SingleTankHome({ device }: { device: HomeDevice }) {
   const volume = device.has_tank_profile && device.current_volume != null && Number.isFinite(device.current_volume)
     ? Math.round(device.current_volume).toLocaleString() : null;
   const actions = [
-    { icon: ChartLine, title: 'Water history', detail: 'See how your level changes', href: `${base}/history` },
+    { icon: ChartLine, title: 'Water history', detail: 'Understand your daily water use', href: `${base}/history` },
     { icon: Bell, title: 'Alerts', detail: device.active_alert ? 'Review what needs attention' : 'Review your tank notifications', href: `${base}/alerts` },
     { icon: GearSix, title: 'Tank settings', detail: 'Dimensions, thresholds and sharing', href: `${base}/settings` },
   ];
@@ -58,6 +60,8 @@ export function SingleTankHome({ device }: { device: HomeDevice }) {
           </Button>
         </div>
       </section>
+      <WaterSnapshot deviceId={device.id} />
+      <UsagePanel deviceId={device.id} />
       <nav className="single-tank-actions" aria-label="Tank shortcuts">
         {actions.map(({ icon: Icon, title, detail, href }) => (
           <Link key={href} to={href}>
