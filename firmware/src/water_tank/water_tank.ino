@@ -353,6 +353,7 @@ void takeMeasurement() {
 
     // Read temperature
     state.temperatureC = Sensor::readTemperature(state.temperatureValid);
+    state.temperatureFault = Sensor::lastTemperatureFault();
     
     // Read battery voltage
     state.batteryVoltage = Sensor::readBatteryVoltage();

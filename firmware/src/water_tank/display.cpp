@@ -146,9 +146,14 @@ namespace {
     // the clock's "--:--". A field that vanishes when its sensor dies looks
     // exactly like a field that was never designed in, and someone standing
     // at the tank should be able to tell a dead probe from a missing one.
+    //
+    // When the read failed for a known reason, the reason replaces the dashes
+    // ("!P", "!R", "!H" - see Sensor::lastTemperatureFault()), so a probe can
+    // be diagnosed at the tank without a laptop on serial.
     void formatTemperature(char* out, size_t outSize, const SystemState &state) {
         if (!state.temperatureValid) {
-            snprintf(out, outSize, "--C");
+            if (state.temperatureFault) snprintf(out, outSize, "!%c", state.temperatureFault);
+            else snprintf(out, outSize, "--C");
             return;
         }
         snprintf(out, outSize, "%.0fC", state.temperatureC);

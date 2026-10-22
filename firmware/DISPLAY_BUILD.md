@@ -154,13 +154,16 @@ after `BACKLIGHT_TIMEOUT_MS` (30s, or 0 to disable).
 |---|---|---|
 | Reading | `Tank 84%` + status | `1260L 27C  14:32` |
 | Network | `-58dBm` + status | IP address |
-| Device | `fw 1.1.6-display` | device ID |
+| Device | `fw 1.1.7-display` | device ID |
 
 The temperature is whole degrees with no unit symbol — at 16 columns a decimal
 place buys a number nobody acts on, and the HD44780's degree glyph is not
 portable across the ROM variants these panels ship with. A disconnected DS18B20
 prints `--C`, matching the clock's `--:--`: a field that vanishes when its
-sensor dies looks exactly like a field that was never designed in. On a tank
+sensor dies looks exactly like a field that was never designed in. When three
+read attempts all fail for a known reason, the reason replaces the dashes:
+`!P` nothing answered on the bus, `!R` the sensor answered but every read was
+corrupt, `!H` it returned 85C because it reset mid-read. On a tank
 large enough that the volume, temperature and clock cannot all fit, the
 temperature is dropped whole rather than truncated.
 
