@@ -8,7 +8,7 @@ import { queryKeys } from '@/api/queries';
 import { haptics } from '@/feedback/haptics';
 import { applyAlertToWidget } from '@/push/background';
 import { CHANNELS } from '@/push/channels';
-import { parseAlertPayload } from '@/push/payload';
+import { parseNotificationPayload } from '@/push/payload';
 
 /**
  * Foreground push handling.
@@ -22,15 +22,16 @@ export function usePushMessages(enabled: boolean): void {
     if (!enabled) return;
 
     const unsubscribeMessages = onMessage(getMessaging(getApp()), async (message) => {
-      const payload = parseAlertPayload(message.data);
+      const payload = parseNotificationPayload(message.data);
       if (!payload) return;
 
-      await applyAlertToWidget(message.data);
+      if (payload.type !== 'daily_insight') await applyAlertToWidget(message.data);
 
       // A critical alert arriving while the user is looking at the app is a
       // state change worth one haptic. Nothing quieter gets one.
-      if (payload.severity === 'critical') haptics.warning();
+      if (payload.type !== 'daily_insight' && payload.severity === 'critical') haptics.warning();
 
+      await queryClient.invalidateQueries({ queryKey: ['insights'] });
       await queryClient.invalidateQueries({ queryKey: queryKeys.alerts });
       await queryClient.invalidateQueries({ queryKey: queryKeys.devices });
 

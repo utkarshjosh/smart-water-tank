@@ -43,3 +43,21 @@ export function tankPatchFromAlert(payload: AlertPayload): Partial<WidgetTank> &
     alert: payload.type === 'leak_detected' ? 'leak' : payload.type === 'tank_low' ? 'low' : null,
   };
 }
+
+
+/** Daily insights are informational; they must never change tank/widget state. */
+export const insightPayloadSchema = z.object({
+  type: z.literal('daily_insight'),
+  insight_id: z.string().min(1),
+  device_id: z.string().min(1),
+  device_name: z.string().default('Your tank'),
+  kind: z.string().min(1),
+  channel_id: z.string().min(1),
+  as_of: z.string().optional(),
+});
+export type InsightPayload = z.infer<typeof insightPayloadSchema>;
+
+export function parseNotificationPayload(data: unknown): AlertPayload | InsightPayload | null {
+  const insight = insightPayloadSchema.safeParse(data);
+  return insight.success ? insight.data : parseAlertPayload(data);
+}

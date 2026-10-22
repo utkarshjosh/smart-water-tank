@@ -1,0 +1,227 @@
+.water-chart {
+  min-width: 0;
+  --water-bar: #278c83;
+}
+.water-chart--filled {
+  --water-bar: #397dc4;
+}
+.water-chart-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+.water-chart-toolbar [role='tablist'] button {
+  height: 36px;
+  font-size: 11px;
+  padding: 0 12px;
+}
+.water-chart-unit {
+  font-size: 11px;
+  color: hsl(var(--ink-3));
+}
+.water-chart-frame {
+  display: flex;
+  gap: 10px;
+}
+.water-chart-axis {
+  flex: 0 0 34px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  text-align: right;
+  font-size: 10px;
+  line-height: 1;
+  color: hsl(var(--ink-3));
+  font-variant-numeric: tabular-nums;
+}
+.water-chart-plot {
+  display: flex;
+  flex: 1;
+  position: relative;
+  align-items: flex-end;
+  gap: clamp(2px, 0.65vw, 8px);
+  min-width: 0;
+  touch-action: pan-y;
+  cursor: crosshair;
+  outline-offset: 5px;
+}
+.water-chart-grid {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+}
+.water-chart-grid i {
+  border-top: 1px dashed hsl(var(--hairline));
+}
+.water-chart-column {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.water-chart-column.is-active::before {
+  content: '';
+  position: absolute;
+  inset: -7px -2px 0;
+  border-radius: 6px 6px 0 0;
+  background: hsl(var(--ink-1) / 0.035);
+}
+.water-chart-bar {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: 44px;
+  border-radius: 5px 5px 0 0;
+  background: var(--water-bar);
+  opacity: 0.66;
+  transition: opacity 120ms;
+}
+.is-active .water-chart-bar {
+  opacity: 1;
+}
+.water-chart-bar.is-alert {
+  background: hsl(var(--critical));
+}
+.water-chart-gap {
+  width: 100%;
+  max-width: 44px;
+  height: 5px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(
+    125deg,
+    hsl(var(--hairline)),
+    hsl(var(--hairline)) 2px,
+    transparent 2px,
+    transparent 4px
+  );
+}
+.water-chart-ticks {
+  display: flex;
+  gap: clamp(2px, 0.65vw, 8px);
+  margin: 10px 0 18px 44px;
+  font-size: 10px;
+  color: hsl(var(--ink-3));
+}
+.water-chart-ticks > span {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: visible;
+}
+.water-chart-readout {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: hsl(var(--surface-sunk));
+}
+.water-chart-readout > div {
+  display: grid;
+  gap: 3px;
+}
+.water-chart-readout > div > span {
+  font-size: 11px;
+  color: hsl(var(--ink-3));
+}
+.water-chart-readout strong {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+}
+.water-chart-readout small {
+  font-size: 11px;
+  font-weight: 400;
+  color: hsl(var(--ink-3));
+  letter-spacing: 0;
+}
+.water-chart-hint {
+  max-width: 48%;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: right;
+  color: hsl(var(--ink-3));
+}
+.water-chart-coverage {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 11px;
+  color: hsl(var(--ink-3));
+}
+.water-chart-coverage i {
+  width: 12px;
+  height: 5px;
+  background: repeating-linear-gradient(
+    125deg,
+    hsl(var(--hairline)),
+    hsl(var(--hairline)) 2px,
+    transparent 2px,
+    transparent 4px
+  );
+}
+.water-chart-empty {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 9px;
+  padding: 24px 16px;
+  text-align: center;
+  color: hsl(var(--ink-3));
+  font-size: 12px;
+  line-height: 1.7;
+}
+.water-chart-empty strong {
+  font-size: 15px;
+  color: hsl(var(--ink-2));
+  font-weight: 550;
+}
+.water-chart-empty-mark {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  background: hsl(var(--surface-sunk));
+  border-radius: 50%;
+  font-size: 28px;
+  letter-spacing: 3px;
+}
+@media (max-width: 480px) {
+  .water-chart-readout {
+    padding: 12px;
+  }
+  .water-chart-hint {
+    max-width: 40%;
+    font-size: 10px;
+  }
+}
+
+.water-chart-zero {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  padding: 24px 16px;
+  border-radius: 12px;
+  background: hsl(var(--surface-sunk));
+  color: hsl(var(--ink-3));
+  text-align: center;
+  font-size: 12px;
+}
+
+.water-chart-zero strong {
+  color: hsl(var(--ink-2));
+  font-size: 14px;
+  font-weight: 500;
+}

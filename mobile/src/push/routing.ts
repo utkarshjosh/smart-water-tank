@@ -4,7 +4,7 @@ import { getInitialNotification, getMessaging } from '@react-native-firebase/mes
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 
-import { parseAlertPayload } from '@/push/payload';
+import { parseNotificationPayload } from '@/push/payload';
 
 /**
  * Opening the app from a notification lands on the tank it is about, not the
@@ -24,7 +24,7 @@ export function useNotificationRouting(enabled: boolean): void {
     let cancelled = false;
 
     const open = (data: unknown) => {
-      const payload = parseAlertPayload(data);
+      const payload = parseNotificationPayload(data);
       if (!payload || cancelled) return;
       router.push(`/device/${payload.device_id}`);
     };

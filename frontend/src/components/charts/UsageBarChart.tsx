@@ -1,69 +1,20 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import {
+  waterChartModel,
+  preferredWaterMetric,
+  type WaterChartSlot,
+  type WaterChartMetric,
+} from '@aquamind/contracts';
+import { SegmentedControl } from '@/components/ui/segmented-control';
 import { formatLitres } from '@/lib/usage-format';
+import './water-chart.css';
 
-/**
- * Litres per time slot as bars: water used above the baseline, water added
- * below it, both on ONE scale. When fills dwarf use (an hourly view with a
- * refill in it) they become labelled markers instead - see MARKER_RATIO.
- * Shared by the hourly, daily and history charts.
- *
- * Reading it should need no guessing:
- * - the larger bars carry their number;
- * - pointing at, tapping or arrow-keying to a slot selects it at once and the
- *   line under the chart spells it out ("1 PM - 2 PM · 86 L used · 120 L
- *   added"). No native tooltip: those appear after a delay and never on touch.
- * - a slot with no readings is drawn dashed, so "no data" never looks like
- *   "no use".
- *
- * Plain DOM, no chart library, so the Overview tab still doesn't load the
- * chart bundle.
- */
+export type UsageSlot = WaterChartSlot;
 
-export interface UsageSlot {
-  key: string;
-  /** Short axis label, e.g. "1 PM" or "18". */
-  tick: string;
-  /** Full label for the detail line, e.g. "1 PM – 2 PM" or "Sat 18 Oct". */
-  title: string;
-  usedL: number | null;
-  /** Omit for charts that don't track fills. */
-  filledL?: number | null;
-  /** Extra words for the detail line, e.g. "2 refills" or "leak suspected". */
-  note?: string;
-  /** Draw this slot's used bar in the alert colour. */
-  alert?: boolean;
-}
-
-/**
- * Above this ratio of the biggest fill to the biggest use, fills are drawn
- * as labelled markers instead of bars. A refill pours 300-600 L into one hour
- * while normal use is 20-90 L; on one shared scale the green bars would
- * shrink to slivers. Days, weeks and months sit well under it - water in and
- * out roughly balance - so they get true bars on one scale.
- */
-const MARKER_RATIO = 2.5;
-const LABEL_PAD = 14; // room above and below the bars for their numbers
-
-type Layout = 'used-only' | 'shared' | 'markers';
-
-/** Runs of consecutive slots with water added: one fill, one marker. */
-function fillRuns(slots: UsageSlot[]): Array<{ from: number; to: number; litres: number }> {
-  const runs: Array<{ from: number; to: number; litres: number }> = [];
-  slots.forEach((s, i) => {
-    const litres = s.filledL ?? 0;
-    if (litres <= 0) return;
-    const last = runs[runs.length - 1];
-    if (last && last.to === i - 1) {
-      last.to = i;
-      last.litres += litres;
-    } else runs.push({ from: i, to: i, litres });
-  });
-  return runs;
-}
-
+/** A single, labelled ruler. Used water and refills each get a clear view. */
 export function UsageBarChart({
   slots,
-  height = 150,
+  height = 170,
   ariaLabel,
   showFills = true,
   tickEvery,
@@ -72,173 +23,150 @@ export function UsageBarChart({
   height?: number;
   ariaLabel: string;
   showFills?: boolean;
-  /** Label every nth slot on the axis; default fits about six labels. */
   tickEvery?: number;
 }) {
-  const lastWithData = useMemo(() => {
-    for (let i = slots.length - 1; i >= 0; i--) if (slots[i].usedL != null) return i;
-    return slots.length - 1;
-  }, [slots]);
-  const [selected, setSelected] = useState<number | null>(null);
-  const active = selected ?? lastWithData;
-  // A new window (Today vs 24h) means old indexes point at different slots.
-  const slotsKey = slots.map((s) => s.key).join();
-  useEffect(() => setSelected(null), [slotsKey]);
-
-  const plot = useRef<HTMLDivElement>(null);
-  const maxUp = Math.max(1, ...slots.map((s) => s.usedL ?? 0));
-  const maxDown = Math.max(1, ...slots.map((s) => s.filledL ?? 0));
-  const hasFills = showFills && slots.some((s) => (s.filledL ?? 0) > 0);
-  const layout: Layout = !hasFills ? 'used-only' : maxDown / maxUp > MARKER_RATIO ? 'markers' : 'shared';
-  // One ruler for both directions: the height splits in proportion to the
-  // biggest use and the biggest fill, so 100 L is the same height above and
-  // below the line and no space is held for bars that never come.
-  const upHeight = layout === 'shared' ? (height * maxUp) / (maxUp + maxDown) : height;
-  const downHeight = layout === 'shared' ? height - upHeight : 0;
-  const runs = layout === 'markers' ? fillRuns(slots) : [];
-  const every = tickEvery ?? Math.max(1, Math.ceil(slots.length / 6));
-  // Numbers only where they fit: on bars at least a fifth of the tallest, and
-  // past 24 slots (a month of days) only on the tallest - plus, always, the
-  // selected one.
-  const labelFrom = slots.length > 24 ? 1 : 0.2;
-
-  const pick = (event: PointerEvent<HTMLDivElement>) => {
-    const box = plot.current?.getBoundingClientRect();
-    if (!box || slots.length === 0) return;
-    const i = Math.floor(((event.clientX - box.left) / box.width) * slots.length);
-    setSelected(Math.min(slots.length - 1, Math.max(0, i)));
-  };
-  const onKey = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'ArrowLeft') setSelected(Math.max(0, active - 1));
-    else if (event.key === 'ArrowRight') setSelected(Math.min(slots.length - 1, active + 1));
-    else return;
-    event.preventDefault();
-  };
-
-  if (slots.length === 0) return null;
+  const [choice, setChoice] = useState<WaterChartMetric | null>(null);
+  const metric = showFills ? (choice ?? preferredWaterMetric(slots)) : 'used';
+  const model = waterChartModel(slots, metric);
+  const slotsKey = slots.map((s) => s.key).join('|');
+  const [selection, setSelection] = useState<{ key: string; index: number } | null>(null);
+  const active =
+    selection?.key === slotsKey
+      ? Math.min(selection.index, slots.length - 1)
+      : model.peak >= 0
+        ? model.peak
+        : model.latest;
   const current = slots[active];
-
+  const amount = model.values[active];
+  const plot = useRef<HTMLDivElement>(null);
+  const select = (index: number) => setSelection({ key: slotsKey, index });
+  const pick = (e: PointerEvent<HTMLDivElement>) => {
+    const box = plot.current?.getBoundingClientRect();
+    if (box?.width)
+      select(
+        Math.min(
+          slots.length - 1,
+          Math.max(0, Math.floor(((e.clientX - box.left) / box.width) * slots.length))
+        )
+      );
+  };
+  const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'ArrowLeft') select(Math.max(0, active - 1));
+    else if (e.key === 'ArrowRight') select(Math.min(slots.length - 1, active + 1));
+    else if (e.key === 'Home') select(0);
+    else if (e.key === 'End') select(slots.length - 1);
+    else return;
+    e.preventDefault();
+  };
+  if (!slots.length) return <p className="water-chart-empty">Waiting for your first readings.</p>;
+  const every = tickEvery ?? Math.max(1, Math.ceil(slots.length / 5));
+  const unit = metric === 'used' ? 'used' : 'added';
+  const detail = current
+    ? `${current.title} · ${amount == null ? 'No readings' : `${formatLitres(amount)} ${unit}`}`
+    : 'No readings in this period';
   return (
-    <div>
-      <div
-        ref={plot}
-        role="slider"
-        tabIndex={0}
-        aria-label={ariaLabel}
-        aria-valuemin={0}
-        aria-valuemax={slots.length - 1}
-        aria-valuenow={active}
-        aria-valuetext={current ? detailText(current, hasFills) : undefined}
-        onPointerMove={pick}
-        onPointerDown={pick}
-        onKeyDown={onKey}
-        className="relative cursor-crosshair touch-pan-y select-none outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
-        style={{ height: height + LABEL_PAD * (layout === 'shared' ? 2 : 1) }}
-      >
-        {/* Room above the tallest bar (and below the deepest) for numbers. */}
-        <div className="absolute inset-x-0 flex gap-[2px]" style={{ height, top: LABEL_PAD }}>
-          {slots.map((slot, i) => {
-            const up = slot.usedL == null ? null : slot.usedL / maxUp;
-            const down = (slot.filledL ?? 0) / maxDown;
-            const isActive = i === active;
-            return (
-              <div key={slot.key} className="relative flex h-full flex-1 flex-col">
-                {isActive && <div aria-hidden className="absolute inset-0 -mx-[1px] rounded-sm bg-ink-1/[0.05]" />}
-                <div className="relative flex items-end" style={{ height: upHeight }}>
-                  {up == null ? (
-                    <div className="h-full w-full rounded-sm border border-dashed border-hairline" />
+    <div className={`water-chart water-chart--${metric}`}>
+      <div className="water-chart-toolbar">
+        <span className="water-chart-unit">Litres {unit}</span>
+        {showFills && (
+          <SegmentedControl
+            aria-label={`${ariaLabel}: measure`}
+            value={metric}
+            onChange={(metric) => {
+              setChoice(metric);
+              setSelection(null);
+            }}
+            options={[
+              { value: 'used', label: 'Water used' },
+              { value: 'filled', label: 'Refills' },
+            ]}
+          />
+        )}
+      </div>
+      {model.recorded === 0 ? (
+        <div className="water-chart-empty" style={{ minHeight: height }}>
+          <span className="water-chart-empty-mark" aria-hidden>
+            ···
+          </span>
+          <strong>No readings in this period</strong>
+          <span>
+            Usage will appear after the sensor reports. Missing readings do not mean zero use.
+          </span>
+        </div>
+      ) : model.total === 0 ? (
+        <div className="water-chart-zero" role="status">
+          <strong>{metric === 'used' ? 'No measurable use recorded' : 'No refill recorded'}</strong>
+          <span>During the periods with valid readings.</span>
+        </div>
+      ) : (
+        <>
+          <div className="water-chart-frame" style={{ height }}>
+            <div className="water-chart-axis" aria-hidden>
+              {[model.maximum, model.maximum / 2, 0].map((v) => (
+                <span key={v}>{v.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+              ))}
+            </div>
+            <div
+              ref={plot}
+              role="slider"
+              tabIndex={0}
+              aria-label={`${ariaLabel}: ${unit}`}
+              aria-valuemin={0}
+              aria-valuemax={slots.length - 1}
+              aria-valuenow={Math.max(0, active)}
+              aria-valuetext={detail}
+              onPointerMove={pick}
+              onPointerDown={pick}
+              onKeyDown={onKey}
+              className="water-chart-plot"
+            >
+              <div className="water-chart-grid" aria-hidden>
+                <i />
+                <i />
+                <i />
+              </div>
+              {slots.map((s, i) => (
+                <div
+                  key={s.key}
+                  className={`water-chart-column ${active === i ? 'is-active' : ''}`}
+                  aria-hidden
+                >
+                  {model.values[i] == null ? (
+                    <span className="water-chart-gap" />
                   ) : (
-                    <div
-                      className={`relative w-full rounded-t-[3px] ${slot.alert ? 'bg-critical' : 'bg-series-volume'} ${
-                        isActive ? '' : 'opacity-90'
-                      }`}
-                      style={{ height: `${Math.max(slot.usedL ? 2 : 1, up * 100)}%` }}
-                    >
-                      {(up >= labelFrom || isActive) && slot.usedL ? (
-                        <span className="absolute inset-x-[-8px] -top-[15px] text-center text-[10px] leading-none text-ink-2 tnum">
-                          {Math.round(slot.usedL)}
-                        </span>
-                      ) : null}
-                    </div>
+                    <span
+                      className={`water-chart-bar ${s.alert && metric === 'used' ? 'is-alert' : ''}`}
+                      style={{
+                        height: `${Math.max(model.values[i]! > 0 ? 1.5 : 0.6, (model.values[i]! / model.maximum) * 100)}%`,
+                      }}
+                    />
                   )}
                 </div>
-                {layout === 'shared' && (
-                  <div className="relative border-t border-hairline" style={{ height: downHeight }}>
-                    {down > 0 && (
-                      <div
-                        className="relative w-full rounded-b-[3px] bg-brand"
-                        style={{ height: `${Math.max(2, down * 100)}%` }}
-                      >
-                        {(down >= labelFrom || isActive) && (
-                          <span className="absolute inset-x-[-8px] -bottom-[13px] text-center text-[10px] leading-none text-ink-2 tnum">
-                            {Math.round(slot.filledL!)}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      {layout === 'markers' && (
-        // Fills as markers: a blue line under the hours the tank was filling,
-        // with the litres added. Not a bar - its length is time, not volume.
-        <div className="relative mt-1 h-[22px]" aria-hidden>
-          {runs.map((run) => (
-            <div
-              key={run.from}
-              className="absolute top-0 flex flex-col items-center"
-              style={{
-                left: `${(run.from / slots.length) * 100}%`,
-                width: `${((run.to - run.from + 1) / slots.length) * 100}%`,
-              }}
-            >
-              <span className="h-[3px] w-full rounded-full bg-brand" />
-              <span className="mt-0.5 whitespace-nowrap text-[10px] font-medium leading-none text-brand tnum">
-                +{Math.round(run.litres)}
-              </span>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
+          <div className="water-chart-ticks" aria-hidden>
+            {slots.map((s, i) => (
+              <span key={s.key}>{i % every === 0 ? s.tick : ''}</span>
+            ))}
+          </div>
+          <div className="water-chart-readout" aria-live="polite">
+            <div>
+              <span>{current?.title ?? 'Select a bar'}</span>
+              <strong className="tnum">
+                {amount == null ? 'No readings' : formatLitres(amount)}
+                {amount != null && <small> {unit}</small>}
+              </strong>
+            </div>
+            <span className="water-chart-hint">{current?.note || 'Tap a bar to explore'}</span>
+          </div>
+        </>
       )}
-      <div className="mt-1 flex gap-[2px] text-[11px] text-ink-3" aria-hidden>
-        {slots.map((slot, i) => (
-          <span key={slot.key} className="flex-1 overflow-visible whitespace-nowrap">
-            {i % every === 0 ? slot.tick : ''}
-          </span>
-        ))}
-      </div>
-      <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-hairline pt-2.5">
-        <p className="text-label text-ink-1" aria-live="polite">
-          {current && detailText(current, hasFills)}
+      {model.total !== 0 && model.recorded > 0 && model.recorded < slots.length && (
+        <p className="water-chart-coverage">
+          <i aria-hidden /> Gaps show hours or days without readings.
         </p>
-        <span className="flex items-center gap-3 text-caption text-ink-3">
-          <span className="flex items-center gap-1.5">
-            <i aria-hidden className="inline-block h-2.5 w-2.5 rounded-sm bg-series-volume" /> Used
-          </span>
-          {layout === 'shared' && (
-            <span className="flex items-center gap-1.5">
-              <i aria-hidden className="inline-block h-2.5 w-2.5 rounded-sm bg-brand" /> Added (tank filling)
-            </span>
-          )}
-          {layout === 'markers' && (
-            <span className="flex items-center gap-1.5">
-              <i aria-hidden className="inline-block h-[3px] w-3 rounded-full bg-brand" /> Tank filling, litres added
-            </span>
-          )}
-        </span>
-      </div>
+      )}
     </div>
   );
-}
-
-function detailText(slot: UsageSlot, withFills: boolean): string {
-  if (slot.usedL == null) return `${slot.title} · no readings`;
-  const parts = [`${slot.title}`, `${formatLitres(slot.usedL)} used`];
-  if (withFills && slot.filledL) parts.push(`${formatLitres(slot.filledL)} added`);
-  if (slot.note) parts.push(slot.note);
-  return parts.join(' · ');
 }

@@ -1,4 +1,4 @@
-import type { Reading } from './rollup';
+import { DEFAULT_READING_GAP_MS, prepareReadings, type Reading } from './rollup';
 
 /**
  * Finds fill and draw episodes in a run of readings: stretches where the level
@@ -34,15 +34,22 @@ export interface EpisodeOptions {
   noiseL: number;
   /** A pause longer than this ends the episode. */
   maxGapMs: number;
+  /** Missing telemetry resets the level reference, independently of idle time. */
+  maxReadingGapMs?: number;
   /** Smaller episodes are dropped: a 3 L draw is a glass of water, not an event. */
   minDrawL: number;
   minFillL: number;
 }
 
 /** Thresholds scaled to the tank, like the noise floor. */
-export function episodeOptions(capacityL: number | null, noiseL: number): EpisodeOptions {
+export function episodeOptions(
+  capacityL: number | null,
+  noiseL: number,
+  maxReadingGapMs = DEFAULT_READING_GAP_MS,
+): EpisodeOptions {
   return {
     noiseL,
+    maxReadingGapMs,
     maxGapMs: 30 * 60 * 1000,
     minDrawL: Math.max(10, (capacityL ?? 0) * 0.02),
     minFillL: Math.max(20, (capacityL ?? 0) * 0.03),
@@ -63,8 +70,12 @@ export function detectEpisodes(
   readings: Reading[],
   before: Reading | null,
   opts: EpisodeOptions,
-  now: Date = new Date()
+  now: Date = new Date(),
 ): Episode[] {
+  readings = prepareReadings(
+    readings.filter((r) => r.at <= now),
+    opts.maxReadingGapMs ?? DEFAULT_READING_GAP_MS,
+  );
   const closed: Open[] = [];
   let open = null as Open | null;
   let reference = before?.litres ?? null;
@@ -72,6 +83,18 @@ export function detectEpisodes(
 
   for (let i = 0; i < readings.length; i++) {
     const r = readings[i];
+    const gap = previous ? r.at.getTime() - previous.at.getTime() : 0;
+    if (
+      r.breakBefore ||
+      previous?.breakAfter ||
+      (previous && (gap <= 0 || gap > (opts.maxReadingGapMs ?? DEFAULT_READING_GAP_MS)))
+    ) {
+      if (open) closed.push(open);
+      open = null;
+      reference = r.litres;
+      previous = r;
+      continue;
+    }
     if (open && r.at.getTime() - open.endedAt.getTime() > opts.maxGapMs) {
       closed.push(open);
       open = null;
@@ -123,8 +146,24 @@ export function detectEpisodes(
         volumeL,
         rateLPerMin: volumeL / minutes,
         readings: e.lastIndex - e.firstIndex + 1,
-        ongoing: e === stillOpen && now.getTime() - e.endedAt.getTime() <= opts.maxGapMs,
+        ongoing:
+          e === stillOpen &&
+          !previous?.breakAfter &&
+          e.endedAt.getTime() === previous?.at.getTime() &&
+          now.getTime() - e.endedAt.getTime() <= (opts.maxReadingGapMs ?? DEFAULT_READING_GAP_MS),
       };
     })
     .filter((e) => e.volumeL >= (e.kind === 'draw' ? opts.minDrawL : opts.minFillL));
+}
+
+/** Cached ongoing flags expire even when an offline device stops its rollup job. */
+export function episodeIsCurrent(
+  ongoing: boolean,
+  endedAt: Date,
+  online: boolean,
+  now: Date,
+  maxGapMs = DEFAULT_READING_GAP_MS,
+): boolean {
+  const age = now.getTime() - endedAt.getTime();
+  return ongoing && online && age >= 0 && age <= maxGapMs;
 }

@@ -1,3 +1,6 @@
+import { env } from '../config/env';
+import { COMPLETE_HOUR_SECONDS, continuityGapMs } from '../lib/rollup';
+import { episodeIsCurrent } from '../lib/episodes';
 import { Device } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http-error';
@@ -11,6 +14,7 @@ import {
   byWeekday,
   daysBetween,
   groupDays,
+  isCompleteDay,
   summarize,
 } from '../lib/usage-history';
 import { capacityOf, timeZoneOf } from './rollup.service';
@@ -25,7 +29,8 @@ import { capacityOf, timeZoneOf } from './rollup.service';
 const MAX_DAYS = 365;
 
 const num = (v: { toNumber(): number } | null | undefined) => (v == null ? null : v.toNumber());
-const round = (v: number | null, digits = 1) => (v == null ? null : Math.round(v * 10 ** digits) / 10 ** digits);
+const round = (v: number | null, digits = 1) =>
+  v == null ? null : Math.round(v * 10 ** digits) / 10 ** digits;
 
 export interface UsageDay {
   date: string;
@@ -48,31 +53,56 @@ export async function getDeviceUsage(device: Device, days: number, now = new Dat
   const firstDay = addDays(today, -(days - 1));
   const from = startOfLocalDay(firstDay, timeZone);
 
-  const [profile, summaries] = await Promise.all([
+  const [profile, summaries, coverage] = await Promise.all([
     prisma.tankProfile.findUnique({ where: { deviceId: device.id } }),
     prisma.dailySummary.findMany({
       where: {
         deviceId: device.id,
-        date: { gte: new Date(`${firstDay}T00:00:00.000Z`), lte: new Date(`${today}T00:00:00.000Z`) },
+        date: {
+          gte: new Date(`${firstDay}T00:00:00.000Z`),
+          lte: new Date(`${today}T00:00:00.000Z`),
+        },
       },
       orderBy: { date: 'asc' },
+    }),
+    prisma.hourlyUsage.findMany({
+      where: {
+        deviceId: device.id,
+        hourStart: { gte: from, lte: now },
+        observedSeconds: { gt: 0 },
+      },
+      select: { hourStart: true, observedSeconds: true },
     }),
   ]);
   const capacityL = capacityOf(profile);
 
-  const usageDays: UsageDay[] = summaries.map((s) => ({
-    date: s.date.toISOString().slice(0, 10),
-    used_l: round(s.totalUsageL.toNumber()),
-    min_l: round(num(s.minVolumeL)),
-    avg_l: round(num(s.avgVolumeL)),
-    max_l: round(num(s.maxVolumeL)),
-    refill_events: s.refillEvents,
-    leak_suspected: s.leakSuspected,
-    readings: s.readings,
-  }));
+  const dayCoverage = new Map<string, number>();
+  for (const h of coverage) {
+    const day = localDate(h.hourStart, timeZone);
+    dayCoverage.set(day, (dayCoverage.get(day) ?? 0) + h.observedSeconds);
+  }
+  const usageDays: UsageDay[] = summaries
+    .filter((s) => (dayCoverage.get(s.date.toISOString().slice(0, 10)) ?? 0) > 0)
+    .map((s) => ({
+      date: s.date.toISOString().slice(0, 10),
+      used_l: round(s.totalUsageL.toNumber()),
+      min_l: round(num(s.minVolumeL)),
+      avg_l: round(num(s.avgVolumeL)),
+      max_l: round(num(s.maxVolumeL)),
+      refill_events: s.refillEvents,
+      leak_suspected: s.leakSuspected,
+      readings: s.readings,
+    }));
 
   // Today is still running, so it is left out of the daily average.
-  const complete = usageDays.filter((d) => d.date !== today);
+  const complete = usageDays.filter(
+    (d) =>
+      d.date !== today &&
+      isCompleteDay({
+        hoursWithData: (dayCoverage.get(d.date) ?? 0) / 3600,
+        expectedHours: expectedDayHours(d.date, timeZone),
+      }),
+  );
   const totalUsed = usageDays.reduce((sum, d) => sum + (d.used_l ?? 0), 0);
   const completeUsed = complete.reduce((sum, d) => sum + (d.used_l ?? 0), 0);
 
@@ -84,7 +114,7 @@ export async function getDeviceUsage(device: Device, days: number, now = new Dat
     capacity_l: round(capacityL),
     days: usageDays,
     totals: {
-      used_l: round(totalUsed),
+      used_l: usageDays.length ? round(totalUsed) : null,
       daily_average_l: complete.length ? round(completeUsed / complete.length) : null,
       refill_events: usageDays.reduce((sum, d) => sum + d.refill_events, 0),
       leak_days: usageDays.filter((d) => d.leak_suspected).length,
@@ -112,26 +142,33 @@ export async function getHourlyUsage(device: Device, range: HourlyRange, now = n
       : // The 24 local hours ending with the current one.
         localHourStart(new Date(now.getTime() - 23 * HOUR), timeZone);
 
+  const todayStart = startOfLocalDay(today, timeZone);
   const rows = await prisma.hourlyUsage.findMany({
-    where: { deviceId: device.id, hourStart: { gte: from, lte: now } },
+    where: {
+      deviceId: device.id,
+      hourStart: { gte: from < todayStart ? from : todayStart, lte: now },
+    },
     orderBy: { hourStart: 'asc' },
   });
-
-  const hours = rows.map((r) => ({
+  const mapped = rows.map((r) => ({
     hour_start: r.hourStart.toISOString(),
-    used_l: round(r.usedL.toNumber()),
-    filled_l: round(r.filledL.toNumber()),
+    used_l: r.observedSeconds > 0 ? round(r.usedL.toNumber()) : null,
+    filled_l: r.observedSeconds > 0 ? round(r.filledL.toNumber()) : null,
     min_l: round(num(r.minL)),
     max_l: round(num(r.maxL)),
     avg_l: round(num(r.avgL)),
     readings: r.readings,
+    observed_seconds: r.observedSeconds,
   }));
-
-  const todaySummary = await prisma.dailySummary.findUnique({
-    where: { deviceId_date: { deviceId: device.id, date: new Date(`${today}T00:00:00.000Z`) } },
-    select: { totalUsageL: true, totalFilledL: true },
-  });
-
+  const hours = mapped.filter((h) => Date.parse(h.hour_start) >= from.getTime());
+  const sum = (list: typeof mapped) => {
+    const usable = list.filter((h) => h.observed_seconds > 0);
+    return {
+      used_l: usable.length ? round(usable.reduce((s, h) => s + (h.used_l ?? 0), 0)) : null,
+      filled_l: usable.length ? round(usable.reduce((s, h) => s + (h.filled_l ?? 0), 0)) : null,
+      observed_seconds: usable.reduce((s, h) => s + h.observed_seconds, 0),
+    };
+  };
   return {
     device_id: device.deviceId,
     timezone: timeZone,
@@ -139,14 +176,10 @@ export async function getHourlyUsage(device: Device, range: HourlyRange, now = n
     from: from.toISOString(),
     to: now.toISOString(),
     hours,
-    totals: {
-      used_l: round(hours.reduce((sum, h) => sum + (h.used_l ?? 0), 0)),
-      filled_l: round(hours.reduce((sum, h) => sum + (h.filled_l ?? 0), 0)),
-    },
+    totals: sum(hours),
     today: {
       date: today,
-      used_l: todaySummary ? round(todaySummary.totalUsageL.toNumber()) : 0,
-      filled_l: todaySummary ? round(todaySummary.totalFilledL.toNumber()) : 0,
+      ...sum(mapped.filter((h) => Date.parse(h.hour_start) >= todayStart.getTime())),
     },
   };
 }
@@ -171,6 +204,14 @@ export async function getTankEvents(device: Device, range: EventRange, now = new
     orderBy: { startedAt: 'desc' },
   });
 
+  const config = await prisma.deviceConfig.findUnique({
+    where: { deviceId: device.id },
+    select: { reportIntervalMs: true, offlineThresholdMin: true },
+  });
+  const maxGapMs = continuityGapMs(
+    config?.reportIntervalMs,
+    config?.offlineThresholdMin ?? env.alertOfflineThresholdMinutes,
+  );
   const events = rows.map((e) => ({
     id: e.id,
     kind: e.kind,
@@ -181,7 +222,7 @@ export async function getTankEvents(device: Device, range: EventRange, now = new
     volume_l: round(e.volumeL.toNumber()),
     rate_l_per_min: round(e.rateLPerMin.toNumber(), 2),
     readings: e.readings,
-    ongoing: e.ongoing,
+    ongoing: episodeIsCurrent(e.ongoing, e.endedAt, device.status === 'online', now, maxGapMs),
   }));
   const sum = (kind: 'fill' | 'draw') =>
     round(events.filter((e) => e.kind === kind).reduce((total, e) => total + (e.volume_l ?? 0), 0));
@@ -220,13 +261,14 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 export async function getUsageHistory(
   device: Device,
   opts: { from?: string; to?: string; group?: Group },
-  now = new Date()
+  now = new Date(),
 ) {
   const timeZone = timeZoneOf(device);
   const today = localDate(now, timeZone);
   const to = opts.to ?? today;
   const from = opts.from ?? addDays(to, -29);
-  if (!ISO_DATE.test(from) || !ISO_DATE.test(to)) throw new HttpError(400, 'from and to must be YYYY-MM-DD');
+  if (!ISO_DATE.test(from) || !ISO_DATE.test(to))
+    throw new HttpError(400, 'from and to must be YYYY-MM-DD');
   const span = daysBetween(from, to);
   if (span < 1) throw new HttpError(400, 'to must be on or after from');
   if (span > MAX_HISTORY_DAYS) throw new HttpError(400, `Choose at most ${MAX_HISTORY_DAYS} days`);
@@ -237,12 +279,19 @@ export async function getUsageHistory(
   const [profile, summaries, hourRows] = await Promise.all([
     prisma.tankProfile.findUnique({ where: { deviceId: device.id } }),
     prisma.dailySummary.findMany({
-      where: { deviceId: device.id, date: { gte: new Date(`${from}T00:00:00Z`), lte: new Date(`${to}T00:00:00Z`) } },
+      where: {
+        deviceId: device.id,
+        date: { gte: new Date(`${from}T00:00:00Z`), lte: new Date(`${to}T00:00:00Z`) },
+      },
       orderBy: { date: 'asc' },
     }),
     prisma.hourlyUsage.findMany({
-      where: { deviceId: device.id, hourStart: { gte: start, lt: end }, readings: { gt: 0 } },
-      select: { hourStart: true, usedL: true },
+      where: {
+        deviceId: device.id,
+        hourStart: { gte: start, lt: end },
+        observedSeconds: { gt: 0 },
+      },
+      select: { hourStart: true, usedL: true, observedSeconds: true },
     }),
   ]);
 
@@ -250,7 +299,7 @@ export async function getUsageHistory(
   const hoursByDate = new Map<string, number>();
   for (const h of hourRows) {
     const date = localDate(h.hourStart, timeZone);
-    hoursByDate.set(date, (hoursByDate.get(date) ?? 0) + 1);
+    hoursByDate.set(date, (hoursByDate.get(date) ?? 0) + h.observedSeconds / 3600);
   }
   const days: DayInput[] = summaries.map((s) => {
     const date = s.date.toISOString().slice(0, 10);
@@ -261,6 +310,7 @@ export async function getUsageHistory(
       refills: s.refillEvents,
       leak: s.leakSuspected,
       hoursWithData: hoursByDate.get(date) ?? 0,
+      expectedHours: expectedDayHours(date, timeZone),
     };
   });
 
@@ -286,19 +336,42 @@ export async function getUsageHistory(
       full_days: b.fullDays,
     })),
     totals: {
-      used_l: round(summary.usedL),
-      filled_l: round(summary.filledL),
+      used_l: summary.daysWithData ? round(summary.usedL) : null,
+      filled_l: summary.daysWithData ? round(summary.filledL) : null,
       refills: summary.refills,
       days: span,
       days_with_data: summary.daysWithData,
       full_days: summary.fullDays,
       daily_average_l: round(summary.dailyAverageL),
-      busiest_day: summary.busiestDay && { date: summary.busiestDay.date, used_l: round(summary.busiestDay.usedL)! },
-      quietest_day: summary.quietestDay && { date: summary.quietestDay.date, used_l: round(summary.quietestDay.usedL)! },
+      busiest_day: summary.busiestDay && {
+        date: summary.busiestDay.date,
+        used_l: round(summary.busiestDay.usedL)!,
+      },
+      quietest_day: summary.quietestDay && {
+        date: summary.quietestDay.date,
+        used_l: round(summary.quietestDay.usedL)!,
+      },
     },
-    by_weekday: byWeekday(days).map((w) => ({ weekday: w.weekday, average_l: round(w.averageL), days: w.days })),
-    by_hour: byHourOfDay(hourRows.map((h) => ({ hour: localHour(h.hourStart, timeZone), usedL: h.usedL.toNumber() }))).map(
-      (h) => ({ hour: h.hour, average_l: round(h.averageL), samples: h.samples })
-    ),
+    by_weekday: byWeekday(days).map((w) => ({
+      weekday: w.weekday,
+      average_l: round(w.averageL),
+      days: w.days,
+    })),
+    by_hour: byHourOfDay(
+      hourRows
+        .filter(
+          (h) =>
+            h.observedSeconds > 0 && (from === to || h.observedSeconds >= COMPLETE_HOUR_SECONDS),
+        )
+        .map((h) => ({ hour: localHour(h.hourStart, timeZone), usedL: h.usedL.toNumber() })),
+    ).map((h) => ({ hour: h.hour, average_l: round(h.averageL), samples: h.samples })),
   };
+}
+
+function expectedDayHours(date: string, timeZone: string): number {
+  return (
+    (startOfLocalDay(addDays(date, 1), timeZone).getTime() -
+      startOfLocalDay(date, timeZone).getTime()) /
+    3_600_000
+  );
 }

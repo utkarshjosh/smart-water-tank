@@ -7,15 +7,14 @@ import { useCurrentReading, useDevices, useTankProfile } from '@/api/queries';
 import type { DeviceSummary } from '@/api/schemas';
 import {
   formatAge,
-  formatCapacity,
   formatPercent,
-  formatTemperature,
-  formatVolts,
 } from '@/lib/format';
-import { Button, Card, Label, Pill, StatusDot, Text } from '@/ui/components';
+import { Button, Card, Pill, StatusDot, Text } from '@/ui/components';
 import { Screen } from '@/ui/Screen';
 import { radius, space, useTheme } from '@/ui/theme';
 import { GlassTank } from '@/viz/GlassTank';
+import { WaterSnapshot } from '@/usage/WaterSnapshot';
+import { UsagePanel } from '@/usage/UsagePanel';
 import { syncWidgets } from '@/widget/sync';
 
 /**
@@ -124,19 +123,11 @@ export default function TanksScreen() {
         </Card>
       )}
 
-      {reading.data && (
-        <Card>
-          <Label>Sensor</Label>
-          <View style={styles.metrics}>
-            <Metric label="Temperature" value={formatTemperature(reading.data.temperature_c)} />
-            <Metric label="Battery" value={formatVolts(reading.data.battery_v)} />
-            <Metric
-              label="Signal"
-              value={reading.data.rssi === null ? '—' : `${reading.data.rssi} dBm`}
-            />
-          </View>
-        </Card>
-      )}
+      {selected.has_tank_profile && <>
+        <WaterSnapshot deviceId={selected.id} />
+        <UsagePanel deviceId={selected.id} />
+      </>}
+
     </Screen>
   );
 }
@@ -166,13 +157,12 @@ function TankHero({
             </Text>
           </View>
 
-          <Text variant="hero" numeric>
-            {formatPercent(device.level_percent)}
+          <Text variant="display" numeric style={{ fontSize: 36 }}>
+            {device.current_volume == null ? '—' : Math.round(device.current_volume).toLocaleString()}
           </Text>
-
-          <Text variant="body" color="mutedForeground" numeric>
-            {formatCapacity(device.current_volume, capacityL)}
-          </Text>
+          <Text variant="caption" color="mutedForeground">L {offline || device.level_percent_stale ? 'last recorded' : 'available'}</Text>
+          <View style={[styles.levelTrack, { backgroundColor: colors.muted }]}><View style={{ width: `${Math.max(0, Math.min(100, device.level_percent ?? 0))}%`, height: '100%', borderRadius: 4, backgroundColor: offline ? colors.offline : colors.seriesVolume }} /></View>
+          <Text variant="caption" color="mutedForeground" numeric>{formatPercent(device.level_percent)} full{capacityL == null ? '' : ` · ${Math.round(capacityL).toLocaleString()} L capacity`}</Text>
 
           <Text variant="caption" color="mutedForeground">
             {device.level_percent_stale ? `last good reading ${formatAge(asOf)}` : formatAge(asOf)}
@@ -231,18 +221,8 @@ function TankChip({
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.metric}>
-      <Text variant="heading" numeric>
-        {value}
-      </Text>
-      <Label>{label}</Label>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
+  levelTrack: { height: 6, borderRadius: 4, overflow: 'hidden', marginVertical: space.xs },
   selector: { gap: space.sm, paddingVertical: 2 },
   chip: {
     alignItems: 'center',

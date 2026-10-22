@@ -6,18 +6,16 @@
  * pre-written sentence. Optional LLM rephrasing may only reword that sentence;
  * see validateRephrase.
  *
- * Only FULL days (FULL_DAY_HOURS of readings) are compared, so a day the
+ * Only near-complete days (23h 45m of observed time) are compared, so a day the
  * sensor was off for half of never reads as "low use".
  */
+import { COMPLETE_HOUR_SECONDS } from './rollup';
 import { addDays } from './local-time';
-import { FULL_DAY_HOURS } from './usage-history';
+/** Near-complete daily coverage is required for comparative push notifications. */
+export const INSIGHT_DAY_HOURS = 23.75;
 
 export type InsightKind =
-  | 'yesterday_vs_normal'
-  | 'busiest_day'
-  | 'busiest_hour'
-  | 'fills_week'
-  | 'quiet_night';
+  'yesterday_vs_normal' | 'busiest_day' | 'busiest_hour' | 'fills_week' | 'quiet_night';
 
 export type Facts = Record<string, number | string>;
 
@@ -34,6 +32,8 @@ export interface InsightDay {
   usedL: number;
   refills: number;
   hoursWithData: number;
+  /** Local days can be 23 or 25 hours at a daylight-saving transition. */
+  expectedHours?: number;
 }
 
 export interface InsightHour {
@@ -41,6 +41,7 @@ export interface InsightHour {
   hour: number; // local 0-23
   usedL: number;
   readings: number;
+  observedSeconds: number;
 }
 
 export interface InsightInput {
@@ -76,7 +77,7 @@ export function hourRange(hour: number): string {
 }
 
 function isFull(d: InsightDay | undefined): d is InsightDay {
-  return !!d && d.hoursWithData >= FULL_DAY_HOURS;
+  return !!d && d.hoursWithData >= (d.expectedHours ?? 24) - (24 - INSIGHT_DAY_HOURS);
 }
 
 export function generateInsights(input: InsightInput): Insight[] {
@@ -102,8 +103,14 @@ export function generateInsights(input: InsightInput): Insight[] {
         out.push({
           kind: 'yesterday_vs_normal',
           score: Math.min(1, Math.abs(change)),
-          facts: { used_l: r(y.usedL), normal_l: r(normal), change_pct: pct, direction: more ? 'more' : 'less', baseline_days: baseline.length },
-          text: `Yesterday you used ${r(y.usedL)} L, ${pct}% ${more ? 'more' : 'less'} than your normal day (${r(normal)} L).`,
+          facts: {
+            used_l: r(y.usedL),
+            normal_l: r(normal),
+            change_pct: pct,
+            direction: more ? 'more' : 'less',
+            baseline_days: baseline.length,
+          },
+          text: `Estimated use yesterday: ${r(y.usedL)} L, ${pct}% ${more ? 'more' : 'less'} than your normal day (${r(normal)} L).`,
         });
       }
       if (y.usedL > Math.max(...baseline.map((d) => d.usedL)) && baseline.length >= 5) {
@@ -112,27 +119,34 @@ export function generateInsights(input: InsightInput): Insight[] {
           kind: 'busiest_day',
           score: 0.8,
           facts: { used_l: r(y.usedL), days_compared: n },
-          text: `Yesterday was your busiest day of the last ${n} full days: ${r(y.usedL)} L.`,
+          text: `Estimated use yesterday was the highest of the last ${n} recorded days: ${r(y.usedL)} L.`,
         });
       }
     }
   }
 
   if (isFull(y)) {
-    const hours = input.hours.filter((h) => h.date === yesterday && h.readings > 0);
+    const hours = input.hours.filter(
+      (h) => h.date === yesterday && h.readings > 0 && h.observedSeconds >= COMPLETE_HOUR_SECONDS,
+    );
     const top = hours.reduce<InsightHour | null>((a, h) => (a && a.usedL >= h.usedL ? a : h), null);
     if (top && top.usedL >= 10 && y.usedL > 0) {
       const share = top.usedL / y.usedL;
       out.push({
         kind: 'busiest_hour',
         score: Math.min(1, 0.2 + share),
-        facts: { hour: top.hour, range: hourRange(top.hour), used_l: r(top.usedL), share_pct: r(share * 100) },
-        text: `Yesterday your busiest hour was ${hourRange(top.hour)} (${r(top.usedL)} L, ${r(share * 100)}% of the day).`,
+        facts: {
+          hour: top.hour,
+          range: hourRange(top.hour),
+          used_l: r(top.usedL),
+          share_pct: r(share * 100),
+        },
+        text: `Estimated peak use yesterday: ${hourRange(top.hour)} (${r(top.usedL)} L, ${r(share * 100)}% of the day).`,
       });
     }
   }
 
-  // Fills: last 7 days ending yesterday vs the 7 before; each week needs 5 full days.
+  // Fills: compare only complete observed weeks; missing days are not zero refills.
   const week = (endOffset: number) => {
     const ds = [];
     for (let i = endOffset; i < endOffset + 7; i++) ds.push(byDate.get(addDays(input.today, -i)));
@@ -141,26 +155,36 @@ export function generateInsights(input: InsightInput): Insight[] {
   };
   const thisWeek = week(1);
   const lastWeek = week(8);
-  if (thisWeek.full >= 5 && lastWeek.full >= 5 && thisWeek.fills !== lastWeek.fills) {
+  if (thisWeek.full === 7 && lastWeek.full === 7 && thisWeek.fills !== lastWeek.fills) {
     const times = (n: number) => (n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`);
     out.push({
       kind: 'fills_week',
-      score: Math.min(1, Math.abs(thisWeek.fills - lastWeek.fills) / Math.max(thisWeek.fills, lastWeek.fills)),
+      score: Math.min(
+        1,
+        Math.abs(thisWeek.fills - lastWeek.fills) / Math.max(thisWeek.fills, lastWeek.fills),
+      ),
       facts: { fills: thisWeek.fills, fills_previous: lastWeek.fills },
       text: `The tank filled ${times(thisWeek.fills)} in the last 7 days, ${thisWeek.fills > lastWeek.fills ? 'up' : 'down'} from ${lastWeek.fills} the week before.`,
     });
   }
 
   // Last night: every hour midnight-5 AM today must have readings.
-  const night = input.hours.filter((h) => h.date === input.today && h.hour >= NIGHT_START && h.hour < NIGHT_END && h.readings > 0);
-  if (night.length === NIGHT_END - NIGHT_START) {
+  const night = input.hours.filter(
+    (h) =>
+      h.date === input.today &&
+      h.hour >= NIGHT_START &&
+      h.hour < NIGHT_END &&
+      h.readings > 0 &&
+      h.observedSeconds >= COMPLETE_HOUR_SECONDS,
+  );
+  if (new Set(night.map((h) => h.hour)).size === NIGHT_END - NIGHT_START) {
     const used = night.reduce((s, h) => s + h.usedL, 0);
     if (used <= QUIET_NIGHT_L) {
       out.push({
         kind: 'quiet_night',
         score: 0.35,
         facts: { night_used_l: r(used), from_hour: NIGHT_START, to_hour: NIGHT_END },
-        text: `Nothing was drawn overnight (midnight to 5 AM), so no sign of a leak.`,
+        text: `No measurable water-level drop was recorded between midnight and 5 AM.`,
       });
     }
   }
@@ -177,13 +201,19 @@ export interface SentInsight {
  * At most one a day. Never the same kind as yesterday's, and a kind sent
  * often in the last week scores lower, so the user sees variety.
  */
-export function pickInsight(candidates: Insight[], recent: SentInsight[], today: string): Insight | null {
+export function pickInsight(
+  candidates: Insight[],
+  recent: SentInsight[],
+  today: string,
+): Insight | null {
   const yesterday = addDays(today, -1);
   const weekAgo = addDays(today, -7);
   let best: { i: Insight; s: number } | null = null;
   for (const c of candidates) {
     if (recent.some((s) => s.date === yesterday && s.kind === c.kind)) continue;
-    const times = recent.filter((s) => s.kind === c.kind && s.date >= weekAgo && s.date < today).length;
+    const times = recent.filter(
+      (s) => s.kind === c.kind && s.date >= weekAgo && s.date < today,
+    ).length;
     const s = c.score * Math.max(0.2, 1 - 0.25 * times);
     if (!best || s > best.s) best = { i: c, s };
   }
@@ -194,7 +224,11 @@ export function pickInsight(candidates: Insight[], recent: SentInsight[], today:
 export const SEND_WINDOW = { start: 9, end: 20 };
 
 /** Send now? Only inside waking hours, and only if nothing went out today. */
-export function shouldSendNow(localHour: number, alreadySentToday: boolean, window = SEND_WINDOW): boolean {
+export function shouldSendNow(
+  localHour: number,
+  alreadySentToday: boolean,
+  window = SEND_WINDOW,
+): boolean {
   return !alreadySentToday && localHour >= window.start && localHour < window.end;
 }
 
@@ -210,6 +244,8 @@ export function numbersIn(text: string): number[] {
 export function validateRephrase(rephrased: string, insight: Insight): boolean {
   const text = rephrased.trim();
   if (!text || text.length > 180) return false;
+  // A volume estimate must not become a definitive consumption claim.
+  if (/^Estimated\b/i.test(insight.text) && !/\bestimat(?:e[ds]?|ion)\b/i.test(text)) return false;
   const allowed = new Set<number>(numbersIn(insight.text));
   for (const v of Object.values(insight.facts)) {
     if (typeof v === 'number') allowed.add(v);

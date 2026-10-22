@@ -396,6 +396,8 @@ model HourlyUsage {
   maxL      Decimal? @map("max_l") @db.Decimal(10, 2)
   avgL      Decimal? @map("avg_l") @db.Decimal(10, 2)
   readings  Int      @default(0)
+  // Coverage from consecutive valid readings; zero means unverified legacy data.
+  observedSeconds Int @default(0) @map("observed_seconds")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)

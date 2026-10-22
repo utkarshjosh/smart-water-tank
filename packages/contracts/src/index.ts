@@ -17,3 +17,5 @@ export * from './history';
 export * from './tank-profile';
 export * from './device';
 export * from './admin';
+
+export * from './usage-display';

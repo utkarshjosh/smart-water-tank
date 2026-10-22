@@ -8,13 +8,28 @@ import type { UsageHistoryResponse } from '@aquamind/contracts';
 // preview page can render it from fixed data.
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const WEEKDAYS_LONG = ['Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays', 'Sundays'];
+const WEEKDAYS_LONG = [
+  'Mondays',
+  'Tuesdays',
+  'Wednesdays',
+  'Thursdays',
+  'Fridays',
+  'Saturdays',
+  'Sundays',
+];
 
 /** A YYYY-MM-DD read as a calendar date (noon, so no zone shifts it a day). */
 const asDate = (iso: string) => new Date(`${iso}T12:00:00`);
-const fmt = (iso: string, opts: Intl.DateTimeFormatOptions) => asDate(iso).toLocaleDateString(undefined, opts);
+const fmt = (iso: string, opts: Intl.DateTimeFormatOptions) =>
+  asDate(iso).toLocaleDateString(undefined, opts);
 
-export function UsageHistoryBody({ data, fetching }: { data: UsageHistoryResponse; fetching: boolean }) {
+export function UsageHistoryBody({
+  data,
+  fetching,
+}: {
+  data: UsageHistoryResponse;
+  fetching: boolean;
+}) {
   const t = data.totals;
   const partial = t.days_with_data > t.full_days || t.days_with_data < t.days;
   const hasPatterns = t.full_days >= 3;
@@ -32,13 +47,21 @@ export function UsageHistoryBody({ data, fetching }: { data: UsageHistoryRespons
           label="Normal day"
           value={t.daily_average_l == null ? null : Math.round(t.daily_average_l)}
           unit="L"
-          hint={t.full_days ? `Average of ${t.full_days} full day${t.full_days === 1 ? '' : 's'}` : 'No full days of readings yet'}
+          hint={
+            t.full_days
+              ? `Average of ${t.full_days} full day${t.full_days === 1 ? '' : 's'}`
+              : 'No full days of readings yet'
+          }
         />
         <StatTile
           label="Busiest day"
           value={t.busiest_day ? Math.round(t.busiest_day.used_l) : null}
           unit="L"
-          hint={t.busiest_day ? fmt(t.busiest_day.date, { weekday: 'long', day: 'numeric', month: 'short' }) : '—'}
+          hint={
+            t.busiest_day
+              ? fmt(t.busiest_day.date, { weekday: 'long', day: 'numeric', month: 'short' })
+              : '—'
+          }
         />
         <StatTile
           label="Tank filled"
@@ -51,18 +74,25 @@ export function UsageHistoryBody({ data, fetching }: { data: UsageHistoryRespons
       <Card>
         <CardHeader className="flex-row items-center justify-between gap-2">
           <CardTitle>Water used per {data.group}</CardTitle>
-          <span className="text-caption text-ink-3">{data.buckets.length} {data.group}s</span>
+          <span className="text-caption text-ink-3">
+            {data.buckets.length} {data.group}s
+          </span>
         </CardHeader>
         <CardContent>
           {t.days_with_data === 0 ? (
             <p className="py-10 text-center text-caption text-ink-3">No readings in these dates.</p>
           ) : (
-            <UsageBarChart slots={bucketSlots(data)} ariaLabel={`Water used and added per ${data.group}`} height={180} />
+            <UsageBarChart
+              slots={bucketSlots(data)}
+              ariaLabel={`Water used and added per ${data.group}`}
+              height={180}
+            />
           )}
           {partial && t.days_with_data > 0 && (
             <p className="mt-3 text-caption text-ink-3">
-              Readings on {t.days_with_data} of {t.days} days. Days with under {data.full_day_hours} hours of readings
-              (the sensor was off part of the day) count in totals but not in “normal day” or the patterns below.
+              Readings on {t.days_with_data} of {t.days} days. Daily averages exclude days missing
+              more than 15 minutes of readings. Partial days still contribute their recorded amounts
+              to totals.
             </p>
           )}
         </CardContent>
@@ -125,7 +155,9 @@ export function UsageHistoryBody({ data, fetching }: { data: UsageHistoryRespons
           <table className="w-full whitespace-nowrap text-left text-caption tnum">
             <thead className="text-ink-3">
               <tr>
-                <th className="py-1.5 pr-4 font-medium">{data.group === 'day' ? 'Date' : data.group === 'week' ? 'Week' : 'Month'}</th>
+                <th className="py-1.5 pr-4 font-medium">
+                  {data.group === 'day' ? 'Date' : data.group === 'week' ? 'Week' : 'Month'}
+                </th>
                 <th className="py-1.5 pr-4 text-right font-medium">Used</th>
                 <th className="py-1.5 pr-4 text-right font-medium">Added</th>
                 <th className="py-1.5 pr-4 text-right font-medium">Fills</th>
@@ -154,7 +186,8 @@ export function UsageHistoryBody({ data, fetching }: { data: UsageHistoryRespons
 
 type Bucket = UsageHistoryResponse['buckets'][number];
 
-const spanDays = (b: Bucket) => Math.round((asDate(b.end).getTime() - asDate(b.start).getTime()) / 86_400_000) + 1;
+const spanDays = (b: Bucket) =>
+  Math.round((asDate(b.end).getTime() - asDate(b.start).getTime()) / 86_400_000) + 1;
 
 function bucketTitle(b: Bucket, group: UsageHistoryResponse['group']): string {
   if (group === 'day') return fmt(b.start, { weekday: 'short', day: 'numeric', month: 'short' });
@@ -168,8 +201,12 @@ function bucketSlots(data: UsageHistoryResponse): UsageSlot[] {
     const notes = [
       b.refills ? `filled ${b.refills}×` : null,
       b.leak_days ? 'possible leak' : null,
-      b.days_with_data && b.days_with_data < days ? `readings on ${b.days_with_data} of ${days} days` : null,
-      days === 1 && b.days_with_data === 1 && b.full_days === 0 ? 'sensor off part of the day' : null,
+      b.days_with_data && b.days_with_data < days
+        ? `readings on ${b.days_with_data} of ${days} days`
+        : null,
+      days === 1 && b.days_with_data === 1 && b.full_days === 0
+        ? 'sensor off part of the day'
+        : null,
       data.group === 'day' && b.start === data.today ? 'so far today' : null,
     ].filter(Boolean);
     return {
