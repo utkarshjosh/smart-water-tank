@@ -1,38 +1,57 @@
 import { Device, Prisma } from '@prisma/client';
-import { COMPLETE_HOUR_SECONDS } from '../lib/rollup';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http-error';
-import { addDays, localDate, localHour, startOfLocalDay } from '../lib/local-time';
+import { noiseFloorL } from '../lib/rollup';
+import { addDays, localDate, localHour, offsetMs, startOfLocalDay } from '../lib/local-time';
 import {
+  adjustedScore,
+  barFor,
+  dueSlot,
   generateInsights,
   Insight,
   InsightDay,
   InsightHour,
   pickInsight,
-  shouldSendNow,
+  seededRandom,
+  SentInsight,
+  Slot,
+  SLOTS,
+  slotTarget,
 } from '../lib/insights';
-import { timeZoneOf } from './rollup.service';
+import { capacityOf, timeZoneOf } from './rollup.service';
 import { rephraseInsight } from './insight-llm.service';
 import { sendNotificationToUser } from './fcm.service';
 
 /**
- * Experimental daily insight: at most one push a day per opted-in user, in
- * waking hours of the tank's timezone, on the quiet info channel.
+ * Experimental daily insight: at most one push a day per opted-in user,
+ * decided at a midday and an early-evening slot in the tank's timezone, and
+ * only when a fact clears that slot's interest bar. Dull days send nothing.
+ * On the quiet info channel.
  */
 
-const LOOKBACK_DAYS = 15;
+/** Two weeks to compare against, plus one more for week-on-week. */
+const HISTORY_DAYS = 15;
+/** How far back sent insights count for the recency penalty and the weekly budget. */
+const RECENT_DAYS = 14;
 
-/** Loads a device's last 15 local days of rollups in the shape the generator takes. */
-async function loadInput(device: Device, now: Date) {
+/** Minutes past local midnight. */
+function localMinutes(now: Date, timeZone: string): number {
+  const wall = new Date(now.getTime() + offsetMs(now, timeZone));
+  return wall.getUTCHours() * 60 + wall.getUTCMinutes();
+}
+
+/** A tank's last 15 local days and today so far, in the shape the generator takes. */
+async function loadHistory(device: Device, now: Date) {
   const timeZone = timeZoneOf(device);
   const today = localDate(now, timeZone);
-  const from = addDays(today, -LOOKBACK_DAYS);
-  const [summaries, hourRows] = await Promise.all([
+  const from = addDays(today, -HISTORY_DAYS);
+  const [summaries, hourRows, profile] = await Promise.all([
     prisma.dailySummary.findMany({
       where: {
         deviceId: device.id,
         date: { gte: new Date(`${from}T00:00:00Z`), lte: new Date(`${today}T00:00:00Z`) },
       },
+      select: { date: true, refillEvents: true },
     }),
     prisma.hourlyUsage.findMany({
       where: {
@@ -42,42 +61,32 @@ async function loadInput(device: Device, now: Date) {
       },
       select: { hourStart: true, usedL: true, readings: true, observedSeconds: true },
     }),
+    prisma.tankProfile.findUnique({ where: { deviceId: device.id } }),
   ]);
-  const hoursByDate = new Map<string, number>();
-  const hours: InsightHour[] = [];
-  const yesterday = addDays(today, -1);
-  for (const h of hourRows) {
-    const date = localDate(h.hourStart, timeZone);
-    hoursByDate.set(date, (hoursByDate.get(date) ?? 0) + h.observedSeconds / 3600);
-    if ((date === today || date === yesterday) && h.observedSeconds >= COMPLETE_HOUR_SECONDS) {
-      hours.push({
-        date,
-        hour: localHour(h.hourStart, timeZone),
-        usedL: h.usedL.toNumber(),
-        readings: h.readings,
-        observedSeconds: h.observedSeconds,
-      });
-    }
-  }
-  const days: InsightDay[] = summaries.map((s) => {
-    const date = s.date.toISOString().slice(0, 10);
-    return {
-      date,
-      usedL: s.totalUsageL.toNumber(),
-      refills: s.refillEvents,
-      hoursWithData: hoursByDate.get(date) ?? 0,
-      expectedHours:
-        (startOfLocalDay(addDays(date, 1), timeZone).getTime() -
-          startOfLocalDay(date, timeZone).getTime()) /
-        3600000,
-    };
-  });
-  return { timeZone, today, input: { today, days, hours } };
+  const hours: InsightHour[] = hourRows.map((h) => ({
+    date: localDate(h.hourStart, timeZone),
+    hour: localHour(h.hourStart, timeZone),
+    usedL: h.usedL.toNumber(),
+    readings: h.readings,
+    observedSeconds: h.observedSeconds,
+  }));
+  const days: InsightDay[] = summaries.map((s) => ({
+    date: s.date.toISOString().slice(0, 10),
+    refills: s.refillEvents,
+  }));
+  return {
+    timeZone,
+    today,
+    nowHour: localHour(now, timeZone),
+    hours,
+    days,
+    noiseL: noiseFloorL(capacityOf(profile)),
+  };
 }
 
-async function recentSent(userId: string, today: string) {
+async function recentSent(userId: string, today: string): Promise<SentInsight[]> {
   const rows = await prisma.dailyInsight.findMany({
-    where: { userId, localDate: { gte: addDays(today, -7) } },
+    where: { userId, localDate: { gte: addDays(today, -RECENT_DAYS) } },
     select: { kind: true, localDate: true },
   });
   return rows.map((r) => ({ kind: r.kind, date: r.localDate }));
@@ -96,33 +105,53 @@ function devicesOf(user: { id: string; tenantId: string | null }) {
   });
 }
 
+/** Every candidate for this slot across a user's tanks. */
+async function candidatesFor(devices: Device[], slot: Slot, now: Date) {
+  const all: { device: Device; insight: Insight }[] = [];
+  for (const device of devices) {
+    const history = await loadHistory(device, now);
+    for (const insight of generateInsights({ ...history, slot })) all.push({ device, insight });
+  }
+  return all;
+}
+
+const round3 = (n: number) => Math.round(n * 1000) / 1000;
+
+/** The slot a dry run speaks for: midday until it closes, then the evening. */
+const previewSlot = (hour: number): Slot => (hour < SLOTS.midday.end ? 'midday' : 'evening');
+
 /**
- * Dry run: what would be sent for this device today, with every candidate.
- * Sends nothing, stores nothing.
+ * Dry run: what this device's next slot today would send, with every
+ * candidate. Sends nothing, stores nothing.
  */
 export async function previewInsight(
   device: Device,
   opts: { userId?: string; rephrase?: boolean } = {},
   now = new Date(),
 ) {
-  const { today, timeZone, input } = await loadInput(device, now);
-  const candidates = generateInsights(input);
+  const history = await loadHistory(device, now);
+  const { today, timeZone } = history;
+  const slot = previewSlot(history.nowHour);
+  const candidates = generateInsights({ ...history, slot });
   const recent = opts.userId ? await recentSent(opts.userId, today) : [];
-  const picked = pickInsight(candidates, recent, today);
+  const picked = pickInsight(candidates, recent, today, {
+    minScore: barFor(slot, recent, today),
+    rand: seededRandom(`${opts.userId ?? device.id}:${today}:${slot}:pick`),
+  });
   const final =
     picked && opts.rephrase
-      ? await rephraseInsight(picked)
-      : picked && { text: picked.text, source: 'template' as const };
+      ? await rephraseInsight(picked.insight)
+      : picked && { text: picked.insight.text, source: 'template' as const };
   return {
     device_id: device.deviceId,
     timezone: timeZone,
     local_date: today,
     picked: picked && {
-      kind: picked.kind,
-      score: round3(picked.score),
-      facts: picked.facts,
+      kind: picked.insight.kind,
+      score: round3(picked.adjusted),
+      facts: picked.insight.facts,
       text: final!.text,
-      template: picked.text,
+      template: picked.insight.text,
       source: final!.source,
     },
     candidates: candidates.map((c) => ({
@@ -134,12 +163,52 @@ export async function previewInsight(
   };
 }
 
-const round3 = (n: number) => Math.round(n * 1000) / 1000;
+/**
+ * Dry run over the last `days` days: what each slot would have sent, with the
+ * recency penalty and weekly budget applied to the simulated sends. Read-only.
+ * Refill counts are the whole day's, so a replayed evening sees a few refills
+ * from after its send time.
+ */
+export async function replayInsights(device: Device, days: number, now = new Date()) {
+  const timeZone = timeZoneOf(device);
+  const today = localDate(now, timeZone);
+  const sent: SentInsight[] = [];
+  const out = [];
+  for (let i = days; i >= 1; i--) {
+    const date = addDays(today, -i);
+    for (const slot of ['midday', 'evening'] as Slot[]) {
+      if (sent.some((s) => s.date === date)) break;
+      const at = new Date(startOfLocalDay(date, timeZone).getTime() + slotTarget(`replay:${date}`, slot) * 60_000);
+      const history = await loadHistory(device, at);
+      const candidates = generateInsights({ ...history, slot });
+      const bar = barFor(slot, sent, date);
+      const picked = pickInsight(candidates, sent, date, {
+        minScore: bar,
+        rand: seededRandom(`replay:${date}:${slot}:pick`),
+      });
+      if (picked) sent.push({ kind: picked.insight.kind, date });
+      out.push({
+        date,
+        slot,
+        at: at.toISOString(),
+        bar,
+        sent: picked && { kind: picked.insight.kind, score: round3(picked.adjusted), text: picked.insight.text },
+        candidates: candidates.map((c) => ({
+          kind: c.kind,
+          score: round3(c.score),
+          adjusted: round3(adjustedScore(c, sent, date)),
+          text: c.text,
+        })),
+      });
+    }
+  }
+  return out;
+}
 
 /**
- * Cron entry point. For every opted-in user whose first tank is in waking
- * hours and who has had nothing today, picks the best insight across their
- * tanks and sends it. Days with no solid insight send nothing.
+ * Cron entry point, every 15 minutes. Each opted-in user's midday and evening
+ * slots are decided once a day each, at a minute that varies by day; the
+ * first slot with a fact above its bar sends, and the day is done.
  */
 export async function sendDueInsights(now = new Date()): Promise<number> {
   const users = await prisma.user.findMany({
@@ -163,24 +232,39 @@ async function sendInsightForUser(
 ): Promise<boolean> {
   const devices = await devicesOf(user);
   if (devices.length === 0) return false;
-  // The first tank's zone decides the user's day and waking hours.
+  // The first tank's zone decides the user's day and slots.
   const timeZone = timeZoneOf(devices[0]);
   const today = localDate(now, timeZone);
+  const slot = dueSlot(localMinutes(now, timeZone), `${user.id}:${today}`);
+  if (!slot) return false;
+
   const already = await prisma.dailyInsight.findUnique({
     where: { userId_localDate: { userId: user.id, localDate: today } },
   });
-  if (!shouldSendNow(localHour(now, timeZone), already != null)) return false;
+  if (already) {
+    console.log(`[insights] ${slot} for user ${user.id}: already sent today (${already.kind})`);
+    return false;
+  }
 
   const recent = await recentSent(user.id, today);
-  let best: { device: Device; insight: Insight } | null = null;
-  for (const device of devices) {
-    const { input } = await loadInput(device, now);
-    const picked = pickInsight(generateInsights(input), recent, today);
-    if (picked && (!best || picked.score > best.insight.score)) best = { device, insight: picked };
+  const minScore = barFor(slot, recent, today);
+  const all = await candidatesFor(devices, slot, now);
+  const picked = pickInsight(
+    all.map((a) => a.insight),
+    recent,
+    today,
+    { minScore, rand: seededRandom(`${user.id}:${today}:${slot}:pick`) },
+  );
+  if (!picked) {
+    const seen = all
+      .map((a) => `${a.insight.kind} ${round3(adjustedScore(a.insight, recent, today))}`)
+      .join(', ');
+    console.log(`[insights] ${slot} for user ${user.id}: nothing above ${minScore} (${seen || 'no candidates'})`);
+    return false;
   }
-  if (!best) return false;
 
-  const { insight, device } = best;
+  const { insight } = picked;
+  const device = all.find((a) => a.insight === insight)!.device;
   const { text, source } = await rephraseInsight(insight);
 
   // Claim the day first: the unique (user, date) key keeps two overlapping
@@ -197,7 +281,7 @@ async function sendInsightForUser(
         text,
         template: insight.text,
         source,
-        score: insight.score,
+        score: picked.adjusted,
       },
     });
   } catch (error) {
@@ -220,7 +304,9 @@ async function sendInsightForUser(
     where: { id: row.id },
     data: { delivered: delivered ? 1 : 0 },
   });
-  console.log(`[insights] ${insight.kind} for user ${user.id} (${source}), delivered=${delivered}`);
+  console.log(
+    `[insights] ${slot} for user ${user.id}: sent ${insight.kind} ${round3(picked.adjusted)} (${source}), delivered=${delivered}`,
+  );
   return true;
 }
 

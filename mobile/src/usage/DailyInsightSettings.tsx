@@ -79,8 +79,9 @@ export function DailyInsightSettings({
       <View style={[styles.status, { backgroundColor: colors.muted }]}>
         <Text variant="body">{status}</Text>
         <Text variant="caption" color="mutedForeground">
-          At most once a day, 9 AM–8 PM in your tank’s time. Quiet when there is
-          no useful insight. Daily comparisons need complete days of readings.
+          At most once a day, around midday or early evening in your tank’s
+          time, and only when there is something worth saying, so a few times a
+          week. Comparisons use the hours the sensor actually recorded.
         </Text>
       </View>
       {(settings.isError || toggle.isError) && (
