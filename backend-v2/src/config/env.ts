@@ -55,4 +55,7 @@ export const env = {
   insightLlmUrl: process.env.INSIGHT_LLM_URL,
   insightLlmKey: process.env.INSIGHT_LLM_KEY,
   insightLlmModel: process.env.INSIGHT_LLM_MODEL,
+  // Per call. Free providers behind a router can take 10-25 s when it falls
+  // back between them; this runs in a cron job, not a request.
+  insightLlmTimeoutMs: parseInt(process.env.INSIGHT_LLM_TIMEOUT_MS || '20000', 10),
 };

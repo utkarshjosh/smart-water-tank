@@ -372,15 +372,54 @@ test('rephrase: no LLM configured sends the template', async () => {
   }
 });
 
-test('rephrase: the server fills the numbers into a valid rewording; anything else falls back', async (t) => {
+/**
+ * A fake router: rewording requests get `rewords` in turn, meaning checks get
+ * `verdicts` in turn. Records every request body.
+ */
+function fakeLlm(rewords: string[], verdicts: string[] = []) {
+  const bodies: Array<{ temperature: number; messages: Array<{ role: string; content: string }> }> = [];
+  const fetchImpl = (async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    bodies.push(body);
+    const judging = body.messages[0].content.includes('Answer YES only');
+    const content = (judging ? verdicts : rewords).shift() ?? '';
+    return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+  }) as unknown as typeof fetch;
+  return { fetchImpl, bodies };
+}
+const goodReword = '"Only about {{used_l}} L by {{until}}, your lightest in {{days}} days of readings."';
+
+test('rephrase: the server fills the numbers into a rewording judged to say the same thing', async (t) => {
   withLlm(t);
-  assert.deepEqual(
-    await rephraseInsight(light, {
-      fetchImpl: reply('"Only about {{used_l}} L by {{until}}, your lightest in {{days}} days of readings."'),
-    }),
-    { text: 'Only about 30 L by noon, your lightest in 8 days of readings.', source: 'llm' },
-  );
-  assert.equal((await rephraseInsight(light, { fetchImpl: reply('Only about 30 L by noon, nice.') })).source, 'template');
+  const llm = fakeLlm([goodReword], ['YES']);
+  assert.deepEqual(await rephraseInsight(light, { fetchImpl: llm.fetchImpl }), {
+    text: 'Only about 30 L by noon, your lightest in 8 days of readings.',
+    source: 'llm',
+  });
+  // The model is told exactly which placeholders to keep and which way use went.
+  const ask = llm.bodies[0].messages[1].content;
+  assert.match(ask, /Placeholders to keep: \{\{used_l\}\}, \{\{until\}\}, \{\{days\}\}/);
+  assert.match(ask, /Use went: down/);
+  // The judge sees both filled sentences.
+  assert.match(llm.bodies[1].messages[1].content, /^A: Light day so far: about 30 L.*\nB: Only about 30 L/s);
+});
+
+test('rephrase: a rewording judged to change the meaning is retried, warmer, then falls back', async (t) => {
+  withLlm(t);
+  const llm = fakeLlm([goodReword, goodReword, goodReword], ['NO', 'No.', 'NO']);
+  assert.deepEqual(await rephraseInsight(light, { fetchImpl: llm.fetchImpl }), { text: light.text, source: 'template' });
+  const temps = llm.bodies.filter((b) => !b.messages[0].content.includes('Answer YES only')).map((b) => b.temperature);
+  assert.deepEqual(temps, [0.7, 0.9, 1.0]);
+
+  const second = fakeLlm([goodReword, goodReword], ['NO', 'YES']);
+  assert.equal((await rephraseInsight(light, { fetchImpl: second.fetchImpl })).source, 'llm');
+});
+
+test('rephrase: an echo or an invented number is retried, never judged', async (t) => {
+  withLlm(t);
+  const llm = fakeLlm([light.template, 'Only about 30 L by noon, nice.', goodReword], ['YES']);
+  assert.equal((await rephraseInsight(light, { fetchImpl: llm.fetchImpl })).source, 'llm');
+  assert.equal(llm.bodies.length, 4, 'three rewordings, one meaning check');
 });
 
 test('rephrase: an LLM error falls back to the template', async (t) => {
