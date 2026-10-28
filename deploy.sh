@@ -19,6 +19,11 @@ info()  { echo -e "${YELLOW}$*${NC}"; }
 ok()    { echo -e "${GREEN}$*${NC}"; }
 fail()  { echo -e "${RED}$*${NC}" >&2; exit 1; }
 
+# Percent-decoding for the user and password in a URL ("p%40ss" -> "p@ss").
+# Backslashes are escaped first so printf %b only ever expands the \xHH it
+# was given, never a "\n" that happens to be in a password.
+url_decode() { local s="${1//\\/\\\\}"; printf '%b' "${s//%/\\x}"; }
+
 echo "🚀 AquaMind Deployment"
 echo "======================"
 
@@ -52,16 +57,32 @@ backup_database() {
       command -v mysqldump >/dev/null || fail "❌ mysqldump not found"
       local dump="$BACKUP_DIR/aquamind-mysql-$stamp.sql.gz"
       info "💾 Backing up MySQL → $dump"
-      # Parse user:pass@host:port/db out of the URL.
-      local creds="${url#*://}"; local hostpart="${creds#*@}"; local userpass="${creds%%@*}"
+      # Parse user:pass@host:port/db out of the URL. The host starts after the
+      # LAST "@": a password can contain "@" itself (the live one does), and
+      # splitting at the first one handed mysqldump a "host" made of the end
+      # of the password, so every deploy needed --skip-backup.
+      local creds="${url#*://}"; local hostpart="${creds##*@}"; local userpass="${creds%@*}"
       local db="${hostpart##*/}"; db="${db%%\?*}"
       local hostport="${hostpart%%/*}"
       local host="${hostport%%:*}"; local port="${hostport##*:}"
       [ "$port" = "$host" ] && port=3306
-      MYSQL_PWD="${userpass#*:}" mysqldump \
-        --host="$host" --port="$port" --user="${userpass%%:*}" \
-        --single-transaction --quick --routines --triggers --events \
-        "$db" | gzip > "$dump"
+      local user pass
+      user="$(url_decode "${userpass%%:*}")"; pass="$(url_decode "${userpass#*:}")"
+      # The dump runs as the app's own database user, which has no RELOAD,
+      # PROCESS or EVENT privilege. MySQL 8's mysqldump issues FLUSH TABLES for
+      # GTID consistency (skipped with --set-gtid-purged=OFF, a flag MariaDB's
+      # mysqldump doesn't have), reads tablespaces, and --events needs EVENT;
+      # the app defines no events, so tables, routines and triggers are all.
+      local gtid=()
+      mysqldump --help 2>/dev/null | grep -q -- '--set-gtid-purged' && gtid=(--set-gtid-purged=OFF)
+      # A failed dump must not leave a small file behind that looks like a backup.
+      if ! MYSQL_PWD="$pass" mysqldump \
+        --host="$host" --port="$port" --user="$user" \
+        --single-transaction --quick --routines --triggers --no-tablespaces ${gtid[@]+"${gtid[@]}"} \
+        "$db" | gzip > "$dump"; then
+        rm -f "$dump"
+        fail "❌ mysqldump failed (host $host, database $db). Nothing was deployed."
+      fi
       ;;
     postgres://*|postgresql://*)
       command -v pg_dump >/dev/null || fail "❌ pg_dump not found"
