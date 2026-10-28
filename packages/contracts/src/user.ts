@@ -54,6 +54,7 @@ export const deviceSummarySchema = z.object({
   level_percent_as_of: nullableIsoDateTime,
   has_tank_profile: z.boolean(),
   last_measurement: nullableIsoDateTime,
+  /** No longer shown anywhere; kept so already-installed Android builds still parse this response. */
   active_alert: z.enum(['leak', 'low']).nullable(),
 });
 export type DeviceSummary = z.infer<typeof deviceSummarySchema>;

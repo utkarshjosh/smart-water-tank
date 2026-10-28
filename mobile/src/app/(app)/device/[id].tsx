@@ -253,7 +253,6 @@ export default function DeviceDetailScreen() {
         <View style={styles.heroRow}>
           <GlassTank
             level={reading.data?.level_percent ?? null}
-            alert={device?.active_alert ?? null}
             width={88}
             height={140}
           />

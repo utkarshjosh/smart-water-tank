@@ -24,7 +24,6 @@ export type WidgetTank = {
   asOf: number | null;
   stale: boolean;
   online: boolean;
-  alert: 'low' | 'leak' | null;
 };
 
 export type WidgetState = {
@@ -76,7 +75,6 @@ export function mergeTank(patch: Partial<WidgetTank> & { deviceId: string }): vo
           asOf: null,
           stale: false,
           online: true,
-          alert: null,
         };
 
   const merged = { ...base, ...patch };

@@ -1,11 +1,11 @@
 import { Link, useParams } from 'react-router-dom';
-import { ArrowRight, Drop, Warning } from '@phosphor-icons/react';
+import { ArrowRight, Drop } from '@phosphor-icons/react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import TankLevel from '@/components/TankLevel';
 import { LiveIndicator } from './LiveIndicator';
 import { WaterSnapshot } from './WaterSnapshot';
 import { UsagePanel } from './UsagePanel';
-import { formatReading, useAlerts, useCurrent, useDevice, useTankProfile } from './useDevice';
+import { formatReading, useCurrent, useDevice, useTankProfile } from './useDevice';
 import './water-story.css';
 
 export default function OverviewTab() {
@@ -13,31 +13,15 @@ export default function OverviewTab() {
   const current = useCurrent(deviceId);
   const device = useDevice(deviceId);
   const profile = useTankProfile(deviceId);
-  const alerts = useAlerts(deviceId);
   const reading = current.data;
   const stale = Boolean(
     reading?.level_percent_stale || (device.data && device.data.status !== 'online')
   );
-  const active = alerts.data?.find(
-    (a) => !a.acknowledged && (a.type === 'leak_detected' || a.type === 'tank_low')
-  );
-  const tankAlert = active ? (active.type === 'leak_detected' ? 'leak' : 'low') : null;
   const level = profile.data ? (reading?.level_percent ?? null) : null;
   const capacity = profile.data?.total_capacity_l;
   const volume = profile.data ? reading?.volume_l : null;
   return (
     <div className="device-overview water-overview">
-      {active && (
-        <Link to="alerts" className="device-alert-strip bg-warning-wash text-warning-text">
-          <Warning size={18} weight="fill" aria-hidden />
-          <span>
-            {tankAlert === 'leak'
-              ? 'Possible leak. Check your tank.'
-              : 'Water is running low. Plan a refill.'}
-          </span>
-          <ArrowRight size={16} aria-hidden />
-        </Link>
-      )}
       {current.isError && (
         <Alert variant="critical">
           <AlertDescription>
@@ -54,15 +38,7 @@ export default function OverviewTab() {
             <Drop size={15} weight="fill" aria-hidden />{' '}
             {stale ? 'Last recorded reserve' : 'Your water, at a glance'}
           </span>
-          <h2>
-            {level == null
-              ? 'Waiting for your tank'
-              : tankAlert === 'low'
-                ? 'Time to plan a refill'
-                : tankAlert === 'leak'
-                  ? 'Your tank needs attention'
-                  : 'Here’s what’s in your tank'}
-          </h2>
+          <h2>{level == null ? 'Waiting for your tank' : 'Here’s what’s in your tank'}</h2>
           <p className="water-reserve-number tnum">
             {volume == null ? '—' : Math.round(volume).toLocaleString()}
             <span>L {stale ? 'last recorded' : 'available'}</span>
@@ -111,7 +87,6 @@ export default function OverviewTab() {
             level={level}
             shape={profile.data?.shape}
             stale={stale}
-            alert={tankAlert}
             showLabel={false}
           />
         </div>
