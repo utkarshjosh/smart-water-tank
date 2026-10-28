@@ -10,6 +10,7 @@
  */
 import { prisma } from '../src/lib/prisma';
 import { previewInsight, replayInsights } from '../src/services/insight.service';
+import { timeZoneOf } from '../src/services/rollup.service';
 
 async function main() {
   const args = process.argv.slice(2);
@@ -23,7 +24,8 @@ async function main() {
   if (flag('--replay')) {
     const rows = await replayInsights(device, Number(flag('--replay')), at);
     for (const r of rows) {
-      const local = new Date(r.at).toLocaleTimeString('en-IN', { timeZone: device.timezone ?? undefined, hour: 'numeric', minute: '2-digit' });
+      // The tank's zone, with the same default the slots are decided in - not the server's.
+      const local = new Date(r.at).toLocaleTimeString('en-IN', { timeZone: timeZoneOf(device), hour: 'numeric', minute: '2-digit' });
       console.log(`${r.date} ${r.slot.padEnd(7)} ${local.padStart(8)}  bar ${r.bar}`);
       console.log(r.sent ? `  SENT ${r.sent.kind} ${r.sent.score}: ${r.sent.text}` : '  nothing sent');
       for (const c of r.candidates) console.log(`    ${c.kind} ${c.score} (after recency ${c.adjusted}): ${c.text}`);
