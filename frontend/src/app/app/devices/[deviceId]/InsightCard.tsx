@@ -57,8 +57,8 @@ export function InsightCard() {
       <CardHeader>
         <CardTitle>Daily water insight</CardTitle>
         <CardDescription>
-          At most one notification a day, between 9 AM and 8 PM, with something worth knowing about your water use.
-          Optional and off by default. Quiet when there is no useful insight.
+          At most one notification a day, around midday or early evening, and only when there is something worth
+          knowing about your water use, so a few times a week. Optional and off by default.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -73,7 +73,7 @@ export function InsightCard() {
         </div>
         <div className="rounded-xl bg-surface-sunk p-4 text-caption text-ink-2" role="status">
           <p className="font-medium">{settings.isError ? 'Couldn’t check this setting' : !settings.data ? 'Checking your preference…' : !settings.data.enabled ? 'Currently off' : sent[0]?.local_date === preview.data?.local_date ? 'Today’s insight is saved below' : preview.isError ? 'Couldn’t check today’s insight' : preview.data?.picked ? 'On · ready for the next daily check' : 'On · collecting enough readings'}</p>
-          <p className="mt-1 leading-relaxed text-ink-3">Daily comparisons use complete days of readings. After an offline period, allow time to build a reliable picture. Notifications also need to be enabled on your phone.</p>
+          <p className="mt-1 leading-relaxed text-ink-3">Comparisons use only the hours the sensor recorded on both days. After an offline period, allow a few days to build a reliable picture. Notifications also need to be enabled on your phone.</p>
           {settings.isError && <button className="mt-2 text-brand underline" onClick={() => settings.refetch()}>Try again</button>}
         </div>
         {insights.isError && <p className="text-caption text-critical-text">Couldn’t load saved insights. <button className="underline" onClick={() => insights.refetch()}>Try again</button></p>}
