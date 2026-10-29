@@ -31,7 +31,8 @@ export function UsageHistoryBody({
   fetching: boolean;
 }) {
   const t = data.totals;
-  const partial = t.days_with_data > t.full_days || t.days_with_data < t.days;
+  const partial =
+    t.days_with_data > t.full_days - t.estimated_days || t.days_with_data < t.days;
   const hasPatterns = t.full_days >= 3;
 
   return (
@@ -49,7 +50,7 @@ export function UsageHistoryBody({
           unit="L"
           hint={
             t.full_days
-              ? `Average of ${t.full_days} full day${t.full_days === 1 ? '' : 's'}`
+              ? `Average of ${t.full_days} full day${t.full_days === 1 ? '' : 's'}${t.estimated_days ? `, ${t.estimated_days} with gaps filled` : ''}`
               : 'No full days of readings yet'
           }
         />
@@ -90,9 +91,9 @@ export function UsageHistoryBody({
           )}
           {partial && t.days_with_data > 0 && (
             <p className="mt-3 text-caption text-ink-3">
-              Readings on {t.days_with_data} of {t.days} days. Daily averages exclude days missing
-              more than 15 minutes of readings. Partial days still contribute their recorded amounts
-              to totals.
+              Readings on {t.days_with_data} of {t.days} days. Daily averages exclude days with
+              under {data.full_day_hours} hours of readings; shorter gaps are filled in from your
+              usual use at those hours. Bars and totals show recorded amounts only.
             </p>
           )}
         </CardContent>
@@ -204,7 +205,7 @@ function bucketSlots(data: UsageHistoryResponse): UsageSlot[] {
       b.days_with_data && b.days_with_data < days
         ? `readings on ${b.days_with_data} of ${days} days`
         : null,
-      days === 1 && b.days_with_data === 1 && b.full_days === 0
+      days === 1 && b.days_with_data === 1 && (b.full_days === 0 || b.estimated_days > 0)
         ? 'sensor off part of the day'
         : null,
       data.group === 'day' && b.start === data.today ? 'so far today' : null,

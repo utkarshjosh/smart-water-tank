@@ -64,13 +64,13 @@ const DEMO_HISTORY = (() => {
   const days = Array.from({ length: 30 }, (_, i) => new Date(Date.UTC(2026, 8, 21 + i)).toISOString().slice(0, 10));
   const buckets = days.map((d) => {
     const r = REAL[d];
-    return { key: d, start: d, end: d, used_l: r ? r[0] : null, filled_l: r ? r[1] : null, refills: r ? r[2] : 0, leak_days: 0, days_with_data: r ? 1 : 0, full_days: r && r[3] >= 20 ? 1 : 0 };
+    return { key: d, start: d, end: d, used_l: r ? r[0] : null, filled_l: r ? r[1] : null, refills: r ? r[2] : 0, leak_days: 0, days_with_data: r ? 1 : 0, full_days: r && r[3] >= 20 ? 1 : 0, estimated_days: r && r[3] >= 20 && r[3] < 24 ? 1 : 0 };
   });
   const hourShape = [0, 0, 0, 0, 0, 6, 22, 40, 18, 35, 42, 30, 20, 8, 4, 4, 6, 25, 30, 22, 12, 6, 2, 0];
   return {
     device_id: 'esp8266-e3f7f7', timezone: 'Asia/Kolkata', from: days[0], to: days[29], group: 'day' as const, today: '2026-10-20',
     capacity_l: 1145, full_day_hours: 20, buckets,
-    totals: { used_l: 3125, filled_l: 3026, refills: 8, days: 30, days_with_data: 5, full_days: 4, daily_average_l: 601.3,
+    totals: { used_l: 3125, filled_l: 3026, refills: 8, days: 30, days_with_data: 5, full_days: 4, estimated_days: 1, daily_average_l: 601.3,
       busiest_day: { date: '2026-10-14', used_l: 802 }, quietest_day: { date: '2026-10-16', used_l: 425 } },
     by_weekday: [0, 1, 2, 3, 4, 5, 6].map((w) => ({ weekday: w, average_l: [null, null, 802, 540, 425, 638, null][w], days: [0, 0, 1, 1, 1, 1, 0][w] })),
     by_hour: hourShape.map((v, h) => ({ hour: h, average_l: v, samples: 4 })),

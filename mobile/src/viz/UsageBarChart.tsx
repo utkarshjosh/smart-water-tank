@@ -38,8 +38,9 @@ export function UsageBarChart({
     key: string;
     index: number;
   } | null>(null);
+  const picked = selection?.key === slotsKey;
   const active =
-    selection?.key === slotsKey
+    picked
       ? Math.min(selection.index, slots.length - 1)
       : model.peak >= 0
         ? model.peak
@@ -210,7 +211,7 @@ export function UsageBarChart({
               {amount == null ? 'No readings' : `${formatLitres(amount)} ${unit}`}
             </Text>
             <Text variant="caption" color="mutedForeground">
-              {current?.note || 'Touch a bar to explore'}
+              {current?.note || (picked ? '' : 'Highest shown. Touch a bar to compare.')}
             </Text>
           </View>
         </>

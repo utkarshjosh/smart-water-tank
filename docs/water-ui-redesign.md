@@ -2,7 +2,12 @@
 
 The web home and tank overview now lead with water available, water used today,
 water added today, and a usual-day baseline. The baseline uses at least three
-well-covered days from the preceding two weeks (all but 15 minutes of the local day observed).
+well-covered days from the preceding two weeks: at least 20 hours of the local day observed.
+The rest of such a day (typically a power cut) is filled in with the usual use at those
+clock hours, taken from hours in the range that were fully observed on at least three days.
+Gaps with no usual figure may total at most 15 minutes, so a new tank still needs nearly
+complete days. Per-day bars and totals stay as recorded; only averages, weekday patterns
+and busiest/quietest day use the filled-in figures.
 Day length follows the tank timezone, including daylight-saving transitions. Today is excluded, and hours without usable observation do not count toward
 coverage. A tank that is just starting to report shows a learning state.
 

@@ -164,7 +164,7 @@ export function waterPreviewData(scenario: WaterScenario) {
     group: 'day',
     today,
     capacity_l: 1145,
-    full_day_hours: 23.75,
+    full_day_hours: 20,
     buckets: Array.from({ length: 14 }, (_, i) => ({
       key: shift(i - 14),
       start: shift(i - 14),
@@ -175,6 +175,7 @@ export function waterPreviewData(scenario: WaterScenario) {
       leak_days: 0,
       days_with_data: first || empty ? 0 : 1,
       full_days: first || empty ? 0 : 1,
+      estimated_days: 0,
     })),
     totals: {
       used_l: first || empty ? null : 6230,
@@ -183,6 +184,7 @@ export function waterPreviewData(scenario: WaterScenario) {
       days: 14,
       days_with_data: first || empty ? 0 : 14,
       full_days: first || empty ? 0 : 14,
+      estimated_days: 0,
       daily_average_l: first || empty ? null : 445,
       busiest_day: null,
       quietest_day: null,
