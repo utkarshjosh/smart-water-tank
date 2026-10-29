@@ -2,10 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   adjustedScore,
-  barFor,
   clockLabel,
   dueSlot,
-  EXCEPTIONAL_SCORE,
   generateInsights,
   hourRange,
   pickInsight,
@@ -217,10 +215,10 @@ test('a quiet night is news only right after a night with use, and says so', () 
   const usedNightBefore = dayHours(addDays(TODAY, -1), { 2: 50 });
   const news = find(generateInsights(input({ slot: 'midday', nowHour: 12, hours: [...night, ...usedNightBefore] })), 'quiet_night')!;
   assert.equal(news.text, 'No measurable water-level drop was recorded between midnight and 5 AM, after about 50 L the night before.');
-  assert.ok(news.score >= SLOTS.evening.bar);
+  assert.ok(news.score >= SLOTS.midday.bar);
 
   const usual = find(generateInsights(input({ slot: 'midday', nowHour: 12, hours: [...night, ...dayHours(addDays(TODAY, -1), {})] })), 'quiet_night')!;
-  assert.ok(usual.score < SLOTS.evening.bar, 'an ordinary quiet night is not sent');
+  assert.ok(usual.score < SLOTS.midday.bar, 'an ordinary quiet night is not sent at midday');
 });
 
 test('a quiet night needs every overnight hour, and a repeated clock hour adds up', () => {
@@ -289,12 +287,31 @@ test('the pick is weighted-random among candidates above the bar', () => {
   assert.equal(pickInsight([], [], TODAY, { minScore: 0.35, rand: Math.random }), null);
 });
 
-test('after four sends in six days only an exceptional fact goes out', () => {
-  const sent = (offsets: number[]) => offsets.map((d) => ({ kind: 'x', date: addDays(TODAY, -d) }));
-  assert.equal(barFor('evening', sent([1, 2, 4]), TODAY), SLOTS.evening.bar);
-  assert.equal(barFor('evening', sent([1, 2, 4, 6]), TODAY), EXCEPTIONAL_SCORE);
-  assert.equal(barFor('evening', sent([1, 2, 4, 7]), TODAY), SLOTS.evening.bar);
-  assert.equal(barFor('midday', [], TODAY), SLOTS.midday.bar);
+test('a dull evening still sends something: the day so far', () => {
+  const hours = [...history(7), ...dayHours(TODAY, USUAL, { until: 19 })];
+  const days = [{ date: TODAY, refills: 2 }];
+  const out = generateInsights(input({ hours, days }));
+  const summary = find(out, 'day_summary')!;
+  assert.equal(summary.text, 'Today so far: about 300 L used by 7 PM, with 2 refills.');
+  // Every other kind sent yesterday, the summary included: it may repeat.
+  const recent = out.map((c) => ({ kind: c.kind, date: addDays(TODAY, -1) }));
+  const picked = pickInsight(out, recent, TODAY, { minScore: SLOTS.evening.bar, rand: seededRandom('dull') });
+  assert.equal(picked?.insight.kind, 'day_summary');
+});
+
+test('the day summary only claims the hours it saw, and says when nothing arrived', () => {
+  const cut = dayHours(TODAY, USUAL, { until: 19, missing: [9, 10, 11] });
+  const [summary] = generateInsights(input({ hours: cut, days: [{ date: TODAY, refills: 1 }] })).filter(
+    (c) => c.kind === 'day_summary',
+  );
+  assert.equal(summary.text, 'Today so far: about 250 L used in the 16 hours with readings by 7 PM, with one refill.');
+  const quiet = find(generateInsights(input({ hours: dayHours(TODAY, {}, { until: 19 }) })), 'day_summary')!;
+  assert.equal(quiet.text, 'Today so far: no measurable water use by 7 PM, with no refill yet.');
+  const none = find(generateInsights(input({ hours: [] })), 'day_summary')!;
+  assert.match(none.text, /No readings have arrived/);
+  // Midday never sends the summary on its own.
+  assert.equal(find(generateInsights(input({ slot: 'midday', nowHour: 12, hours: cut })), 'day_summary'), undefined);
+  assert.ok(SLOTS.midday.bar > summary.score);
 });
 
 test('each slot is decided once, inside its window, at a time that varies by day', () => {

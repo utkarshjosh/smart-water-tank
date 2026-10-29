@@ -57,8 +57,8 @@ export function InsightCard() {
       <CardHeader>
         <CardTitle>Daily water insight</CardTitle>
         <CardDescription>
-          At most one notification a day, around midday or early evening, and only when there is something worth
-          knowing about your water use, so a few times a week. Optional and off by default.
+          One notification a day, around midday or early evening. On a quiet day it is a short summary of your
+          water use so far. Optional and off by default.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

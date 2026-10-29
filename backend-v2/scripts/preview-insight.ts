@@ -6,7 +6,7 @@
  *
  *   npm run insights:preview -- <hardware-device-id> --replay 14
  *     replays the midday and evening slots of the last 14 days: what would have
- *     been sent each day, with the recency penalty and weekly budget applied
+ *     been sent each day, with the recency penalty applied
  */
 import { prisma } from '../src/lib/prisma';
 import { previewInsight, replayInsights } from '../src/services/insight.service';
