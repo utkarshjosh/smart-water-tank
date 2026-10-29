@@ -141,8 +141,6 @@
 .single-tank-volume { margin-top: 10px; font-size: 14px; color: hsl(var(--ink-2)); }
 .single-tank-volume strong { color: hsl(var(--ink-1)); font-weight: 550; }
 .single-tank-freshness { margin-top: 12px; color: hsl(var(--ink-3)); font-size: 12px; line-height: 1.7; }
-.single-tank-alert { display: flex; align-items: center; gap: 9px; border-radius: 10px; padding: 12px; margin-top: 20px; font-size: 12px; }
-.single-tank-alert > svg { flex-shrink: 0; }
 .single-tank-primary { margin-top: 28px; }
 .single-tank-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .single-tank-actions > a { display: flex; align-items: center; gap: 13px; padding: 22px; border: 1px solid hsl(var(--hairline)); border-radius: 16px; background: white; transition: border-color 140ms ease; }

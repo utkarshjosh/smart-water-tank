@@ -146,12 +146,12 @@ function TankHero({
   const asOf = device.level_percent_as_of ?? device.last_measurement;
 
   return (
-    <Card accent={device.active_alert === 'leak' ? 'crit' : device.active_alert === 'low' ? 'warn' : undefined}>
+    <Card>
       <View style={styles.heroRow}>
-        <GlassTank level={device.level_percent} alert={device.active_alert} width={104} height={168} />
+        <GlassTank level={device.level_percent} width={104} height={168} />
         <View style={styles.heroText}>
           <View style={styles.statusRow}>
-            <StatusDot tone={offline ? 'offline' : device.active_alert ? 'warn' : 'ok'} />
+            <StatusDot tone={offline ? 'offline' : 'ok'} />
             <Text variant="caption" color="mutedForeground">
               {device.name}
             </Text>
@@ -169,8 +169,6 @@ function TankHero({
           </Text>
 
           {offline && <Pill tone="offline">Offline</Pill>}
-          {device.active_alert === 'low' && <Pill tone="warn">Running low</Pill>}
-          {device.active_alert === 'leak' && <Pill tone="crit">Possible leak</Pill>}
           {device.level_percent === null && device.has_tank_profile && (
             <Pill tone="offline">Sensor unreadable</Pill>
           )}

@@ -22,7 +22,6 @@ function toWidgetTank(device: DeviceSummary, capacityL: number | null): WidgetTa
     asOf: (device.level_percent_as_of ?? device.last_measurement)?.getTime() ?? null,
     stale: device.level_percent_stale,
     online: device.status === 'online',
-    alert: device.active_alert,
   };
 }
 

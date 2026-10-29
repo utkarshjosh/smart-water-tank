@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
-import { CaretRight, Drop, Plus, Warning } from '@phosphor-icons/react';
+import { CaretRight, Drop, Plus } from '@phosphor-icons/react';
 import { devicesResponseSchema, type DeviceSummary } from '@aquamind/contracts';
 import { get } from '@/lib/api';
 import { SingleTankHome } from './SingleTankHome';
@@ -27,7 +27,6 @@ export default function TenantDevicesPage() {
 
   const list = devices.data ?? [];
   const online = list.filter((d) => d.status === 'online').length;
-  const needsAttention = list.filter((d) => d.active_alert).length;
 
   const singleDevice = list.length === 1 ? list[0] : null;
   usePageHeading(singleDevice ? 'My tank' : 'My tanks');
@@ -69,17 +68,12 @@ export default function TenantDevicesPage() {
       )}
 
       {list.length > 1 && (
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           <StatTile label="Tanks" value={list.length} />
           <StatTile
             label="Online"
             value={online}
             tone={online === list.length ? 'good' : 'default'}
-          />
-          <StatTile
-            label="Attention"
-            value={needsAttention}
-            tone={needsAttention > 0 ? 'warning' : 'default'}
           />
         </div>
       )}
@@ -115,7 +109,6 @@ export default function TenantDevicesPage() {
                 <div className="workspace-tank-visual">
                   <TankLevel
                     level={device.has_tank_profile ? device.level_percent : null}
-                    alert={device.active_alert}
                     showLabel={false}
                     stale={device.level_percent_stale || device.status !== 'online'}
                     animated={false}
@@ -149,12 +142,6 @@ export default function TenantDevicesPage() {
                     device.level_percent_stale && (
                       <p className="mt-1 text-caption text-ink-3">Last known level</p>
                     )}
-                  {device.active_alert && (
-                    <p className="mt-1 inline-flex items-center gap-1 text-caption text-warning-text">
-                      <Warning size={13} weight="fill" aria-hidden />
-                      {device.active_alert === 'leak' ? 'Possible leak' : 'Level low'}
-                    </p>
-                  )}
                 </div>
 
                 <CaretRight

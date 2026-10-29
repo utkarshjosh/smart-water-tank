@@ -40,7 +40,6 @@ export function tankPatchFromAlert(payload: AlertPayload): Partial<WidgetTank> &
     ...(payload.level_percent === undefined ? {} : { levelPercent: payload.level_percent }),
     ...(payload.online === undefined ? {} : { online: payload.online }),
     ...(payload.as_of ? { asOf: new Date(payload.as_of).getTime() } : {}),
-    alert: payload.type === 'leak_detected' ? 'leak' : payload.type === 'tank_low' ? 'low' : null,
   };
 }
 

@@ -18,13 +18,7 @@ import type { WidgetTank } from '@/widget/state';
 
 const c = palette.dark;
 type Hex = `#${string}`;
-const STATUS = { ok: '#3fc397', warn: '#e5a53a', crit: '#f4726f', offline: '#64748b' } as const satisfies Record<string, Hex>;
-
-function waterColor(tank: WidgetTank): Hex {
-  if (tank.alert === 'leak') return STATUS.crit;
-  if (tank.alert === 'low') return STATUS.warn;
-  return c.chart2;
-}
+const STATUS = { ok: '#3fc397', offline: '#64748b' } as const satisfies Record<string, Hex>;
 
 /** Ribbed tank with a flat surface — RemoteViews gets no animation. */
 function tankSvg(tank: WidgetTank): string {
@@ -42,7 +36,7 @@ function tankSvg(tank: WidgetTank): string {
     <rect x="2" y="2" width="${w - 4}" height="${h - 4}" rx="9" fill="${c.muted}" opacity="0.45"/>
     <clipPath id="tank"><rect x="2" y="2" width="${w - 4}" height="${h - 4}" rx="9"/></clipPath>
     <g clip-path="url(#tank)" opacity="${opacity}">
-      <rect x="2" y="${y}" width="${w - 4}" height="${waterHeight}" fill="${waterColor(tank)}"/>
+      <rect x="2" y="${y}" width="${w - 4}" height="${waterHeight}" fill="${c.chart2}"/>
       <rect x="2" y="${y}" width="${w - 4}" height="1.5" fill="#ffffff" opacity="0.55"/>
     </g>
     ${ribs}
@@ -73,7 +67,7 @@ export function TankWidget({ tank }: { tank: WidgetTank | null }) {
     );
   }
 
-  const statusColor = !tank.online ? STATUS.offline : tank.alert ? waterColor(tank) : STATUS.ok;
+  const statusColor = tank.online ? STATUS.ok : STATUS.offline;
   const age = formatAge(tank.asOf === null ? null : new Date(tank.asOf));
 
   return (
