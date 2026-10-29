@@ -121,8 +121,6 @@ export function useUpdateAlertRules(deviceId: string) {
     },
     onSuccess: (saved) => {
       client.setQueryData(key, saved);
-      // The Tanks screen derives "running low" from the same numbers.
-      void client.invalidateQueries({ queryKey: ['devices'] });
     },
   });
 }
