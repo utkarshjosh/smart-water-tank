@@ -5,8 +5,12 @@ import {
   bucketKey,
   byHourOfDay,
   byWeekday,
+  fillGaps,
   groupDays,
+  isCompleteDay,
+  isEstimatedDay,
   summarize,
+  usualHours,
   weekdayOf,
   type DayInput,
 } from '../lib/usage-history';
@@ -112,4 +116,58 @@ test('daily baselines exclude four-hour outages and respect 23/25-hour local day
     true,
   );
   assert.equal(groupDays([days[1]], '2026-10-13', '2026-10-13', 'day')[0].fullDays, 0);
+});
+
+test('a power cut is filled from the usual use at those hours, and the day then counts', () => {
+  // Hours 10-12 were each fully observed on three other days.
+  const usual = usualHours(
+    [10, 10, 10, 11, 11, 11, 12, 12, 12].map((hour, i) => ({ hour, usedL: 20 + (i % 3) * 5 })),
+  );
+  assert.equal(usual[10], 25);
+  assert.equal(usual[9], null); // never fully observed: nothing to fill with
+  // A 2.5-hour cut from 10:00 to 12:30.
+  const slots = Array.from({ length: 24 }, (_, hour) => ({
+    hour,
+    observedSeconds: hour === 10 || hour === 11 ? 0 : hour === 12 ? 1800 : 3600,
+    over: true,
+  }));
+  const fill = fillGaps(slots, usual);
+  assert.equal(fill.gapFillL, 62.5);
+  assert.equal(fill.unknownHours, 0);
+  const cut = day('2026-10-27', 300, 21.5, fill);
+  assert.equal(isCompleteDay(cut), true);
+  assert.equal(isEstimatedDay(cut), true);
+  const s = summarize([cut, day('2026-10-26', 400)]);
+  assert.equal(s.usedL, 700); // totals stay as recorded
+  assert.equal(s.dailyAverageL, 381.25);
+  assert.deepEqual(s.quietestDay, { date: '2026-10-27', usedL: 362.5 });
+  assert.equal(s.estimatedDays, 1);
+  assert.equal(groupDays([cut], '2026-10-27', '2026-10-27', 'day')[0].estimatedDays, 1);
+});
+
+test('gaps with no usual figure, or hours still to come, are not guessed at', () => {
+  const slots = Array.from({ length: 24 }, (_, hour) => ({
+    hour,
+    observedSeconds: hour === 9 ? 0 : 3600,
+    over: true,
+  }));
+  const usual = Array.from({ length: 24 }, (_, hour) => (hour === 9 ? null : 10));
+  assert.deepEqual(fillGaps(slots, usual), { gapFillL: 0, unknownHours: 1 });
+  assert.equal(isCompleteDay(day('2026-10-27', 300, 23, fillGaps(slots, usual))), false);
+
+  // Today at 21:00: the last three hours have not happened yet.
+  const today = Array.from({ length: 24 }, (_, hour) => ({
+    hour,
+    observedSeconds: hour < 21 ? 3600 : 0,
+    over: hour < 21,
+  }));
+  const partial = fillGaps(today, Array(24).fill(10));
+  assert.deepEqual(partial, { gapFillL: 0, unknownHours: 3 });
+  assert.equal(isCompleteDay(day('2026-10-28', 300, 21, partial)), false);
+});
+
+test('more than four hours missing is never filled in', () => {
+  const d = day('2026-10-27', 300, 19.5, { gapFillL: 120, unknownHours: 0 });
+  assert.equal(isCompleteDay(d), false);
+  assert.equal(summarize([d]).dailyAverageL, null);
 });

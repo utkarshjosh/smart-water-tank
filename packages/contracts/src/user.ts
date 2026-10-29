@@ -312,7 +312,10 @@ export const usageHistoryResponseSchema = z.object({
   group: z.enum(['day', 'week', 'month']),
   today: isoDate,
   capacity_l: z.number().nullable(),
-  /** A day needs this many hours with readings to count in averages. */
+  /**
+   * A day needs this many hours with readings to count in averages. Its other
+   * hours are filled in from the usual use at those hours.
+   */
   full_day_hours: z.number(),
   /** Every day/week/month in the range; used_l null = no readings at all. */
   buckets: z.array(
@@ -326,6 +329,8 @@ export const usageHistoryResponseSchema = z.object({
       leak_days: z.number(),
       days_with_data: z.number(),
       full_days: z.number(),
+      /** Of full_days, those whose gaps were filled in; their used_l is recorded only. */
+      estimated_days: z.number(),
     }),
   ),
   totals: z.object({
@@ -335,7 +340,8 @@ export const usageHistoryResponseSchema = z.object({
     days: z.number(),
     days_with_data: z.number(),
     full_days: z.number(),
-    /** Over full days only. */
+    estimated_days: z.number(),
+    /** Over full days only, gaps filled in; busiest/quietest likewise. */
     daily_average_l: z.number().nullable(),
     busiest_day: usageDayRefSchema.nullable(),
     quietest_day: usageDayRefSchema.nullable(),

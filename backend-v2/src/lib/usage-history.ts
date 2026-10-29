@@ -6,13 +6,19 @@ import { addDays } from './local-time';
  * weekdays and hours of the day the water goes. Pure; usage.service feeds it
  * rows from daily_summaries and hourly_usage.
  *
- * Averages only count nearly complete days: all but 15 minutes observed.
- * Local day lengths account for daylight-saving changes. A day the device was off for half of reads as half the use, and
- * letting it into an average would make "the sensor was unplugged" look like
- * "we used less water".
+ * Averages and day-to-day comparisons only count well-covered days: at least
+ * 20 hours observed, with the rest filled in from the usual use at those clock
+ * hours (see fillGaps). A day the device was off for half of reads as half the
+ * use, and letting it in as recorded would make "the power was cut" look like
+ * "we used less water". Totals and per-day bars stay as recorded.
+ * Local day lengths account for daylight-saving changes.
  */
 
-export const FULL_DAY_HOURS = 23.75;
+export const FULL_DAY_HOURS = 20;
+/** Unobserved time that may go unfilled: no usual figure, or not over yet. */
+const MAX_UNKNOWN_HOURS = 0.25;
+/** A clock hour needs this many fully observed samples to stand in for a gap. */
+const MIN_USUAL_SAMPLES = 3;
 
 export type Group = 'day' | 'week' | 'month';
 
@@ -26,14 +32,65 @@ export interface DayInput {
   hoursWithData: number;
   /** Actual local day duration, including daylight-saving changes. */
   expectedHours?: number;
+  /** Litres estimated for unobserved time from the usual use at those hours. */
+  gapFillL?: number;
+  /** Unobserved hours nothing could fill. Defaults to all unobserved time. */
+  unknownHours?: number;
 }
 
-/** A gap longer than 15 minutes disqualifies a day from a daily comparison. */
-export function isCompleteDay(day: Pick<DayInput, 'hoursWithData' | 'expectedHours'>): boolean {
+type Coverage = Pick<DayInput, 'hoursWithData' | 'expectedHours' | 'unknownHours'>;
+const missingHours = (day: Coverage) => (day.expectedHours ?? 24) - day.hoursWithData;
+
+/**
+ * At least 20 hours observed, and no more than 15 minutes of the rest left
+ * unaccounted for. Without usual-hour figures that is the old rule: all but 15
+ * minutes observed.
+ */
+export function isCompleteDay(day: Coverage): boolean {
   return (
     Number.isFinite(day.hoursWithData) &&
-    day.hoursWithData >= (day.expectedHours ?? 24) - (24 - FULL_DAY_HOURS)
+    missingHours(day) <= 24 - FULL_DAY_HOURS &&
+    (day.unknownHours ?? missingHours(day)) <= MAX_UNKNOWN_HOURS
   );
+}
+
+/** A counted day whose missing time was filled in rather than observed. */
+export function isEstimatedDay(day: Coverage): boolean {
+  return isCompleteDay(day) && missingHours(day) > MAX_UNKNOWN_HOURS;
+}
+
+/** What averages and comparisons use: recorded use plus the filled gaps. */
+export function estimatedUseL(day: Pick<DayInput, 'usedL' | 'gapFillL'>): number {
+  return day.usedL + (day.gapFillL ?? 0);
+}
+
+/**
+ * Usual litres per clock hour (0-23) from fully observed hours, or null when
+ * an hour has too few samples to stand in for a gap.
+ */
+export function usualHours(hours: Array<{ hour: number; usedL: number }>): Array<number | null> {
+  return byHourOfDay(hours).map((h) => (h.samples >= MIN_USUAL_SAMPLES ? h.averageL : null));
+}
+
+/**
+ * Fills each local hour's unobserved share with the usual use at that hour.
+ * Hours not over yet, or with no usual figure, stay unknown: today is never
+ * finished off with a guess about the rest of it.
+ */
+export function fillGaps(
+  slots: Array<{ hour: number; observedSeconds: number; over: boolean }>,
+  usual: Array<number | null>,
+): { gapFillL: number; unknownHours: number } {
+  let gapFillL = 0;
+  let unknownHours = 0;
+  for (const s of slots) {
+    const missing = Math.max(0, 3600 - s.observedSeconds) / 3600;
+    if (!missing) continue;
+    const litres = s.over ? usual[s.hour] : null;
+    if (litres == null) unknownHours += missing;
+    else gapFillL += litres * missing;
+  }
+  return { gapFillL, unknownHours };
 }
 
 export interface Bucket {
@@ -47,6 +104,8 @@ export interface Bucket {
   leakDays: number;
   daysWithData: number;
   fullDays: number;
+  /** Of fullDays, those with gaps filled in. */
+  estimatedDays: number;
 }
 
 /** Days for short ranges, weeks up to ~6 months, months beyond. */
@@ -91,6 +150,7 @@ export function groupDays(days: DayInput[], from: string, to: string, group: Gro
         leakDays: 0,
         daysWithData: 0,
         fullDays: 0,
+        estimatedDays: 0,
       };
       buckets.set(key, b);
     }
@@ -103,6 +163,7 @@ export function groupDays(days: DayInput[], from: string, to: string, group: Gro
     b.leakDays += d.leak ? 1 : 0;
     b.daysWithData += 1;
     b.fullDays += isCompleteDay(d) ? 1 : 0;
+    b.estimatedDays += isEstimatedDay(d) ? 1 : 0;
   }
   return [...buckets.values()];
 }
@@ -113,16 +174,20 @@ export interface Summary {
   refills: number;
   daysWithData: number;
   fullDays: number;
-  /** Over full days only; null when there are none. */
+  estimatedDays: number;
+  /** Over full days only, gaps filled; null when there are none. */
   dailyAverageL: number | null;
+  /** Full days only, gaps filled. */
   busiestDay: { date: string; usedL: number } | null;
   quietestDay: { date: string; usedL: number } | null;
 }
 
 export function summarize(days: DayInput[]): Summary {
   const withData = days.filter((d) => d.hoursWithData > 0);
-  const full = withData.filter(isCompleteDay);
-  const sum = (list: DayInput[], f: (d: DayInput) => number) => list.reduce((t, d) => t + f(d), 0);
+  const full = withData
+    .filter(isCompleteDay)
+    .map((d) => ({ date: d.date, usedL: estimatedUseL(d) }));
+  const sum = <T>(list: T[], f: (d: T) => number) => list.reduce((t, d) => t + f(d), 0);
   const sorted = [...full].sort((a, b) => b.usedL - a.usedL);
   return {
     usedL: sum(withData, (d) => d.usedL),
@@ -130,15 +195,14 @@ export function summarize(days: DayInput[]): Summary {
     refills: sum(withData, (d) => d.refills),
     daysWithData: withData.length,
     fullDays: full.length,
+    estimatedDays: withData.filter(isEstimatedDay).length,
     dailyAverageL: full.length ? sum(full, (d) => d.usedL) / full.length : null,
-    busiestDay: sorted.length ? { date: sorted[0].date, usedL: sorted[0].usedL } : null,
-    quietestDay: sorted.length
-      ? { date: sorted[sorted.length - 1].date, usedL: sorted[sorted.length - 1].usedL }
-      : null,
+    busiestDay: sorted[0] ?? null,
+    quietestDay: sorted[sorted.length - 1] ?? null,
   };
 }
 
-/** Average use per weekday, Monday first, over full days only. */
+/** Average use per weekday, Monday first, over full days only, gaps filled. */
 export function byWeekday(
   days: DayInput[],
 ): Array<{ weekday: number; averageL: number | null; days: number }> {
@@ -146,7 +210,7 @@ export function byWeekday(
   for (const d of days) {
     if (!isCompleteDay(d)) continue;
     const t = totals[weekdayOf(d.date)];
-    t.sum += d.usedL;
+    t.sum += estimatedUseL(d);
     t.n += 1;
   }
   return totals.map((t, weekday) => ({ weekday, averageL: t.n ? t.sum / t.n : null, days: t.n }));

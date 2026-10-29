@@ -14,6 +14,7 @@ export function WaterSnapshot({ deviceId }: { deviceId: string }) {
   const baseline = useUsageHistory(deviceId, { from: shift(-14), to: shift(-1), group: 'day' });
   const total = today.data?.today;
   const fullDays = baseline.data?.totals.full_days ?? 0;
+  const estimatedDays = baseline.data?.totals.estimated_days ?? 0;
   const average = fullDays >= 3 ? baseline.data?.totals.daily_average_l : null;
   const stats = [
     {
@@ -35,8 +36,10 @@ export function WaterSnapshot({ deviceId }: { deviceId: string }) {
       note: baseline.isError
         ? 'Couldn’t load your daily average'
         : average == null
-          ? 'Needs 3 well-covered days'
-          : `From ${fullDays} well-covered days`,
+          ? 'Needs 3 days with 20+ hours of readings'
+          : estimatedDays
+            ? `From ${fullDays} days, gaps filled from your usual hours`
+            : `From ${fullDays} well-covered days`,
     },
   ];
   return (

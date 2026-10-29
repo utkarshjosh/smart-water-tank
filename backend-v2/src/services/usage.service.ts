@@ -13,9 +13,11 @@ import {
   byHourOfDay,
   byWeekday,
   daysBetween,
+  fillGaps,
   groupDays,
   isCompleteDay,
   summarize,
+  usualHours,
 } from '../lib/usage-history';
 import { capacityOf, timeZoneOf } from './rollup.service';
 
@@ -297,12 +299,28 @@ export async function getUsageHistory(
 
   // Hours with readings per local day: how much of each day the device saw.
   const hoursByDate = new Map<string, number>();
+  const observedAt = new Map<number, number>();
   for (const h of hourRows) {
     const date = localDate(h.hourStart, timeZone);
     hoursByDate.set(date, (hoursByDate.get(date) ?? 0) + h.observedSeconds / 3600);
+    observedAt.set(h.hourStart.getTime(), h.observedSeconds);
   }
+  const fullHours = hourRows
+    .filter((h) => h.observedSeconds >= COMPLETE_HOUR_SECONDS)
+    .map((h) => ({ hour: localHour(h.hourStart, timeZone), usedL: h.usedL.toNumber() }));
+  // A power cut's missing hours are filled with the usual use at those hours.
+  const usual = usualHours(fullHours);
   const days: DayInput[] = summaries.map((s) => {
     const date = s.date.toISOString().slice(0, 10);
+    const slots: Parameters<typeof fillGaps>[0] = [];
+    const dayEnd = startOfLocalDay(addDays(date, 1), timeZone).getTime();
+    for (let t = startOfLocalDay(date, timeZone).getTime(); t < dayEnd; t += 3_600_000) {
+      slots.push({
+        hour: localHour(new Date(t), timeZone),
+        observedSeconds: observedAt.get(t) ?? 0,
+        over: t + 3_600_000 <= now.getTime(),
+      });
+    }
     return {
       date,
       usedL: s.totalUsageL.toNumber(),
@@ -311,6 +329,7 @@ export async function getUsageHistory(
       leak: s.leakSuspected,
       hoursWithData: hoursByDate.get(date) ?? 0,
       expectedHours: expectedDayHours(date, timeZone),
+      ...fillGaps(slots, usual),
     };
   });
 
@@ -334,6 +353,7 @@ export async function getUsageHistory(
       leak_days: b.leakDays,
       days_with_data: b.daysWithData,
       full_days: b.fullDays,
+      estimated_days: b.estimatedDays,
     })),
     totals: {
       used_l: summary.daysWithData ? round(summary.usedL) : null,
@@ -342,6 +362,7 @@ export async function getUsageHistory(
       days: span,
       days_with_data: summary.daysWithData,
       full_days: summary.fullDays,
+      estimated_days: summary.estimatedDays,
       daily_average_l: round(summary.dailyAverageL),
       busiest_day: summary.busiestDay && {
         date: summary.busiestDay.date,

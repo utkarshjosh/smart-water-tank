@@ -91,7 +91,11 @@ function HistoryBody({ data, dimmed }: { data: UsageHistory; dimmed: boolean }) 
         <Tile
           label="Normal day"
           value={formatLitres(t.daily_average_l)}
-          hint={t.full_days ? `Average of ${t.full_days} full day${t.full_days === 1 ? '' : 's'}` : 'No full days of readings yet'}
+          hint={
+            t.full_days
+              ? `Average of ${t.full_days} full day${t.full_days === 1 ? '' : 's'}${t.estimated_days ? `, ${t.estimated_days} with gaps filled` : ''}`
+              : 'No full days of readings yet'
+          }
         />
         <Tile
           label="Busiest day"

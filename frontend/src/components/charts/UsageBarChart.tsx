@@ -30,8 +30,9 @@ export function UsageBarChart({
   const model = waterChartModel(slots, metric);
   const slotsKey = slots.map((s) => s.key).join('|');
   const [selection, setSelection] = useState<{ key: string; index: number } | null>(null);
+  const picked = selection?.key === slotsKey;
   const active =
-    selection?.key === slotsKey
+    picked
       ? Math.min(selection.index, slots.length - 1)
       : model.peak >= 0
         ? model.peak
@@ -158,7 +159,9 @@ export function UsageBarChart({
                 {amount != null && <small> {unit}</small>}
               </strong>
             </div>
-            <span className="water-chart-hint">{current?.note || 'Tap a bar to explore'}</span>
+            <span className="water-chart-hint">
+              {current?.note || (picked ? '' : 'Highest shown. Hover or tap a bar to compare.')}
+            </span>
           </div>
         </>
       )}

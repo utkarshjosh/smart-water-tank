@@ -36,7 +36,9 @@ export function bucketSlots(data: UsageHistory): UsageSlot[] {
       b.refills ? `filled ${b.refills}×` : null,
       b.leak_days ? 'possible leak' : null,
       b.days_with_data && b.days_with_data < days ? `readings on ${b.days_with_data} of ${days} days` : null,
-      days === 1 && b.days_with_data === 1 && b.full_days === 0 ? 'sensor off part of the day' : null,
+      days === 1 && b.days_with_data === 1 && (b.full_days === 0 || b.estimated_days > 0)
+        ? 'sensor off part of the day'
+        : null,
       data.group === 'day' && b.start === data.today ? 'so far today' : null,
     ].filter(Boolean);
     return {
@@ -83,9 +85,10 @@ export function weekdaySlots(data: UsageHistory): UsageSlot[] {
 export function coverageNote(data: UsageHistory): string | null {
   const t = data.totals;
   if (t.days_with_data === 0) return null;
-  if (t.days_with_data === t.days && t.full_days === t.days_with_data) return null;
+  if (t.days_with_data === t.days && t.full_days - t.estimated_days === t.days_with_data) return null;
   return (
     `Readings on ${t.days_with_data} of ${t.days} days. Days with under ${data.full_day_hours} hours of readings ` +
-    '(the sensor was off part of the day) count in totals but not in “normal day” or the patterns.'
+    '(the sensor was off part of the day) count in totals but not in “normal day” or the patterns. ' +
+    'Shorter gaps are filled in from your usual use at those hours.'
   );
 }

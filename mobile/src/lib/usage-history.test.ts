@@ -17,6 +17,7 @@ const bucket = (
   leak_days: 0,
   days_with_data: used == null ? 0 : 1,
   full_days: used == null ? 0 : 1,
+  estimated_days: 0,
   ...extra,
 });
 
@@ -40,6 +41,7 @@ const history = (
     days: buckets.length,
     days_with_data: buckets.filter((b) => b.used_l != null).length,
     full_days: buckets.filter((b) => b.full_days).length,
+    estimated_days: buckets.filter((b) => b.estimated_days).length,
     daily_average_l: null,
     busiest_day: null,
     quietest_day: null,
@@ -61,6 +63,13 @@ describe('usage history wording', () => {
     expect(slots.map((s) => s.usedL)).toEqual([638, 720, null]);
     expect(slots[1].note).toContain('sensor off part of the day');
     expect(slots[0].note).toBe('filled 1×');
+  });
+
+  it('a day counted with its gaps filled still says its bar is partial', () => {
+    const data = history([bucket('2026-10-26', 410, { estimated_days: 1 }), bucket('2026-10-27', 520)]);
+    expect(bucketSlots(data)[0].note).toContain('sensor off part of the day');
+    expect(bucketSlots(data)[1].note).toBe('filled 1×');
+    expect(coverageNote(data)).toMatch(/Shorter gaps are filled in/);
   });
 
   it('a leak day is drawn in the alert colour', () => {
