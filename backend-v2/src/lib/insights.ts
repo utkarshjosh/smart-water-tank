@@ -29,7 +29,8 @@ export type InsightKind =
   | 'refills_today'
   | 'week_vs_last'
   | 'low_streak'
-  | 'quiet_night';
+  | 'quiet_night'
+  | 'day_summary';
 
 export type Facts = Record<string, number | string>;
 
@@ -509,7 +510,7 @@ function lowStreak(grid: Grid, input: InsightInput, rand: () => number): Insight
 /**
  * Last night: every hour midnight-5 AM today seen, and no drop beyond the
  * noise floor. Only news right after a night that did see use; otherwise it
- * is the usual state and scores too low to send.
+ * is the usual state and scores too low for midday, only an evening filler.
  */
 function quietNight(grid: Grid, input: InsightInput): Insight | null {
   const { today, noiseL } = input;
@@ -536,9 +537,34 @@ function quietNight(grid: Grid, input: InsightInput): Insight | null {
   return insight('quiet_night', news ? 0.4 : 0.15, facts, template);
 }
 
+/**
+ * The evening's fallback when nothing else is news: what was recorded today so
+ * far, stated for the hours actually read. Scores low, so any real comparison
+ * wins the pick.
+ */
+function daySummary(_grid: Grid, input: InsightInput): Insight {
+  const { today, nowHour, noiseL } = input;
+  const hours = input.hours.filter((h) => h.date === today && h.hour < nowHour && h.observedSeconds > 0);
+  const refills = input.days.find((d) => d.date === today)?.refills ?? 0;
+  if (hours.length === 0) {
+    const template = 'No readings have arrived from your tank yet today, so there is nothing to compare.';
+    return insight('day_summary', 0.1, {}, template);
+  }
+  const used = sum(hours.map((h) => h.usedL));
+  const observed = sum(hours.map((h) => h.observedSeconds)) / 3600;
+  const facts: Facts = { until: clockLabel(nowHour), used_l: aboutL(used), refills };
+  // Power cuts: say how many hours the amount covers rather than imply a whole day.
+  const gaps = observed < nowHour - 0.25;
+  if (gaps) facts.hours = Math.max(1, Math.floor(observed));
+  const amount = used < noiseL ? 'no measurable water use' : 'about {{used_l}} L used';
+  const span = !gaps ? '' : facts.hours === 1 ? ' in the one hour with readings' : ' in the {{hours}} hours with readings';
+  const refilled = refills === 0 ? 'no refill yet' : refills === 1 ? 'one refill' : '{{refills}} refills';
+  return insight('day_summary', 0.1, facts, `Today so far: ${amount}${span} by {{until}}, with ${refilled}.`);
+}
+
 const KINDS_BY_SLOT: Record<Slot, Array<(g: Grid, i: InsightInput, r: () => number) => Insight | null>> = {
   midday: [daySoFar, yesterdayRank, unusualHour, quietNight],
-  evening: [daySoFar, unusualHour, peakShift, refillsToday, weekVsLast, lowStreak, quietNight],
+  evening: [daySoFar, unusualHour, peakShift, refillsToday, weekVsLast, lowStreak, quietNight, daySummary],
 };
 
 /** Every insight the data supports for this slot, best first. */
@@ -564,17 +590,15 @@ export interface SentInsight {
 
 /** Send slots in the tank's local time, and the score a fact needs to be sent in each. */
 export const SLOTS: Record<Slot, { start: number; end: number; bar: number }> = {
-  // Midday only takes strong facts, so a middling one doesn't use up the
-  // evening, which sees the most of the day.
-  midday: { start: 12, end: 14, bar: 0.6 },
-  evening: { start: 18, end: 20, bar: 0.35 },
+  // Midday takes a fact with some substance; otherwise the evening, which
+  // sees the most of the day, sends its best one, at worst the day summary.
+  // One insight every day the tank reports.
+  midday: { start: 12, end: 14, bar: 0.3 },
+  evening: { start: 18, end: 20, bar: 0 },
 };
 
 /** The insight cron's period, minutes (src/jobs/cron.ts). */
 export const CRON_PERIOD_MIN = 15;
-/** At most this many in the 6 days before today, unless one is exceptional. */
-export const WEEKLY_BUDGET = 4;
-export const EXCEPTIONAL_SCORE = 0.85;
 
 /**
  * The minute of the day this user's slot is decided at, different each day so
@@ -596,13 +620,6 @@ export function dueSlot(localMinutes: number, seed: string): Slot | null {
   return null;
 }
 
-/** The score a fact needs in this slot, raised once the week's budget is spent. */
-export function barFor(slot: Slot, recent: SentInsight[], today: string): number {
-  const weekAgo = addDays(today, -6);
-  const sent = recent.filter((s) => s.date >= weekAgo && s.date < today).length;
-  return sent >= WEEKLY_BUDGET ? Math.max(SLOTS[slot].bar, EXCEPTIONAL_SCORE) : SLOTS[slot].bar;
-}
-
 const daysBetween = (a: string, b: string) =>
   Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
 
@@ -612,6 +629,8 @@ const daysBetween = (a: string, b: string) =>
  * kind two days running, and week-scale kinds not within their gap.
  */
 export function adjustedScore(c: Insight, recent: SentInsight[], today: string): number {
+  // The day summary is the floor that keeps one insight a day; it may repeat.
+  if (c.kind === 'day_summary') return c.score;
   const last = recent
     .filter((s) => s.kind === c.kind && s.date < today)
     .map((s) => daysBetween(s.date, today))

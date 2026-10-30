@@ -5,7 +5,6 @@ import { noiseFloorL } from '../lib/rollup';
 import { addDays, localDate, localHour, offsetMs, startOfLocalDay } from '../lib/local-time';
 import {
   adjustedScore,
-  barFor,
   dueSlot,
   generateInsights,
   Insight,
@@ -23,15 +22,15 @@ import { rephraseInsight } from './insight-llm.service';
 import { sendNotificationToUser } from './fcm.service';
 
 /**
- * Experimental daily insight: at most one push a day per opted-in user,
- * decided at a midday and an early-evening slot in the tank's timezone, and
- * only when a fact clears that slot's interest bar. Dull days send nothing.
- * On the quiet info channel.
+ * Experimental daily insight: one push a day per opted-in user, decided at a
+ * midday and an early-evening slot in the tank's timezone. Midday sends only a
+ * fact that clears its bar; otherwise the evening sends its best fact, at
+ * worst a summary of the day so far. On the quiet info channel.
  */
 
 /** Two weeks to compare against, plus one more for week-on-week. */
 const HISTORY_DAYS = 15;
-/** How far back sent insights count for the recency penalty and the weekly budget. */
+/** How far back sent insights count for the recency penalty. */
 const RECENT_DAYS = 14;
 
 /** Minutes past local midnight. */
@@ -135,7 +134,7 @@ export async function previewInsight(
   const candidates = generateInsights({ ...history, slot });
   const recent = opts.userId ? await recentSent(opts.userId, today) : [];
   const picked = pickInsight(candidates, recent, today, {
-    minScore: barFor(slot, recent, today),
+    minScore: SLOTS[slot].bar,
     rand: seededRandom(`${opts.userId ?? device.id}:${today}:${slot}:pick`),
   });
   const final =
@@ -165,7 +164,7 @@ export async function previewInsight(
 
 /**
  * Dry run over the last `days` days: what each slot would have sent, with the
- * recency penalty and weekly budget applied to the simulated sends. Read-only.
+ * recency penalty applied to the simulated sends. Read-only.
  * Refill counts are the whole day's, so a replayed evening sees a few refills
  * from after its send time.
  */
@@ -181,7 +180,7 @@ export async function replayInsights(device: Device, days: number, now = new Dat
       const at = new Date(startOfLocalDay(date, timeZone).getTime() + slotTarget(`replay:${date}`, slot) * 60_000);
       const history = await loadHistory(device, at);
       const candidates = generateInsights({ ...history, slot });
-      const bar = barFor(slot, sent, date);
+      const bar = SLOTS[slot].bar;
       const picked = pickInsight(candidates, sent, date, {
         minScore: bar,
         rand: seededRandom(`replay:${date}:${slot}:pick`),
@@ -208,7 +207,8 @@ export async function replayInsights(device: Device, days: number, now = new Dat
 /**
  * Cron entry point, every 15 minutes. Each opted-in user's midday and evening
  * slots are decided once a day each, at a minute that varies by day; the
- * first slot with a fact above its bar sends, and the day is done.
+ * first slot with a fact above its bar sends (the evening's bar is 0), and the
+ * day is done.
  */
 export async function sendDueInsights(now = new Date()): Promise<number> {
   const users = await prisma.user.findMany({
@@ -247,7 +247,7 @@ async function sendInsightForUser(
   }
 
   const recent = await recentSent(user.id, today);
-  const minScore = barFor(slot, recent, today);
+  const minScore = SLOTS[slot].bar;
   const all = await candidatesFor(devices, slot, now);
   const picked = pickInsight(
     all.map((a) => a.insight),
