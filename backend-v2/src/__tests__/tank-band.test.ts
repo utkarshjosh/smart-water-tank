@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { TankBand, alertForTransition, isInBlindZone, nextBand } from '../lib/tank-band';
+import {
+  SNAP_BACK_WINDOW_MS,
+  TankBand,
+  alertForTransition,
+  isInBlindZone,
+  isMisreadEntry,
+  nextBand,
+} from '../lib/tank-band';
 
 const pct = { fullAt: 90, lowAt: 20, margin: 10 };
 
@@ -65,4 +72,13 @@ test('blind zone is any distance nearer than the dead-zone edge or sensor offset
   assert.equal(isInBlindZone(18, { sensorOffsetCm: 0, deadZoneCm: 20 }), true);
   assert.equal(isInBlindZone(20, { sensorOffsetCm: 0, deadZoneCm: 20 }), false);
   assert.equal(isInBlindZone(25, { sensorOffsetCm: 30, deadZoneCm: 20 }), true);
+});
+
+test('a jump into low is always a misreading; into full only soon after the band changed', () => {
+  assert.equal(isMisreadEntry('tank_low', true, 24 * 3600_000), true);
+  assert.equal(isMisreadEntry('tank_full', true, 60_000), true);
+  assert.equal(isMisreadEntry('tank_full', true, SNAP_BACK_WINDOW_MS + 1), false);
+  // A level that moved at water's pace is never a misreading.
+  assert.equal(isMisreadEntry('tank_low', false, 0), false);
+  assert.equal(isMisreadEntry('tank_full', false, 0), false);
 });

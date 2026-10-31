@@ -39,7 +39,7 @@ export default function DeviceDetailScreen() {
   const { width } = useWindowDimensions();
   const { colors } = useTheme();
   const [showSensors, setShowSensors] = useState(false);
-  const [range, setRangeState] = useState<RangeKey>('7d');
+  const [range, setRangeState] = useState<RangeKey>('24h');
   const [metricChoice, setMetricChoice] = useState<Metric | null>(null);
   // The window's "now". Fixed per range change / refresh so the query key is
   // stable across renders instead of a fresh pair of timestamps every frame.

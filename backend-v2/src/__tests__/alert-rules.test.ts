@@ -76,6 +76,11 @@ const settled = {
   updatedAt: new Date(0),
 };
 
+/** A tank-state write as Prisma reads it back: the level is a Decimal column. */
+function stored<T extends { levelPercent?: unknown }>(data: T): T {
+  return typeof data.levelPercent === 'number' ? { ...data, levelPercent: new Prisma.Decimal(data.levelPercent) } : data;
+}
+
 function stubAlertSink(t: TestContext): { created: Array<{ type: string; severity: string }> } {
   const created: Array<{ type: string; severity: string }> = [];
   stubModel(t, 'alert', {
@@ -329,10 +334,10 @@ test('a full tank alerts once per crossing, with the blind zone counted as full'
   // Replace the sink's always-wins stub with one that remembers, and refuses
   // a write whose view of the previous band is stale.
   stubModel(t, 'tankState', {
-    create: async ({ data }: { data: typeof settled }) => (state = { ...settled, ...data }),
+    create: async ({ data }: { data: typeof settled }) => (state = { ...settled, ...stored(data) }),
     updateMany: async ({ where, data }: { where: { band: string }; data: Partial<typeof settled> }) => {
       if (state?.band !== where.band) return { count: 0 };
-      state = { ...state, ...data };
+      state = { ...state, ...stored(data) };
       return { count: 1 };
     },
   });
@@ -348,4 +353,96 @@ test('a full tank alerts once per crossing, with the blind zone counted as full'
   await read(40); // 75%: re-armed
   await read(5); // blind zone from normal: full again
   assert.deepEqual(sink.created.map((a) => a.type), ['tank_full', 'tank_full']);
+});
+
+/**
+ * A tracker over a real 785 L tank (100 cm cylinder, sensor at the rim, 20 cm
+ * blind zone: 1 cm is 9.8 L) whose clock the test moves by hand.
+ */
+function trackedTank(t: TestContext) {
+  const tankProfile = {
+    shape: 'cylindrical',
+    parallelUnitCount: 1,
+    heightCm: new Prisma.Decimal(100),
+    diameterCm: new Prisma.Decimal(100),
+    lengthCm: null,
+    widthCm: null,
+    nominalUnitVolumeL: null,
+    sensorOffsetCm: new Prisma.Decimal(0),
+    deadZoneCm: new Prisma.Decimal(20),
+  };
+  const config = configRow({
+    tankFullThresholdPct: new Prisma.Decimal(90),
+    tankLowThresholdPct: new Prisma.Decimal(10),
+  });
+  type State = typeof settled & { levelAt: Date | null };
+  let state: State | null = null;
+  stubModel(t, 'device', {
+    findUnique: async () => ({ ...device, config, tankProfile, tankState: state }),
+  });
+  const sink = stubAlertSink(t);
+  stubModel(t, 'tankState', {
+    create: async ({ data }: { data: State }) => (state = { ...settled, ...stored(data) }),
+    updateMany: async ({ data }: { data: Partial<State> }) => {
+      state = { ...state!, ...stored(data) };
+      return { count: 1 };
+    },
+  });
+  return {
+    sent: () => sink.created.map((a) => a.type),
+    read: (levelCm: number) => processAlertsForMeasurement(device.id, { levelCm, volumeL: 1, batteryV: null }),
+    /** Moves the tracker's last reading and band change `ms` into the past. */
+    later: (ms: number) => {
+      state = {
+        ...state!,
+        levelAt: state!.levelAt && new Date(state!.levelAt.getTime() - ms),
+        bandChangedAt: new Date(state!.bandChangedAt.getTime() - ms),
+      };
+    },
+  };
+}
+
+test('a level that snaps back to full minutes after drifting out does not alert again', async (t) => {
+  const tank = trackedTank(t);
+  await tank.read(25); // 93%: seeds full
+  tank.later(60 * 60_000);
+  await tank.read(30); // 87.5%: drifting, still full
+  tank.later(10 * 60_000);
+  await tank.read(36); // 80%: out of full
+  tank.later(60_000);
+  await tank.read(38); // 77.5%
+  tank.later(20_000);
+  await tank.read(25); // 93% 20 s later: 122 L at once, the sensor recovering
+  tank.later(60_000);
+  await tank.read(24);
+  assert.deepEqual(tank.sent(), []);
+
+  // A real draw, then a refill at 40 L/min, alerts.
+  for (const cm of [50, 70]) {
+    tank.later(30 * 60_000);
+    await tank.read(cm);
+  }
+  for (let cm = 66; cm >= 26; cm -= 4) {
+    tank.later(60_000);
+    await tank.read(cm);
+  }
+  assert.deepEqual(tank.sent(), ['tank_full']);
+});
+
+test('one empty echo from a full tank sends neither "low" nor "full"', async (t) => {
+  const tank = trackedTank(t);
+  await tank.read(25);
+  tank.later(5 * 60_000);
+  await tank.read(100); // 0% for one reading
+  tank.later(20_000);
+  await tank.read(25);
+  assert.deepEqual(tank.sent(), []);
+});
+
+test('a big change across an outage is not a jump', async (t) => {
+  const tank = trackedTank(t);
+  await tank.read(25);
+  tank.later(2 * 60 * 60_000);
+  await tank.read(95); // 6%: two hours later, so the tank really drained
+  assert.deepEqual(tank.sent(), ['tank_low']);
 });

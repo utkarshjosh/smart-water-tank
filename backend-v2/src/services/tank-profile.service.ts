@@ -46,6 +46,19 @@ export function computeTotalCapacityL(profile: {
   return computeUnitCapacityL(profile) * profile.parallelUnitCount;
 }
 
+export function capacityOf(profile: TankProfile | null): number | null {
+  if (!profile) return null;
+  return computeTotalCapacityL({
+    shape: profile.shape,
+    parallelUnitCount: profile.parallelUnitCount,
+    heightCm: profile.heightCm.toNumber(),
+    diameterCm: profile.diameterCm?.toNumber() ?? null,
+    lengthCm: profile.lengthCm?.toNumber() ?? null,
+    widthCm: profile.widthCm?.toNumber() ?? null,
+    nominalUnitVolumeL: profile.nominalUnitVolumeL?.toNumber() ?? null,
+  });
+}
+
 // levelCm is the raw ultrasonic distance `d` from the sensor face down to the
 // water surface - shape-independent. The calibration is derived from the tank
 // profile alone (not firmware's compile-time constants):

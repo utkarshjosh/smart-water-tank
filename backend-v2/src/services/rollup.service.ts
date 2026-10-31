@@ -12,7 +12,7 @@ import {
   rollupHours,
 } from '../lib/rollup';
 import { Episode, detectEpisodes, episodeOptions } from '../lib/episodes';
-import { computeTotalCapacityL, volumeLForProfile } from './tank-profile.service';
+import { capacityOf, volumeLForProfile } from './tank-profile.service';
 import { createLeakAlert } from './alert.service';
 
 /**
@@ -34,19 +34,6 @@ const EPISODE_LOOKAROUND_MS = 6 * 60 * 60 * 1000;
 
 export function timeZoneOf(device: Pick<Device, 'timezone'>): string {
   return device.timezone ?? env.defaultTimezone;
-}
-
-export function capacityOf(profile: TankProfile | null): number | null {
-  if (!profile) return null;
-  return computeTotalCapacityL({
-    shape: profile.shape,
-    parallelUnitCount: profile.parallelUnitCount,
-    heightCm: profile.heightCm.toNumber(),
-    diameterCm: profile.diameterCm?.toNumber() ?? null,
-    lengthCm: profile.lengthCm?.toNumber() ?? null,
-    widthCm: profile.widthCm?.toNumber() ?? null,
-    nominalUnitVolumeL: profile.nominalUnitVolumeL?.toNumber() ?? null,
-  });
 }
 
 type Row = {

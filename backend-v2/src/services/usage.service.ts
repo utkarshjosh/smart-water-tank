@@ -19,7 +19,8 @@ import {
   summarize,
   usualHours,
 } from '../lib/usage-history';
-import { capacityOf, timeZoneOf } from './rollup.service';
+import { timeZoneOf } from './rollup.service';
+import { capacityOf } from './tank-profile.service';
 
 // Usage history, read from the rollups rollup.service maintains:
 // daily_summaries per local day, hourly_usage per local hour.
