@@ -218,3 +218,74 @@ test('a draw that is refilled more than ten minutes later is real', () => {
   assert.equal(hour.usedL, 100);
   assert.equal(hour.filledL, 100);
 });
+
+/** Readings every 20 s (how the live device reports) from run-length pairs. */
+const every20s = (fromIso: string, runs: [number, number][], gapsAfter: Record<number, number> = {}) => {
+  let t = at(fromIso).getTime();
+  const out: { at: Date; litres: number }[] = [];
+  for (const [litres, count] of runs) {
+    for (let n = 0; n < count; n++) {
+      out.push({ at: new Date(t), litres });
+      t += 20_000 + (gapsAfter[out.length - 1] ?? 0);
+    }
+  }
+  return out;
+};
+
+test('the live tank at 9 AM on 31 Oct: a slow phantom drain that snaps back is not use and refill', () => {
+  // Real readings, 08:35-10:05 IST, rounded to the litre. The tank was full
+  // and filling; the sensor drifted down to 867 L over an hour, then read
+  // 196 L higher 20 s later and was full again within 3 minutes. The device
+  // went quiet for ten minutes at 09:03.
+  const raw = every20s(
+    '2026-10-31T08:35:03+05:30',
+    [
+      [1145, 28], [1129, 3], [1112, 6], [1096, 9], [1112, 3], [1096, 3], [1112, 24], [1096, 9],
+      [1063, 1], [1047, 9], [1063, 45], [1047, 3], [1031, 3], [1014, 6], [998, 3], [965, 3],
+      [949, 3], [932, 3], [916, 3], [900, 6], [916, 3], [965, 3], [867, 3], [1063, 3],
+      [1096, 3], [1145, 18], [1063, 3], [1145, 3], [1112, 3], [1145, 27],
+    ],
+    { 84: 565_000 },
+  );
+  const noise = noiseFloorL(1145);
+  const sum = (hours: { usedL: number; filledL: number }[]) =>
+    hours.reduce((s, h) => ({ usedL: s.usedL + h.usedL, filledL: s.filledL + h.filledL }), { usedL: 0, filledL: 0 });
+
+  const before = sum(rollupHours(removeExcursions(raw, noise, 10 * 60_000, { maxRateLPerMin: Infinity }), null, IST, noise));
+  assert.ok(before.usedL > 200 && before.filledL > 200, 'without the speed check it books phantom water');
+
+  const after = sum(rollupHours(removeExcursions(raw, noise), null, IST, noise));
+  assert.equal(after.usedL, 0);
+  assert.equal(after.filledL, 0);
+});
+
+test('a real draw and a refill at pump speed are kept, however long apart', () => {
+  // 300 L drawn over an hour, a quarter of an hour's pause, then refilled at
+  // 40 L/min, faster than the live tank's pump.
+  const draw = Array.from({ length: 61 }, (_, i) => 1145 - i * 5);
+  const fill = Array.from({ length: 7 }, (_, i) => 845 + (i + 1) * 40);
+  const readings = series('06:00', [
+    1145,
+    ...draw,
+    ...Array(15).fill(845),
+    ...fill,
+    ...Array(10).fill(1145),
+  ]);
+  const out = removeExcursions(readings, 17);
+  assert.deepEqual(
+    out.map((r) => r.litres),
+    readings.map((r) => r.litres),
+  );
+});
+
+test('a real fill that blips back to where it started is kept', () => {
+  // Filling from 850 L; one minute at the top the sensor reads 867 L again.
+  // That is a blip on a full tank, not the fill coming undone.
+  const readings = series('18:39', [
+    850, 883, 916, 965, 1014, 1047, 1080, 1129, 1145, 1145, 1145, 1145, 867, 867, 867, 867,
+    1145, 1145, 1145, 1145, 1145,
+  ]);
+  const [hour] = rollupHours(removeExcursions(readings, 17), null, IST, 17);
+  assert.ok(hour.filledL > 280, `filledL ${hour.filledL}`);
+  assert.equal(hour.usedL, 0);
+});

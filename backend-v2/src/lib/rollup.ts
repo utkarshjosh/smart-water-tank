@@ -110,11 +110,38 @@ export function noiseFloorL(capacityL: number | null): number {
  * level. A departure that doesn't come back is real, and becomes the new
  * steady level. Filters that look only at how long a blip lasts (a median)
  * can't tell clustered blips from a real move; this one can.
+ *
+ * A longer departure is also a misreading when the way back is faster than
+ * water moves. On the live tank on 31 Oct the sensor drifted from full to
+ * 867 L over an hour while the tank was filling, then read 196 L higher 20 s
+ * later and was full again within 3 minutes: 278 L "used" and 278 L "added".
+ * Real fills there run at 15-50 L/min. That is a second pass, over readings
+ * the first has already cleared of blips, so a blip inside a long departure
+ * can't pass for its way back. See returnsTooFast.
  */
 export function removeExcursions(
   readings: Reading[],
   noiseL: number,
   maxMs = 10 * 60 * 1000,
+  opts: { maxRateLPerMin?: number; maxSlowMs?: number } = {},
+): Reading[] {
+  const maxRateLPerMin = opts.maxRateLPerMin ?? MAX_PLAUSIBLE_RATE_L_PER_MIN;
+  const withoutBlips = flattenReturns(readings, noiseL, maxMs, () => true);
+  return flattenReturns(withoutBlips, noiseL, opts.maxSlowMs ?? 3 * 60 * 60 * 1000, (out, i, k, level) =>
+    returnsTooFast(out, i, k, level, noiseL, maxRateLPerMin),
+  );
+}
+
+/**
+ * Walks the readings against a steady level. A departure past the noise floor
+ * that returns within `windowMs`, and that `accept` agrees was a misreading,
+ * is replaced by the steady level; otherwise the departure is the new level.
+ */
+function flattenReturns(
+  readings: Reading[],
+  noiseL: number,
+  windowMs: number,
+  accept: (out: Reading[], i: number, k: number, level: number) => boolean,
 ): Reading[] {
   const out = readings.slice();
   let level: number | null = null;
@@ -125,17 +152,22 @@ export function removeExcursions(
       i++;
       continue;
     }
-    // Left the steady level: look for a return within maxMs.
+    // Left the steady level: look for a return within windowMs.
     const leftAt = out[i].at.getTime();
     let k = i;
     while (
       k < out.length &&
       (k === i || !out[k].breakBefore) &&
-      out[k].at.getTime() - leftAt <= maxMs &&
+      out[k].at.getTime() - leftAt <= windowMs &&
       Math.abs(out[k].litres - level) > noiseL
     )
       k++;
-    if (k < out.length && !out[k].breakBefore && out[k].at.getTime() - leftAt <= maxMs) {
+    if (
+      k < out.length &&
+      !out[k].breakBefore &&
+      out[k].at.getTime() - leftAt <= windowMs &&
+      accept(out, i, k, level)
+    ) {
       for (let j = i; j < k; j++) out[j] = { ...out[j], litres: level };
       i = k;
     } else {
@@ -144,6 +176,72 @@ export function removeExcursions(
     }
   }
   return out;
+}
+
+/**
+ * Fastest the level of a household tank really moves, in litres a minute.
+ * The live tank fills at 15-50 L/min; misreadings snap back at 130-600 L/min.
+ */
+export const MAX_PLAUSIBLE_RATE_L_PER_MIN = 100;
+
+/**
+ * The sensor measures about once a minute and the device repeats the value in
+ * between, so a step seen 20 s after the last reading took up to a minute.
+ */
+const MIN_STEP_MS = 60_000;
+/** How long the level must stay back before the departure counts as a misreading. */
+const HOLD_MS = 3 * 60_000;
+
+/** Whether `litres` of movement in `ms` is more than any pump or tap moves. */
+export function fasterThanWater(
+  litres: number,
+  ms: number,
+  noiseL: number,
+  maxRateLPerMin = MAX_PLAUSIBLE_RATE_L_PER_MIN,
+): boolean {
+  return litres > (maxRateLPerMin * Math.max(MIN_STEP_MS, ms)) / 60_000 + noiseL;
+}
+
+/**
+ * Whether the departure out[i..k-1] came back to `level` mostly in steps no
+ * pump or tap could make, and then stayed there.
+ *
+ * "Mostly" (fast steps cover at least half the way back from the furthest
+ * point) keeps a real draw and refill whose fill happens to end in one sensor
+ * blip. A departure that crosses to the other side of `level` is not one
+ * misreading, and "stayed" keeps a real fill that blips back to where it
+ * started.
+ */
+function returnsTooFast(
+  out: Reading[],
+  i: number,
+  k: number,
+  level: number,
+  noiseL: number,
+  maxRateLPerMin: number,
+): boolean {
+  const backAt = out[k].at.getTime();
+  let j = k + 1;
+  for (; j < out.length && out[j].at.getTime() - backAt < HOLD_MS; j++) {
+    if (out[j].breakBefore || Math.abs(out[j].litres - level) > noiseL) return false;
+  }
+  if (j >= out.length || out[j].breakBefore) return false;
+
+  const side = Math.sign(out[i].litres - level);
+  const away = (j: number) => Math.abs(out[j].litres - level);
+  let furthestAt = i;
+  for (let j = i; j < k; j++) {
+    if (Math.sign(out[j].litres - level) !== side && away(j) > noiseL) return false;
+    if (away(j) > away(furthestAt)) furthestAt = j;
+  }
+
+  let fast = 0;
+  for (let j = furthestAt + 1; j <= k; j++) {
+    const step = Math.abs(out[j].litres - out[j - 1].litres);
+    const ms = out[j].at.getTime() - out[j - 1].at.getTime();
+    if (fasterThanWater(step, ms, noiseL, maxRateLPerMin)) fast += Math.max(0, away(j - 1) - away(j));
+  }
+  return fast >= away(furthestAt) / 2;
 }
 
 /**

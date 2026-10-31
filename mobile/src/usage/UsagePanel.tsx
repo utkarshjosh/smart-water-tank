@@ -33,8 +33,8 @@ const DAY_MS = 86_400_000;
 export function UsagePanel({ deviceId }: { deviceId: string }) {
   const router = useRouter();
   const { colors } = useTheme();
-  // Start with the same today window as the daily snapshot.
-  const [range, setRange] = useState<Range>('today');
+  // Open on the rolling day, so the morning's chart isn't a few empty hours.
+  const [range, setRange] = useState<Range>('24h');
   const hourly = useHourlyUsage(deviceId, range);
   const events = useTankEvents(deviceId, range);
   const devices = useDevices();
@@ -59,8 +59,8 @@ export function UsagePanel({ deviceId }: { deviceId: string }) {
           value={range}
           onChange={setRange}
           options={[
-            { value: 'today', label: 'Today' },
             { value: '24h', label: 'Last 24 hours' },
+            { value: 'today', label: 'Today' },
           ]}
         />
 

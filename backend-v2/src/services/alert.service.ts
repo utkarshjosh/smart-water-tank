@@ -7,10 +7,12 @@ import {
   TankBand,
   alertForTransition,
   isInBlindZone,
+  isMisreadEntry,
   nextBand,
 } from '../lib/tank-band';
+import { fasterThanWater, noiseFloorL } from '../lib/rollup';
 import { PushData, sendNotificationToTenant } from './fcm.service';
-import { computeLevelPercent } from './tank-profile.service';
+import { capacityOf, computeLevelPercent } from './tank-profile.service';
 import { effectiveThreshold, isAlertRuleEnabled, severityFor } from './alert-rules.service';
 
 // Android notification channels are created by the app at first launch and
@@ -70,6 +72,7 @@ export async function processAlertsForMeasurement(
   const profile = device.tankProfile;
   const state = device.tankState;
   const { levelCm, volumeL, batteryV } = measurement;
+  const now = new Date();
 
   // Read once, as plain numbers. null means that threshold is not set, which
   // is one of two ways an alert is off for this device - the other is the
@@ -88,6 +91,8 @@ export async function processAlertsForMeasurement(
   let inBlindZone = false;
   let levelPercent: number | null = null;
   let message: Record<'tank_full' | 'tank_low', string> | null = null;
+  // This reading moved the level further from the last one than water can.
+  let jumped = false;
   let detail: Record<string, unknown> = {};
   let extras: PushData = {};
 
@@ -106,6 +111,15 @@ export async function processAlertsForMeasurement(
       };
       levelPercent = computeLevelPercent(levelCm, geometry)!;
       inBlindZone = isInBlindZone(levelCm, geometry);
+      const capacityL = capacityOf(profile);
+      const previousPercent = num(state?.levelPercent);
+      if (capacityL != null && capacityL > 0 && previousPercent != null && state?.levelAt) {
+        jumped = fasterThanWater(
+          (Math.abs(levelPercent - previousPercent) / 100) * capacityL,
+          now.getTime() - state.levelAt.getTime(),
+          noiseFloorL(capacityL)
+        );
+      }
       band = nextBand(state?.band ?? null, {
         value: levelPercent,
         fullAt: fullPct,
@@ -147,6 +161,7 @@ export async function processAlertsForMeasurement(
     band: band ?? state?.band ?? 'normal',
     inBlindZone: band != null ? inBlindZone : (state?.inBlindZone ?? false),
     levelPercent: levelPercent ?? num(state?.levelPercent),
+    levelAt: levelPercent != null ? now : (state?.levelAt ?? null),
     batteryLow,
   });
   // Another reading for this device got there first and has already acted on
@@ -154,7 +169,14 @@ export async function processAlertsForMeasurement(
   if (!won) return;
 
   const tankAlert = band != null ? alertForTransition(state?.band ?? null, band) : null;
-  if (tankAlert && message && isAlertRuleEnabled(config, tankAlert)) {
+  if (
+    tankAlert &&
+    state &&
+    isMisreadEntry(tankAlert, jumped, now.getTime() - state.bandChangedAt.getTime())
+  ) {
+    // The band still moves, so the sensor recovering doesn't alert either.
+    console.log(`[alerts] ${tankAlert} skipped for ${device.deviceId}: level jumped faster than water moves`);
+  } else if (tankAlert && message && isAlertRuleEnabled(config, tankAlert)) {
     await createAndSendAlert(device.id, device.tenantId, tankAlert, message[tankAlert], detail, extras, {
       transition: true,
     });
@@ -183,7 +205,13 @@ export async function processAlertsForMeasurement(
 async function saveTankState(
   deviceId: string,
   previous: TankState | null,
-  next: { band: TankBand; inBlindZone: boolean; levelPercent: number | null; batteryLow: boolean }
+  next: {
+    band: TankBand;
+    inBlindZone: boolean;
+    levelPercent: number | null;
+    levelAt: Date | null;
+    batteryLow: boolean;
+  }
 ): Promise<boolean> {
   const bandChanged = !previous || previous.band !== next.band;
   const data = { ...next, ...(bandChanged ? { bandChangedAt: new Date() } : {}) };

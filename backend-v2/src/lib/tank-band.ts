@@ -73,3 +73,28 @@ export function alertForTransition(
   if (next === 'low') return 'tank_low';
   return null;
 }
+
+/** How soon after a band change a jump back into full is taken for the sensor recovering. */
+export const SNAP_BACK_WINDOW_MS = 30 * 60_000;
+
+/**
+ * Whether an alert for entering a band should be dropped because the reading
+ * that got there jumped faster than water moves - the sensor, not the tank.
+ *
+ * On the live tank a single 0 cm echo read "Tank is low (0%)" and the next
+ * reading "Tank full"; and a level that drifted down for an hour while the
+ * tank filled snapped back to full in 20 s and sent "Tank full" again. Real
+ * draws and fills there move at 15-50 L/min.
+ *
+ * No tank drains that fast, so a jump into low is always a misreading. A jump
+ * into full is one only soon after the band last changed: a fill that ends on
+ * a blip into the blind zone, long after the tank was last full, still alerts.
+ */
+export function isMisreadEntry(
+  alert: 'tank_full' | 'tank_low',
+  jumped: boolean,
+  sinceBandChangeMs: number
+): boolean {
+  if (!jumped) return false;
+  return alert === 'tank_low' || sinceBandChangeMs <= SNAP_BACK_WINDOW_MS;
+}

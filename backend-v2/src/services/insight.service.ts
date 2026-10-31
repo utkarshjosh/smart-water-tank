@@ -17,7 +17,8 @@ import {
   SLOTS,
   slotTarget,
 } from '../lib/insights';
-import { capacityOf, timeZoneOf } from './rollup.service';
+import { timeZoneOf } from './rollup.service';
+import { capacityOf } from './tank-profile.service';
 import { rephraseInsight } from './insight-llm.service';
 import { sendNotificationToUser } from './fcm.service';
 
