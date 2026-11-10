@@ -20,6 +20,14 @@ export default function OverviewTab() {
   const level = profile.data ? (reading?.level_percent ?? null) : null;
   const capacity = profile.data?.total_capacity_l;
   const volume = profile.data ? reading?.volume_l : null;
+  // The water is nearer than the sensor can measure: the level is a floor, not a reading.
+  const tooClose = Boolean(reading?.level_too_close) && level != null;
+  const levelText =
+    level == null
+      ? 'Level unknown'
+      : tooClose && level < 99.5
+        ? `At least ${Math.round(level)}% full`
+        : `${Math.round(level)}% full`;
   return (
     <div className="device-overview water-overview">
       {current.isError && (
@@ -50,18 +58,24 @@ export default function OverviewTab() {
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={level == null ? undefined : Math.max(0, Math.min(100, level))}
-            aria-valuetext={level == null ? 'Unknown' : `${Math.round(level)}% full`}
+            aria-valuetext={level == null ? 'Unknown' : levelText}
           >
             <span style={{ width: `${Math.max(0, Math.min(100, level ?? 0))}%` }} />
           </div>
           <div className="water-reserve-meta">
-            <span>{level == null ? 'Level unknown' : `${Math.round(level)}% full`}</span>
+            <span>{levelText}</span>
             <span>
               {capacity
                 ? `${Math.round(capacity).toLocaleString()} L capacity`
                 : 'Tank setup needed'}
             </span>
           </div>
+          {tooClose && (
+            <p className="text-caption text-ink-3">
+              The water is too close to the sensor to measure exactly, so the tank holds at least
+              this much.
+            </p>
+          )}
           {reading?.timestamp ? (
             <LiveIndicator
               timestamp={reading.level_percent_as_of ?? reading.timestamp}

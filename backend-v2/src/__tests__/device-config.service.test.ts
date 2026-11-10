@@ -39,15 +39,22 @@ test('buildGeometryBlock: derives level_empty_cm = sensorOffset + height', () =>
   assert.equal(buildGeometryBlock(geometry).level_empty_cm, 90);
 });
 
-test('buildGeometryBlock: derives level_full_cm = max(sensorOffset, deadZone)', () => {
+test('buildGeometryBlock: with no measured full line, level_full_cm = max(sensorOffset, deadZone)', () => {
   assert.equal(buildGeometryBlock(geometry).level_full_cm, 20);
   // When the sensor offset exceeds the dead zone, it wins.
   assert.equal(buildGeometryBlock({ ...geometry, sensorOffsetCm: 30 }).level_full_cm, 30);
 });
 
-test('buildGeometryBlock: total_capacity_l is nameplate capacity', () => {
-  assert.equal(buildGeometryBlock(geometry).total_capacity_l, 900);
-  assert.equal(buildGeometryBlock({ ...geometry, parallelUnitCount: 2 }).total_capacity_l, 1800);
+test('buildGeometryBlock: a measured full line is sent as level_full_cm', () => {
+  assert.equal(buildGeometryBlock({ ...geometry, fullDistanceCm: 28 }).level_full_cm, 28);
+});
+
+test('buildGeometryBlock: total_capacity_l is the litres at 100%, not brim-full', () => {
+  // 10 L per cm over the 70 cm between empty (90) and full (20).
+  assert.equal(buildGeometryBlock(geometry).total_capacity_l, 700);
+  assert.equal(buildGeometryBlock({ ...geometry, parallelUnitCount: 2 }).total_capacity_l, 1400);
+  // Sensor mounted clear of the tank top: the whole 90 cm counts.
+  assert.equal(buildGeometryBlock({ ...geometry, sensorOffsetCm: 30 }).total_capacity_l, 900);
 });
 
 test('buildGeometryBlock: passes through shape + dimensions', () => {
@@ -72,7 +79,7 @@ test('mergeDeviceConfig: with a profile includes operational + geometry + versio
   // geometry
   assert.equal(payload.level_empty_cm, 90);
   assert.equal(payload.level_full_cm, 20);
-  assert.equal(payload.total_capacity_l, 900);
+  assert.equal(payload.total_capacity_l, 700);
   // version
   assert.equal(payload.config_version, 7);
 });

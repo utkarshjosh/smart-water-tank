@@ -28,6 +28,8 @@ interface FormState {
   widthCm: string;
   sensorOffsetCm: string;
   deadZoneCm: string;
+  /** Blank = not measured. */
+  fullDistanceCm: string;
 }
 
 function initialFormState(initialData?: TankProfileDto | null): FormState {
@@ -40,7 +42,8 @@ function initialFormState(initialData?: TankProfileDto | null): FormState {
       lengthCm: '',
       widthCm: '',
       sensorOffsetCm: '0',
-      deadZoneCm: '20',
+      deadZoneCm: '25',
+      fullDistanceCm: '',
     };
   }
   return {
@@ -51,10 +54,12 @@ function initialFormState(initialData?: TankProfileDto | null): FormState {
     lengthCm: initialData.length_cm != null ? String(initialData.length_cm) : '',
     widthCm: initialData.width_cm != null ? String(initialData.width_cm) : '',
     sensorOffsetCm: String(initialData.sensor_offset_cm),
-    deadZoneCm: initialData.dead_zone_cm != null ? String(initialData.dead_zone_cm) : '20',
+    deadZoneCm: initialData.dead_zone_cm != null ? String(initialData.dead_zone_cm) : '25',
+    fullDistanceCm: initialData.full_distance_cm != null ? String(initialData.full_distance_cm) : '',
   };
 }
 
+/** Litres in one tank filled to the brim. */
 function computeUnitCapacityL(form: FormState): number {
   const height = Number(form.heightCm) || 0;
   if (form.shape === 'cylindrical') {
@@ -77,15 +82,39 @@ export function TankSetupWizard({
 }) {
   const [step, setStep] = useState<Step>('shape');
   const [form, setForm] = useState<FormState>(() => initialFormState(initialData));
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const totalCapacityL = computeUnitCapacityL(form) * form.parallelUnitCount;
+  const brimCapacityL = computeUnitCapacityL(form) * form.parallelUnitCount;
   const activeStepIndex = STEPS.findIndex((item) => item.key === step);
 
+  // The same three distances the server works from (backend-v2/src/lib/tank-level.ts):
+  // where the sensor reads empty, where it reads full, and the nearest it can see.
+  const heightCm = Number(form.heightCm) || 0;
+  const sensorOffsetCm = Number(form.sensorOffsetCm) || 0;
+  const deadZoneCm = Number(form.deadZoneCm) || 0;
+  const fullDistanceCm = form.fullDistanceCm.trim() === '' ? null : Number(form.fullDistanceCm);
+  const emptyCm = heightCm + sensorOffsetCm;
+  const fullCm = fullDistanceCm ?? Math.max(sensorOffsetCm, deadZoneCm);
+  // Litres at 100%: what the dashboard will call the tank's capacity.
+  const totalCapacityL =
+    heightCm > 0 ? Math.max(0, emptyCm - fullCm) * (brimCapacityL / heightCm) : 0;
+  // The tank fills closer to the sensor than the sensor can see.
+  const shortfallCm =
+    fullDistanceCm != null && fullDistanceCm < deadZoneCm ? deadZoneCm - fullDistanceCm : null;
+  const sensorProblem =
+    heightCm <= 0
+      ? null
+      : fullDistanceCm != null && (Number.isNaN(fullDistanceCm) || fullDistanceCm < 0)
+        ? 'The distance to the water when full must be zero or more.'
+        : emptyCm <= Math.max(fullCm, deadZoneCm)
+          ? 'With these numbers the sensor cannot see any of the tank. Check the tank height and the sensor distances.'
+          : null;
+
   const canProceedFromDimensions =
-    Number(form.heightCm) > 0 &&
+    heightCm > 0 &&
+    !sensorProblem &&
     (form.shape === 'cylindrical'
       ? Number(form.diameterCm) > 0
       : Number(form.lengthCm) > 0 && Number(form.widthCm) > 0);
@@ -102,8 +131,9 @@ export function TankSetupWizard({
         length_cm: form.shape === 'cuboidal' ? Number(form.lengthCm) : null,
         width_cm: form.shape === 'cuboidal' ? Number(form.widthCm) : null,
         nominal_unit_volume_l: null,
-        sensor_offset_cm: Number(form.sensorOffsetCm) || 0,
-        dead_zone_cm: Number(form.deadZoneCm) || 0,
+        sensor_offset_cm: sensorOffsetCm,
+        dead_zone_cm: deadZoneCm,
+        full_distance_cm: fullDistanceCm,
       });
       onComplete();
     } catch (err: any) {
@@ -274,10 +304,10 @@ export function TankSetupWizard({
                 </div>
               )}
               <div className="flex gap-3">
-                <Button variant="secondary" className="w-full" onClick={() => setStep('shape')}>
+                <Button variant="secondary" className="flex-1" onClick={() => setStep('shape')}>
                   Back
                 </Button>
-                <Button className="w-full" onClick={() => setStep('dimensions')}>
+                <Button className="flex-1" onClick={() => setStep('dimensions')}>
                   Next
                 </Button>
               </div>
@@ -343,7 +373,7 @@ export function TankSetupWizard({
                   className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
                   onClick={() => setShowAdvanced((v) => !v)}
                 >
-                  Advanced: sensor calibration
+                  Sensor position
                   {showAdvanced ? (
                     <CaretUp className="h-3 w-3" />
                   ) : (
@@ -353,31 +383,45 @@ export function TankSetupWizard({
                 {showAdvanced && (
                   <div className="mt-2 space-y-4 rounded-lg border border-slate-200 p-3">
                     <div className="space-y-2">
-                      <Label htmlFor="sensor-offset-cm">Sensor mounting offset (cm)</Label>
+                      <Label htmlFor="sensor-offset-cm">Sensor height above the tank top (cm)</Label>
                       <p className="text-xs text-muted-foreground">
-                        How far below the tank's rim is the sensor mounted? Leave as 0 unless your
-                        sensor sits noticeably below the rim.
+                        How far the sensor face sits above the top of the tank. Use a negative
+                        number if it hangs inside the tank, for example -5.
                       </p>
                       <Input
                         id="sensor-offset-cm"
                         type="number"
-                        min={0}
                         placeholder="0"
                         value={form.sensorOffsetCm}
                         onChange={(e) => setForm((f) => ({ ...f, sensorOffsetCm: e.target.value }))}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="dead-zone-cm">Sensor dead zone (cm)</Label>
+                      <Label htmlFor="full-distance-cm">Distance to the water when full (cm)</Label>
                       <p className="text-xs text-muted-foreground">
-                        Minimum distance the ultrasonic sensor can measure. Water closer than this
-                        reads as full. Most SR04-style sensors are ~20-25cm.
+                        With the tank full, measure from the sensor face down to the water. Leave
+                        blank if you haven't measured it.
+                      </p>
+                      <Input
+                        id="full-distance-cm"
+                        type="number"
+                        min={0}
+                        placeholder="Not measured"
+                        value={form.fullDistanceCm}
+                        onChange={(e) => setForm((f) => ({ ...f, fullDistanceCm: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="dead-zone-cm">Nearest distance the sensor can measure (cm)</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Closer than this, the sensor cannot see the water. About 25 cm for the
+                        JSN-SR04T sensor.
                       </p>
                       <Input
                         id="dead-zone-cm"
                         type="number"
                         min={0}
-                        placeholder="20"
+                        placeholder="25"
                         value={form.deadZoneCm}
                         onChange={(e) => setForm((f) => ({ ...f, deadZoneCm: e.target.value }))}
                       />
@@ -386,12 +430,30 @@ export function TankSetupWizard({
                 )}
               </div>
 
+              {sensorProblem && (
+                <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-red-800">
+                  <WarningCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <p className="text-sm leading-relaxed">{sensorProblem}</p>
+                </div>
+              )}
+              {!sensorProblem && shortfallCm != null && (
+                <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+                  <WarningCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <p className="text-sm leading-relaxed">
+                    When full, the water is {fullDistanceCm} cm from the sensor, closer than the{' '}
+                    {deadZoneCm} cm it can measure. Readings near the top will be wrong. Raise the
+                    sensor by at least {Math.ceil(shortfallCm)} cm, or lower the full level by the
+                    same amount.
+                  </p>
+                </div>
+              )}
+
               <div className="flex gap-3">
-                <Button variant="secondary" className="w-full" onClick={() => setStep('parallel')}>
+                <Button variant="secondary" className="flex-1" onClick={() => setStep('parallel')}>
                   Back
                 </Button>
                 <Button
-                  className="w-full"
+                  className="flex-1"
                   disabled={!canProceedFromDimensions}
                   onClick={() => setStep('summary')}
                 >
@@ -407,7 +469,7 @@ export function TankSetupWizard({
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                      Total capacity
+                      Capacity when full
                     </p>
                     <p className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">
                       {totalCapacityL.toFixed(0)}L
@@ -421,18 +483,26 @@ export function TankSetupWizard({
                     : ''}
                   {form.heightCm}cm tall
                 </p>
+                {brimCapacityL - totalCapacityL >= 1 && (
+                  <p className="mt-2 text-xs text-slate-500">
+                    Filled to the brim it would hold {brimCapacityL.toFixed(0)}L.{' '}
+                    {fullDistanceCm != null
+                      ? 'The figure above is what it holds at its full level.'
+                      : 'The figure above is the part the sensor can measure. Add the distance to the water when full for an exact figure.'}
+                  </p>
+                )}
               </div>
               <div className="flex gap-3">
                 <Button
                   variant="secondary"
-                  className="w-full"
+                  className="flex-1"
                   onClick={() => setStep('dimensions')}
                 >
                   Back
                 </Button>
-                <Button className="w-full" onClick={save} disabled={saving}>
+                <Button className="flex-1" onClick={save} disabled={saving}>
                   {!saving && <FloppyDisk className="mr-2 h-4 w-4" />}
-                  {saving ? 'Saving...' : 'FloppyDisk'}
+                  {saving ? 'Saving...' : 'Save'}
                 </Button>
               </div>
             </div>

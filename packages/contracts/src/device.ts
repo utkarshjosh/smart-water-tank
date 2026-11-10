@@ -36,10 +36,11 @@ export const deviceConfigPayloadSchema = z.looseObject({
   sensor_offset_cm: z.number().optional(),
   dead_zone_cm: z.number().optional(),
   parallel_unit_count: z.number().optional(),
-  /** Raw distance when the tank is empty: sensor offset + height. */
+  /** Sensor distance at 0%: sensor offset + height. */
   level_empty_cm: z.number().optional(),
-  /** Closest measurable distance: max(sensor offset, ultrasonic dead zone). */
+  /** Sensor distance at 100%: the measured full line, or the nearest the sensor can see. */
   level_full_cm: z.number().optional(),
+  /** Litres at 100%. */
   total_capacity_l: z.number().optional(),
   config_version: z.number(),
 });

@@ -49,6 +49,8 @@ export const deviceSummarySchema = z.object({
   last_seen: nullableIsoDateTime,
   current_volume: z.number().nullable(),
   level_percent: z.number().nullable(),
+  /** The water is too close to the sensor to measure: level_percent is the least it can be. */
+  level_too_close: z.boolean().default(false),
   /** True when level_percent came from an older reading than last_measurement. */
   level_percent_stale: z.boolean(),
   level_percent_as_of: nullableIsoDateTime,
@@ -90,6 +92,8 @@ export const currentReadingSchema = z.object({
   device_id: z.string(),
   ...measurementFields,
   level_percent: z.number().nullable(),
+  /** The water is too close to the sensor to measure: level_percent is the least it can be. */
+  level_too_close: z.boolean().default(false),
   level_percent_stale: z.boolean(),
   level_percent_as_of: nullableIsoDateTime,
 });

@@ -6,13 +6,13 @@ import {
   REARM_MARGIN_V,
   TankBand,
   alertForTransition,
-  isInBlindZone,
   isMisreadEntry,
   nextBand,
 } from '../lib/tank-band';
 import { fasterThanWater, noiseFloorL } from '../lib/rollup';
 import { PushData, sendNotificationToTenant } from './fcm.service';
-import { capacityOf, computeLevelPercent } from './tank-profile.service';
+import { capacityOf, computeLevelPercent, geometryOf } from './tank-profile.service';
+import { isTooClose } from '../lib/tank-level';
 import { effectiveThreshold, isAlertRuleEnabled, severityFor } from './alert-rules.service';
 
 // Android notification channels are created by the app at first launch and
@@ -104,13 +104,9 @@ export async function processAlertsForMeasurement(
     // works for parallel-plumbed tanks). Without one yet, fall back to the
     // legacy liter thresholds so existing devices keep alerting unchanged.
     if (profile && (fullPct != null || lowPct != null)) {
-      const geometry = {
-        heightCm: profile.heightCm.toNumber(),
-        sensorOffsetCm: profile.sensorOffsetCm.toNumber(),
-        deadZoneCm: profile.deadZoneCm.toNumber(),
-      };
+      const geometry = geometryOf(profile);
       levelPercent = computeLevelPercent(levelCm, geometry)!;
-      inBlindZone = isInBlindZone(levelCm, geometry);
+      inBlindZone = isTooClose(levelCm, geometry);
       const capacityL = capacityOf(profile);
       const previousPercent = num(state?.levelPercent);
       if (capacityL != null && capacityL > 0 && previousPercent != null && state?.levelAt) {
@@ -128,7 +124,10 @@ export async function processAlertsForMeasurement(
         inBlindZone,
       });
       message = {
-        tank_full: `Tank is full (${levelPercent.toFixed(0)}%)`,
+        // Too close to measure: the percentage is only the least it can be,
+        // and "Tank is full (86%)" would read as a contradiction.
+        tank_full:
+          inBlindZone && levelPercent < 99.5 ? 'Tank is full' : `Tank is full (${levelPercent.toFixed(0)}%)`,
         tank_low: `Tank is low (${levelPercent.toFixed(0)}%)`,
       };
       detail = { level_percent: levelPercent, in_blind_zone: inBlindZone, full_pct: fullPct, low_pct: lowPct };

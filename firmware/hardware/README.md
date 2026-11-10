@@ -156,7 +156,7 @@ Cathode (-)  -->  GND
 
 ## Notes
 
-1. **Waterproof Ultrasonic Sensor**: The JSN-SR04T is recommended for outdoor/waterproof applications. It has the same pinout as HC-SR04 but is IP65 rated.
+1. **Waterproof Ultrasonic Sensor**: Current devices use the JSN-SR04T. It has the same pinout as HC-SR04 but is IP65 rated. It cannot measure anything nearer than about 20-25 cm, so it must be mounted with the full water line at least 25-30 cm below the sensor face. **Future devices should use the A02YYUW instead** - see [Sensor choice for future devices](#sensor-choice-for-future-devices).
 
 2. **Voltage Divider**: The ESP8266 ADC has a maximum input of 1V. The 100k/100k divider provides a 2:1 ratio, allowing monitoring of up to 2V. For higher battery voltages, adjust the ratio accordingly.
 
@@ -168,6 +168,30 @@ Cathode (-)  -->  GND
    - Using deep sleep between measurements
    - Disabling WiFi when not transmitting
    - Using a low-power buzzer or speaker
+
+## Sensor choice for future devices
+
+**Use the A02YYUW (DFRobot SEN0311) on new devices, not the JSN-SR04T.**
+
+Why: the JSN-SR04T is blind to anything nearer than about 20-25 cm. On the first tank in the field the water at full sat nearer than that, and the sensor reported distances that were too large and jumped around. The app showed up to 250 L of "use" in an hour that never happened, and three rounds of software filters could not fix it, because a wrong reading that drifts smoothly looks exactly like real use. The A02YYUW's blind zone is 3 cm, so a sensor mounted in the lid sees the water all the way to a normal full line.
+
+| | JSN-SR04T (current) | A02YYUW (future) |
+|---|---|---|
+| Blind zone | about 20-25 cm | 3 cm |
+| Range | to about 4-6 m | 3-450 cm |
+| Output | TRIG/ECHO pulse | UART, 9600 baud |
+| Resolution as we read it | whole cm | 1 mm |
+| Supply | 5 V | 3.3-5 V |
+| Rating | IP65 | IP67 |
+
+What changes when a device is built with it:
+
+- **Firmware**: it is a serial device, not trigger/echo, so the NewPing code in `src/water_tank/sensor.cpp` does not apply. It needs one receive pin and a frame reader (SoftwareSerial on the ESP8266). Take the frame format from the datasheet.
+- **Readings**: it reports millimetres. Sending them as they are removes today's whole-centimetre steps, where one step is 12.7 L on a pair of 90 cm tanks.
+- **Wiring**: run it from 3.3 V and check on the bench whether the 5 V ECHO divider is still needed. It should not be.
+- **Tank setup in the app**: set "Nearest distance the sensor can measure" to the new blind zone (about 3-5 cm) instead of 25 cm.
+
+Until then, a JSN-SR04T install is only sound when the full water line is 25-30 cm or more from the sensor face. The app's tank setup warns when the measured full line is nearer than the sensor can see.
 
 ## Troubleshooting
 

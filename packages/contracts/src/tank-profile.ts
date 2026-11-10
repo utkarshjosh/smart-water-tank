@@ -12,8 +12,13 @@ export const tankProfileSchema = z.object({
   nominal_unit_volume_l: z.number().nullable(),
   sensor_offset_cm: z.number(),
   dead_zone_cm: z.number(),
+  /** Sensor-to-water distance when the tank is full. Null until someone measures it. */
+  full_distance_cm: z.number().nullable().default(null),
+  /** Litres at 100% - what the readings are measured against - per tank and in all. */
   unit_capacity_l: z.number(),
   total_capacity_l: z.number(),
+  /** Litres filled to the brim, from the dimensions alone. Never less than total_capacity_l. */
+  nameplate_capacity_l: z.number().optional(),
 });
 export type TankProfile = z.infer<typeof tankProfileSchema>;
 

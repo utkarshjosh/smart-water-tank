@@ -1,7 +1,8 @@
 import { Device, Prisma, TankProfile } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http-error';
-import { computeLevelPercent, computeTotalCapacityL, getTankProfileRaw } from './tank-profile.service';
+import { capacityOf, computeLevelPercent, geometryOf, getTankProfileRaw } from './tank-profile.service';
+import { LevelGeometry, levelModel } from '../lib/tank-level';
 import { isValidTimeZone, offsetMs } from '../lib/local-time';
 import { timeZoneOf } from './rollup.service';
 
@@ -168,14 +169,10 @@ function toNum(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-type LevelCalibration = { heightCm: number; sensorOffsetCm: number; deadZoneCm: number };
+type LevelCalibration = LevelGeometry;
 
 function calibrationOf(profile: TankProfile): LevelCalibration {
-  return {
-    heightCm: profile.heightCm.toNumber(),
-    sensorOffsetCm: profile.sensorOffsetCm.toNumber(),
-    deadZoneCm: profile.deadZoneCm.toNumber(),
-  };
+  return geometryOf(profile);
 }
 
 /**
@@ -249,17 +246,8 @@ function buildSeries(
   gapMs: number
 ) {
   const cal = profile ? calibrationOf(profile) : null;
-  const capacityL = profile
-    ? computeTotalCapacityL({
-        shape: profile.shape,
-        parallelUnitCount: profile.parallelUnitCount,
-        heightCm: profile.heightCm.toNumber(),
-        diameterCm: profile.diameterCm?.toNumber() ?? null,
-        lengthCm: profile.lengthCm?.toNumber() ?? null,
-        widthCm: profile.widthCm?.toNumber() ?? null,
-        nominalUnitVolumeL: profile.nominalUnitVolumeL?.toNumber() ?? null,
-      })
-    : null;
+  // Litres at 100%, so percent of it is the real volume.
+  const capacityL = capacityOf(profile);
 
   const aggregateFor = (bucket: NormalizedBucket, metric: HistoryMetric): Aggregate => {
     switch (metric) {
@@ -301,11 +289,9 @@ async function fetchBucketed(
   // Clamp inside SQL so AVG matches what computeLevelPercent would produce
   // per-reading: averaging unclamped distances first would let readings inside
   // the sensor's dead zone drag the mean past the 100% ceiling.
-  const levelExpr = profile
-    ? Prisma.sql`LEAST(GREATEST(\`level_cm\`, ${Math.max(
-        profile.sensorOffsetCm.toNumber(),
-        profile.deadZoneCm.toNumber()
-      )}), ${profile.sensorOffsetCm.toNumber() + profile.heightCm.toNumber()})`
+  const model = profile ? levelModel(geometryOf(profile)) : null;
+  const levelExpr = model
+    ? Prisma.sql`LEAST(GREATEST(\`level_cm\`, ${model.topCm}), ${model.emptyCm})`
     : Prisma.sql`\`level_cm\``;
 
   // TIMESTAMPDIFF against a fixed epoch is plain datetime arithmetic - unlike
