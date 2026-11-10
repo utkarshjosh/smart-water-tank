@@ -74,9 +74,16 @@ export function TankSetupWizard({
   initialData,
   onComplete,
   onSkip,
+  variant = 'page',
 }: {
   deviceId: string;
   initialData?: TankProfileDto | null;
+  /**
+   * 'panel' is for a narrow host that already has its own title and frame,
+   * such as the device page's side sheet: one column, no second heading, and
+   * a one-line summary in place of the three boxes.
+   */
+  variant?: 'page' | 'panel';
   onComplete: () => void;
   onSkip?: () => void;
 }) {
@@ -86,6 +93,7 @@ export function TankSetupWizard({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  const panel = variant === 'panel';
   const brimCapacityL = computeUnitCapacityL(form) * form.parallelUnitCount;
   const activeStepIndex = STEPS.findIndex((item) => item.key === step);
 
@@ -144,72 +152,104 @@ export function TankSetupWizard({
   };
 
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-100 px-4 py-3">
+    <div
+      className={
+        panel ? 'space-y-4' : 'overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm'
+      }
+    >
+      <div className={panel ? '' : 'border-b border-slate-100 px-4 py-3'}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="rounded-md bg-cyan-100 p-2 text-cyan-700">
-              <Gauge className="h-5 w-5" />
+          {!panel && (
+            <div className="flex items-start gap-3">
+              <div className="rounded-md bg-cyan-100 p-2 text-cyan-700">
+                <Gauge className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold tracking-tight text-slate-950">
+                  Tank calibration
+                </h2>
+                <p className="text-sm text-slate-500">
+                  Capture shape and size so dashboard readings map to real capacity.
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-lg font-semibold tracking-tight text-slate-950">
-                Tank calibration
-              </h2>
-              <p className="text-sm text-slate-500">
-                Capture shape and size so dashboard readings map to real capacity.
-              </p>
-            </div>
-          </div>
-          <div className="grid grid-cols-4 gap-1 rounded-md bg-slate-100 p-1">
+          )}
+          <ol
+            aria-label="Setup steps"
+            className={`grid shrink-0 grid-cols-4 gap-1 rounded-md bg-slate-100 p-1 ${panel ? 'w-full' : ''}`}
+          >
             {STEPS.map((item, index) => (
-              <span
+              <li
                 key={item.key}
-                className={`rounded px-2 py-1 text-center text-xs font-semibold ${
+                aria-current={index === activeStepIndex ? 'step' : undefined}
+                className={`whitespace-nowrap rounded px-2 py-1 text-center text-xs font-semibold ${
                   index === activeStepIndex ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500'
                 }`}
               >
                 {item.label}
-              </span>
+              </li>
             ))}
-          </div>
+          </ol>
         </div>
       </div>
 
-      <div className="grid gap-0 md:grid-cols-[0.9fr_1.1fr]">
-        <div className="border-b border-slate-100 bg-surface p-4 text-ink-1 md:border-b-0 md:border-r">
-          <div className="flex h-full min-h-72 flex-col justify-between gap-4">
-            <div className="flex items-center justify-center rounded-lg bg-surface px-4 py-5">
-              <TankDiagram
-                shape={form.shape}
-                unitCount={form.parallelUnitCount}
-                fillPercent={step === 'summary' ? 62 : null}
-                className="h-44 max-w-full"
-              />
+      <div className={panel ? 'space-y-4' : 'grid gap-0 md:grid-cols-[0.9fr_1.1fr]'}>
+        {panel ? (
+          <div className="flex items-center gap-4 rounded-lg bg-surface-sunk px-4 py-3 ring-1 ring-hairline">
+            <TankDiagram
+              shape={form.shape}
+              unitCount={form.parallelUnitCount}
+              fillPercent={step === 'summary' ? 62 : null}
+              className="h-20 w-28 shrink-0"
+            />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-ink-1">
+                <span className="capitalize">{form.shape || 'Shape not chosen'}</span>
+                {form.shape && form.parallelUnitCount > 1 ? ` · ${form.parallelUnitCount} tanks` : ''}
+              </p>
+              <p className="tnum text-sm text-ink-3">
+                {totalCapacityL > 0
+                  ? `${Math.round(totalCapacityL).toLocaleString()} L when full`
+                  : 'Capacity appears once the size is in'}
+              </p>
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="rounded-md bg-surface-sunk px-3 py-2 ring-1 ring-hairline">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-ink-3">Shape</p>
-                <p className="mt-1 truncate text-sm font-semibold capitalize">
-                  {form.shape || 'Unset'}
-                </p>
+          </div>
+        ) : (
+          <div className="border-b border-slate-100 bg-surface p-4 text-ink-1 md:border-b-0 md:border-r">
+            <div className="flex h-full min-h-72 flex-col justify-between gap-4">
+              <div className="flex items-center justify-center rounded-lg bg-surface px-4 py-5">
+                <TankDiagram
+                  shape={form.shape}
+                  unitCount={form.parallelUnitCount}
+                  fillPercent={step === 'summary' ? 62 : null}
+                  className="h-44 max-w-full"
+                />
               </div>
-              <div className="rounded-md bg-surface-sunk px-3 py-2 ring-1 ring-hairline">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-ink-3">Units</p>
-                <p className="mt-1 text-sm font-semibold">{form.parallelUnitCount}</p>
-              </div>
-              <div className="rounded-md bg-surface-sunk px-3 py-2 ring-1 ring-hairline">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-ink-3">
-                  Capacity
-                </p>
-                <p className="mt-1 truncate text-sm font-semibold">
-                  {totalCapacityL > 0 ? `${totalCapacityL.toFixed(0)}L` : 'Pending'}
-                </p>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="min-w-0 rounded-md bg-surface-sunk px-3 py-2 ring-1 ring-hairline">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-ink-3">Shape</p>
+                  <p className="mt-1 truncate text-sm font-semibold capitalize">
+                    {form.shape || 'Unset'}
+                  </p>
+                </div>
+                <div className="min-w-0 rounded-md bg-surface-sunk px-3 py-2 ring-1 ring-hairline">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-ink-3">Units</p>
+                  <p className="mt-1 text-sm font-semibold">{form.parallelUnitCount}</p>
+                </div>
+                <div className="min-w-0 rounded-md bg-surface-sunk px-3 py-2 ring-1 ring-hairline">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-ink-3">
+                    Capacity
+                  </p>
+                  <p className="tnum mt-1 truncate text-sm font-semibold">
+                    {totalCapacityL > 0 ? `${totalCapacityL.toFixed(0)}L` : 'Pending'}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
 
-        <div className="flex flex-col gap-4 p-4">
+        <div className={`flex min-w-0 flex-col gap-4 ${panel ? '' : 'p-4'}`}>
           {error && (
             <div className="w-full rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-red-800">
               <div className="flex items-start gap-3">
@@ -381,7 +421,7 @@ export function TankSetupWizard({
                   )}
                 </button>
                 {showAdvanced && (
-                  <div className="mt-2 space-y-4 rounded-lg border border-slate-200 p-3">
+                  <div className={panel ? 'mt-3 space-y-4' : 'mt-2 space-y-4 rounded-lg border border-slate-200 p-3'}>
                     <div className="space-y-2">
                       <Label htmlFor="sensor-offset-cm">Sensor height above the tank top (cm)</Label>
                       <p className="text-xs text-muted-foreground">
@@ -479,7 +519,7 @@ export function TankSetupWizard({
                 </div>
                 <p className="mt-2 text-xs text-slate-500">
                   {form.parallelUnitCount > 1
-                    ? `${form.parallelUnitCount} × ${(totalCapacityL / form.parallelUnitCount).toFixed(0)}L tanks,`
+                    ? `${form.parallelUnitCount} × ${(totalCapacityL / form.parallelUnitCount).toFixed(0)}L tanks, `
                     : ''}
                   {form.heightCm}cm tall
                 </p>

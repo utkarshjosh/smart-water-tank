@@ -27,6 +27,8 @@ export const queryKeys = {
     ['device', deviceId, 'series', from, to, metric] as const,
   deviceAlerts: (deviceId: string) => ['device', deviceId, 'alerts'] as const,
   tankProfile: (deviceId: string) => ['device', deviceId, 'tank-profile'] as const,
+  /** Per account, not per tank. Shared with the settings card. */
+  insights: ['insights'] as const,
   hourlyUsage: (deviceId: string, range: 'today' | '24h') => ['device', deviceId, 'usage-hourly', range] as const,
   tankEvents: (deviceId: string, range: 'today' | '24h' | '7d') => ['device', deviceId, 'events', range] as const,
   usageHistory: (deviceId: string, from: string, to: string, group: UsageGroup | 'auto') =>

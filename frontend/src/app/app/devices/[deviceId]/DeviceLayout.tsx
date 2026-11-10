@@ -104,6 +104,7 @@ export default function DeviceLayout() {
           </SheetHeader>
           {deviceId && (
             <TankSetupWizard
+              variant="panel"
               deviceId={deviceId}
               initialData={profile.data ?? null}
               onComplete={() => {

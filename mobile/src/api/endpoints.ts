@@ -1,3 +1,4 @@
+import { insightsResponseSchema } from '@aquamind/contracts';
 import { z } from 'zod';
 
 import { request, requestNoContent } from '@/api/client';
@@ -19,6 +20,7 @@ import {
   type UsageGroup,
   type RequestedBucket,
 } from '@/api/schemas';
+import type { TankPayload } from '@/lib/tank-setup';
 
 /**
  * Every backend call the app makes, in one place.
@@ -110,6 +112,18 @@ export const api = {
 
   getTankProfile: (deviceId: string) =>
     request(`${BASE}/devices/${id(deviceId)}/tank-profile`, tankProfileResponseSchema).then((r) => r.profile),
+
+  /** Create or replace the tank's dimensions and sensor position. */
+  saveTankProfile: (deviceId: string, profile: TankPayload) =>
+    request(`${BASE}/devices/${id(deviceId)}/tank-profile`, tankProfileResponseSchema, { method: 'PUT', body: profile }).then(
+      (r) => r.profile
+    ),
+
+  /** Every daily insight sent to this account, newest first. */
+  listInsights: () => request(`${BASE}/me/insights`, insightsResponseSchema).then((r) => r.insights),
+
+  setInsightFeedback: (insightId: string, useful: boolean) =>
+    request(`${BASE}/me/insights/${id(insightId)}/feedback`, okSchema, { method: 'POST', body: { useful } }),
 
   mintClaimCode: () => request(`${BASE}/devices/claim-code`, claimCodeSchema, { method: 'POST', body: {} }),
 
