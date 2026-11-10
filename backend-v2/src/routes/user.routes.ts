@@ -420,8 +420,10 @@ const tankProfileSchema = z.object({
   length_cm: z.coerce.number().positive().nullable().optional(),
   width_cm: z.coerce.number().positive().nullable().optional(),
   nominal_unit_volume_l: z.coerce.number().positive().nullable().optional(),
-  sensor_offset_cm: z.coerce.number().min(0).optional(),
+  // Negative when the sensor hangs inside the tank, below its top.
+  sensor_offset_cm: z.coerce.number().optional(),
   dead_zone_cm: z.coerce.number().nonnegative().optional(),
+  full_distance_cm: z.coerce.number().nonnegative().nullable().optional(),
 });
 
 // PUT /api/v1/user/devices/:deviceId/tank-profile - Set/edit tank setup

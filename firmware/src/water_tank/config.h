@@ -351,9 +351,10 @@ namespace Config {
     extern float tankFullThresholdPct;
     extern float tankLowThresholdPct;
     // Derived calibration: level_empty_cm = sensorOffset + height (raw distance
-    // when empty); level_full_cm = max(sensorOffset, deadZone) (closest
-    // measurable distance). The server sends these directly; on first boot they
-    // fall back to the compile-time LEVEL_* defines.
+    // when empty); level_full_cm = the measured distance to the water when full,
+    // or max(sensorOffset, deadZone) while nobody has measured it. The server
+    // sends these directly, with total_capacity_l as the litres at level_full_cm;
+    // on first boot they fall back to the compile-time LEVEL_* defines.
     extern float levelEmptyCm;
     extern float levelFullCm;
 

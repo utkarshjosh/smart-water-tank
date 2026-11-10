@@ -180,9 +180,12 @@ function flattenReturns(
 
 /**
  * Fastest the level of a household tank really moves, in litres a minute.
- * The live tank fills at 15-50 L/min; misreadings snap back at 130-600 L/min.
+ * The live tank fills at 12-40 L/min; misreadings snap back at 100-470 L/min.
+ *
+ * Was 100 while litres were overstated by 29% (see lib/tank-level). 80 real
+ * litres is the same line on that tank: about 7 cm of level in a minute.
  */
-export const MAX_PLAUSIBLE_RATE_L_PER_MIN = 100;
+export const MAX_PLAUSIBLE_RATE_L_PER_MIN = 80;
 
 /**
  * The sensor measures about once a minute and the device repeats the value in

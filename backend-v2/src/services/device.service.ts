@@ -3,7 +3,8 @@ import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http-error';
 import { hashClaimCode } from '../lib/claim-code';
 import { createDeviceToken } from '../lib/device-token';
-import { computeTotalCapacityL, computeVolumeL, getTankProfileRaw } from './tank-profile.service';
+import { computeUsableCapacityL, getTankProfileRaw, volumeLForProfile } from './tank-profile.service';
+import { levelModel } from '../lib/tank-level';
 import { bumpConfigVersion } from '../lib/config-version';
 import { pushConfigToDevice } from '../gateway/registry';
 import { DEFAULT_BATTERY_LOW_THRESHOLD_V } from './alert-rules.service';
@@ -127,6 +128,7 @@ export interface GeometrySource {
   nominalUnitVolumeL: number | null;
   sensorOffsetCm: number;
   deadZoneCm: number;
+  fullDistanceCm?: number | null;
 }
 
 export function profileToGeometry(profile: TankProfile): GeometrySource {
@@ -140,6 +142,7 @@ export function profileToGeometry(profile: TankProfile): GeometrySource {
     nominalUnitVolumeL: profile.nominalUnitVolumeL?.toNumber() ?? null,
     sensorOffsetCm: profile.sensorOffsetCm.toNumber(),
     deadZoneCm: profile.deadZoneCm.toNumber(),
+    fullDistanceCm: profile.fullDistanceCm?.toNumber() ?? null,
   };
 }
 
@@ -157,10 +160,12 @@ export interface GeometryBlock {
   total_capacity_l: number;
 }
 
-// Calibration derived from tank geometry. level_empty_cm is the raw distance
-// when the tank is empty (sensorOffset + height); level_full_cm is the closest
-// measurable distance (max of sensorOffset and the ultrasonic dead zone).
+// Calibration derived from tank geometry (see lib/tank-level). level_empty_cm
+// and level_full_cm are the sensor distances at 0% and 100%, and
+// total_capacity_l is the litres at 100% - so the device's own
+// percent-of-capacity arithmetic lands on the same litres as the server.
 export function buildGeometryBlock(g: GeometrySource): GeometryBlock {
+  const model = levelModel(g);
   return {
     shape: g.shape,
     diameter_cm: g.diameterCm,
@@ -170,9 +175,9 @@ export function buildGeometryBlock(g: GeometrySource): GeometryBlock {
     sensor_offset_cm: g.sensorOffsetCm,
     dead_zone_cm: g.deadZoneCm,
     parallel_unit_count: g.parallelUnitCount,
-    level_empty_cm: g.sensorOffsetCm + g.heightCm,
-    level_full_cm: Math.max(g.sensorOffsetCm, g.deadZoneCm),
-    total_capacity_l: computeTotalCapacityL(g),
+    level_empty_cm: model.emptyCm,
+    level_full_cm: model.fullCm,
+    total_capacity_l: computeUsableCapacityL(g),
   };
 }
 
@@ -373,22 +378,7 @@ export async function recordMeasurement(
   // volumeL (computed on-chip from compile-time constants) is only trusted as a
   // fallback for unprovisioned devices that have no TankProfile yet.
   const profile = await getTankProfileRaw(device.id);
-  const volumeL = profile
-    ? computeVolumeL(
-        {
-          shape: profile.shape,
-          parallelUnitCount: profile.parallelUnitCount,
-          heightCm: profile.heightCm.toNumber(),
-          diameterCm: profile.diameterCm?.toNumber() ?? null,
-          lengthCm: profile.lengthCm?.toNumber() ?? null,
-          widthCm: profile.widthCm?.toNumber() ?? null,
-          nominalUnitVolumeL: profile.nominalUnitVolumeL?.toNumber() ?? null,
-          sensorOffsetCm: profile.sensorOffsetCm.toNumber(),
-          deadZoneCm: profile.deadZoneCm.toNumber(),
-        },
-        data.levelCm
-      )
-    : data.volumeL;
+  const volumeL = profile ? volumeLForProfile(profile, data.levelCm) : data.volumeL;
 
   const measurement = await prisma.measurement.create({
     data: {

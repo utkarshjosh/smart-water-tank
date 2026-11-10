@@ -4,7 +4,6 @@ import {
   SNAP_BACK_WINDOW_MS,
   TankBand,
   alertForTransition,
-  isInBlindZone,
   isMisreadEntry,
   nextBand,
 } from '../lib/tank-band';
@@ -66,12 +65,6 @@ test('leaving a band never alerts', () => {
 test('a null threshold makes that band unreachable', () => {
   assert.equal(nextBand('normal', { fullAt: null, lowAt: null, margin: 10, value: 100 }), 'normal');
   assert.equal(nextBand('full', { fullAt: null, lowAt: 20, margin: 10, value: 100 }), 'normal');
-});
-
-test('blind zone is any distance nearer than the dead-zone edge or sensor offset', () => {
-  assert.equal(isInBlindZone(18, { sensorOffsetCm: 0, deadZoneCm: 20 }), true);
-  assert.equal(isInBlindZone(20, { sensorOffsetCm: 0, deadZoneCm: 20 }), false);
-  assert.equal(isInBlindZone(25, { sensorOffsetCm: 30, deadZoneCm: 20 }), true);
 });
 
 test('a jump into low is always a misreading; into full only soon after the band changed', () => {

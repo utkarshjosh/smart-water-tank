@@ -8,7 +8,7 @@
 
 - ✅ **Sensor must point straight down**
 - ✅ **No obstruction** within its cone (wires, tank lid ribs, inlet pipe, etc.)
-- ✅ Keep it at least **3–5 cm above max water** (to avoid the blind zone)
+- ✅ Keep the sensor face at least **25–30 cm above max water** with the JSN-SR04T. Nearer than about 20–25 cm it cannot see the water and reports wrong distances. (The A02YYUW planned for future devices needs only about 3–5 cm - see `firmware/hardware/README.md`.)
 - ✅ Ideally center it over the tank, or the flattest region of water
 
 > **Important:** Only after mounting should you calibrate — not before.

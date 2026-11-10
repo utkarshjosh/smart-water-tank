@@ -27,9 +27,9 @@ export interface BandInput {
   /** How far back past a threshold the reading must go to leave its band. */
   margin: number;
   /**
-   * The water is inside the sensor's blind zone - too close for it to measure.
-   * That only happens when the tank is at or past the top, so it reads as full
-   * whatever number came back.
+   * The water is inside the sensor's blind zone - too close for it to measure
+   * (isTooClose in lib/tank-level). That only happens when the tank is at or
+   * past the top, so it reads as full whatever number came back.
    */
   inBlindZone?: boolean;
 }
@@ -46,19 +46,6 @@ export function nextBand(previous: TankBand | null, input: BandInput): TankBand 
   if (fullAt != null && value >= fullAt) return 'full';
   if (lowAt != null && value <= lowAt) return 'low';
   return 'normal';
-}
-
-/**
- * Whether the water is inside the blind zone. levelCm is the sensor's
- * distance to the water; the blind zone is anything nearer than the dead-zone
- * edge (or the sensor offset, if that is larger - the same edge
- * computeLevelPercent treats as 100%).
- */
-export function isInBlindZone(
-  levelCm: number,
-  profile: { sensorOffsetCm: number; deadZoneCm: number }
-): boolean {
-  return levelCm < Math.max(profile.sensorOffsetCm, profile.deadZoneCm);
 }
 
 /** The alert to send for a band change, if any. Entering a band alerts; leaving one never does. */
@@ -84,7 +71,7 @@ export const SNAP_BACK_WINDOW_MS = 30 * 60_000;
  * On the live tank a single 0 cm echo read "Tank is low (0%)" and the next
  * reading "Tank full"; and a level that drifted down for an hour while the
  * tank filled snapped back to full in 20 s and sent "Tank full" again. Real
- * draws and fills there move at 15-50 L/min.
+ * draws and fills there move at 12-40 L/min.
  *
  * No tank drains that fast, so a jump into low is always a misreading. A jump
  * into full is one only soon after the band last changed: a fill that ends on

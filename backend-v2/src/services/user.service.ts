@@ -1,4 +1,4 @@
-import { AlertSeverity, AlertType, Device, Role, User } from '@prisma/client';
+import { AlertSeverity, AlertType, Device, Role, TankProfile, User } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http-error';
 import { isUniqueConstraintError } from '../lib/prisma-errors';
@@ -6,25 +6,20 @@ import { getAuth } from '../config/firebase';
 import { provisionPersonalTenantAndUser } from './onboarding.service';
 import { CLAIM_CODE_TTL_MS, generateClaimCode, hashClaimCode } from '../lib/claim-code';
 import { toMeasurementDto } from './device.service';
-import { computeLevelPercent, getTankProfileRaw, volumeLForProfile } from './tank-profile.service';
+import { computeLevelPercent, geometryOf, getTankProfileRaw, volumeLForProfile } from './tank-profile.service';
+import { isTooClose } from '../lib/tank-level';
 
-type TankProfileRaw = {
-  heightCm: { toNumber(): number };
-  sensorOffsetCm: { toNumber(): number };
-  deadZoneCm: { toNumber(): number };
-};
+type TankProfileRaw = TankProfile;
 
 function levelPercentFor(profile: TankProfileRaw | null, levelCm: number | null): number | null {
   if (!profile) return null;
-  return computeLevelPercent(levelCm, {
-    heightCm: profile.heightCm.toNumber(),
-    sensorOffsetCm: profile.sensorOffsetCm.toNumber(),
-    deadZoneCm: profile.deadZoneCm.toNumber(),
-  });
+  return computeLevelPercent(levelCm, geometryOf(profile));
 }
 
 interface LevelPercentInfo {
   level_percent: number | null;
+  /** The water is too close to the sensor: level_percent is the least it can be. */
+  level_too_close: boolean;
   level_percent_stale: boolean;
   level_percent_as_of: Date | null;
 }
@@ -38,11 +33,12 @@ async function resolveLevelPercent(
   latest: { levelCm: { toNumber(): number } | null; timestamp: Date } | null,
   profile: TankProfileRaw | null
 ): Promise<LevelPercentInfo> {
-  if (!profile) return { level_percent: null, level_percent_stale: false, level_percent_as_of: null };
+  if (!profile) return { level_percent: null, level_too_close: false, level_percent_stale: false, level_percent_as_of: null };
 
   if (latest?.levelCm != null) {
     return {
       level_percent: levelPercentFor(profile, latest.levelCm.toNumber()),
+      level_too_close: isTooClose(latest.levelCm.toNumber(), geometryOf(profile)),
       level_percent_stale: false,
       level_percent_as_of: latest.timestamp,
     };
@@ -53,10 +49,11 @@ async function resolveLevelPercent(
     orderBy: { timestamp: 'desc' },
     select: { levelCm: true, timestamp: true },
   });
-  if (!lastGood?.levelCm) return { level_percent: null, level_percent_stale: false, level_percent_as_of: null };
+  if (!lastGood?.levelCm) return { level_percent: null, level_too_close: false, level_percent_stale: false, level_percent_as_of: null };
 
   return {
     level_percent: levelPercentFor(profile, lastGood.levelCm.toNumber()),
+    level_too_close: isTooClose(lastGood.levelCm.toNumber(), geometryOf(profile)),
     level_percent_stale: true,
     level_percent_as_of: lastGood.timestamp,
   };
@@ -261,6 +258,7 @@ export async function listDevicesForTenant(tenantId: string, userId: string) {
               ? latest.volumeL.toNumber()
               : null,
         level_percent: levelInfo.level_percent,
+        level_too_close: levelInfo.level_too_close,
         level_percent_stale: levelInfo.level_percent_stale,
         level_percent_as_of: levelInfo.level_percent_as_of,
         has_tank_profile: !!profile,
@@ -298,6 +296,7 @@ export async function getDeviceCurrent(device: Device) {
     // fall back to the stored snapshot; null level -> null (never 0).
     volume_l: profile != null ? volumeLForProfile(profile, dto.level_cm) : dto.volume_l,
     level_percent: levelInfo.level_percent,
+    level_too_close: levelInfo.level_too_close,
     level_percent_stale: levelInfo.level_percent_stale,
     level_percent_as_of: levelInfo.level_percent_as_of,
   };

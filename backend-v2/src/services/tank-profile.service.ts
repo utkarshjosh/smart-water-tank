@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http-error';
 import { bumpConfigVersion } from '../lib/config-version';
 import { pushConfigToDevice } from '../gateway/registry';
+import { LevelGeometry, levelModel, levelPercent, waterDepthCm } from '../lib/tank-level';
 
 export interface TankProfileInput {
   shape: 'cylindrical' | 'cuboidal';
@@ -14,6 +15,18 @@ export interface TankProfileInput {
   nominal_unit_volume_l?: number | null;
   sensor_offset_cm?: number;
   dead_zone_cm?: number;
+  /** Omitted keeps the stored value; null clears it. */
+  full_distance_cm?: number | null;
+}
+
+/** Everything the level and volume maths needs, as plain numbers. */
+export interface TankGeometry extends LevelGeometry {
+  shape: string;
+  parallelUnitCount: number;
+  diameterCm?: number | null;
+  lengthCm?: number | null;
+  widthCm?: number | null;
+  nominalUnitVolumeL?: number | null;
 }
 
 export function computeUnitCapacityL(profile: {
@@ -46,9 +59,9 @@ export function computeTotalCapacityL(profile: {
   return computeUnitCapacityL(profile) * profile.parallelUnitCount;
 }
 
-export function capacityOf(profile: TankProfile | null): number | null {
-  if (!profile) return null;
-  return computeTotalCapacityL({
+/** Plain-number geometry from a stored profile row. */
+export function geometryOf(profile: TankProfile): TankGeometry {
+  return {
     shape: profile.shape,
     parallelUnitCount: profile.parallelUnitCount,
     heightCm: profile.heightCm.toNumber(),
@@ -56,57 +69,45 @@ export function capacityOf(profile: TankProfile | null): number | null {
     lengthCm: profile.lengthCm?.toNumber() ?? null,
     widthCm: profile.widthCm?.toNumber() ?? null,
     nominalUnitVolumeL: profile.nominalUnitVolumeL?.toNumber() ?? null,
-  });
+    sensorOffsetCm: profile.sensorOffsetCm.toNumber(),
+    deadZoneCm: profile.deadZoneCm.toNumber(),
+    fullDistanceCm: profile.fullDistanceCm?.toNumber() ?? null,
+  };
 }
 
-// levelCm is the raw ultrasonic distance `d` from the sensor face down to the
-// water surface - shape-independent. The calibration is derived from the tank
-// profile alone (not firmware's compile-time constants):
-//   levelEmptyCm     = sensorOffset + height   (reading when the tank is empty)
-//   levelFullEffCm   = max(sensorOffset, deadZone)  (closest we can measure -
-//                      the sensor is blind inside its dead zone)
-//   measurableSpanCm = levelEmptyCm - levelFullEffCm
-// Clamp-to-full model: once the surface enters the top dead-zone band
-// (d <= deadZone) the reading pins to 100% / nameplate-full; d >= levelEmpty
-// gives 0%.
-export function computeLevelPercent(
-  levelCm: number | null,
-  profile: { heightCm: number; sensorOffsetCm: number; deadZoneCm: number }
-): number | null {
-  // No reading this cycle (sensor disconnected/no echo) - unknown, not 0%.
+/** Litres held in one centimetre of depth, across all the joined tanks. */
+export function litresPerCm(g: TankGeometry): number {
+  return g.heightCm > 0 ? computeTotalCapacityL(g) / g.heightCm : 0;
+}
+
+/**
+ * Litres in the tank at 100%: the water between the empty and full lines.
+ * Less than the brim-full figure from computeTotalCapacityL whenever the tank
+ * stops filling below its top, which is every tank with a float valve.
+ */
+export function computeUsableCapacityL(g: TankGeometry): number {
+  return Math.max(0, levelModel(g).spanCm) * litresPerCm(g);
+}
+
+/** The capacity everything is measured against: litres at 100%. */
+export function capacityOf(profile: TankProfile | null): number | null {
+  if (!profile) return null;
+  return computeUsableCapacityL(geometryOf(profile));
+}
+
+// levelCm is the raw ultrasonic distance from the sensor face down to the
+// water. The rules for turning it into a level live in lib/tank-level.
+export function computeLevelPercent(levelCm: number | null, profile: LevelGeometry): number | null {
+  return levelPercent(levelCm, profile);
+}
+
+// Server-side canonical volume: the measured depth of water times the tank's
+// real cross-section. At 100% it equals computeUsableCapacityL, so litres and
+// percent on the dashboard can never disagree. Null when the level is
+// unreadable (never 0).
+export function computeVolumeL(profile: TankGeometry, levelCm: number | null): number | null {
   if (levelCm == null) return null;
-
-  const levelEmptyCm = profile.sensorOffsetCm + profile.heightCm;
-  const levelFullEffCm = Math.max(profile.sensorOffsetCm, profile.deadZoneCm);
-  const measurableSpanCm = levelEmptyCm - levelFullEffCm;
-  if (measurableSpanCm <= 0) return 0;
-
-  const clampedD = Math.min(levelEmptyCm, Math.max(levelFullEffCm, levelCm));
-  const percent = (100 * (levelEmptyCm - clampedD)) / measurableSpanCm;
-  return Math.min(100, Math.max(0, percent));
-}
-
-// Server-side canonical volume: percentage of measured fill applied to the
-// nameplate capacity (area * height). Self-consistent with computeLevelPercent
-// so the dashboard's liters and percent can never disagree. Returns null when
-// the level is unreadable (never 0), mirroring computeLevelPercent.
-export function computeVolumeL(
-  profile: {
-    shape: string;
-    parallelUnitCount: number;
-    heightCm: number;
-    diameterCm?: number | null;
-    lengthCm?: number | null;
-    widthCm?: number | null;
-    nominalUnitVolumeL?: number | null;
-    sensorOffsetCm: number;
-    deadZoneCm: number;
-  },
-  levelCm: number | null
-): number | null {
-  const percent = computeLevelPercent(levelCm, profile);
-  if (percent == null) return null;
-  return (percent / 100) * computeTotalCapacityL(profile);
+  return waterDepthCm(levelCm, profile) * litresPerCm(profile);
 }
 
 // Read-time volume derivation: recompute liters from a raw TankProfile row +
@@ -115,45 +116,30 @@ export function computeVolumeL(
 // snapshot) or when the level is unreadable (never 0).
 export function volumeLForProfile(profile: TankProfile | null, levelCm: number | null): number | null {
   if (!profile) return null;
-  return computeVolumeL(
-    {
-      shape: profile.shape,
-      parallelUnitCount: profile.parallelUnitCount,
-      heightCm: profile.heightCm.toNumber(),
-      diameterCm: profile.diameterCm?.toNumber() ?? null,
-      lengthCm: profile.lengthCm?.toNumber() ?? null,
-      widthCm: profile.widthCm?.toNumber() ?? null,
-      nominalUnitVolumeL: profile.nominalUnitVolumeL?.toNumber() ?? null,
-      sensorOffsetCm: profile.sensorOffsetCm.toNumber(),
-      deadZoneCm: profile.deadZoneCm.toNumber(),
-    },
-    levelCm
-  );
+  return computeVolumeL(geometryOf(profile), levelCm);
 }
 
 export function toTankProfileDto(profile: TankProfile) {
-  const plain = {
-    shape: profile.shape,
-    parallelUnitCount: profile.parallelUnitCount,
-    heightCm: profile.heightCm.toNumber(),
-    diameterCm: profile.diameterCm?.toNumber() ?? null,
-    lengthCm: profile.lengthCm?.toNumber() ?? null,
-    widthCm: profile.widthCm?.toNumber() ?? null,
-    nominalUnitVolumeL: profile.nominalUnitVolumeL?.toNumber() ?? null,
-  };
+  const g = geometryOf(profile);
+  const usableL = computeUsableCapacityL(g);
 
   return {
     shape: profile.shape,
     parallel_unit_count: profile.parallelUnitCount,
-    height_cm: plain.heightCm,
-    diameter_cm: plain.diameterCm,
-    length_cm: plain.lengthCm,
-    width_cm: plain.widthCm,
-    nominal_unit_volume_l: plain.nominalUnitVolumeL,
-    sensor_offset_cm: profile.sensorOffsetCm.toNumber(),
-    dead_zone_cm: profile.deadZoneCm.toNumber(),
-    unit_capacity_l: computeUnitCapacityL(plain),
-    total_capacity_l: computeTotalCapacityL({ ...plain, parallelUnitCount: profile.parallelUnitCount }),
+    height_cm: g.heightCm,
+    diameter_cm: g.diameterCm ?? null,
+    length_cm: g.lengthCm ?? null,
+    width_cm: g.widthCm ?? null,
+    nominal_unit_volume_l: g.nominalUnitVolumeL ?? null,
+    sensor_offset_cm: g.sensorOffsetCm,
+    dead_zone_cm: g.deadZoneCm,
+    full_distance_cm: g.fullDistanceCm ?? null,
+    // Litres at 100%, so "X L of Y L" on a screen adds up. These two fields
+    // used to be the brim-full figure, which the readings could never reach.
+    unit_capacity_l: usableL / profile.parallelUnitCount,
+    total_capacity_l: usableL,
+    /** Filled to the brim, from the dimensions alone. */
+    nameplate_capacity_l: computeTotalCapacityL(g),
   };
 }
 
@@ -196,8 +182,36 @@ function validateShapeFields(input: TankProfileInput): void {
   }
 }
 
+/** Rejects a setup the sensor could not measure anything in. */
+function validateLevels(input: TankProfileInput, fullDistanceCm: number | null): void {
+  const model = levelModel({
+    heightCm: input.height_cm,
+    sensorOffsetCm: input.sensor_offset_cm ?? 0,
+    deadZoneCm: input.dead_zone_cm ?? 25,
+    fullDistanceCm,
+  });
+  if (model.emptyCm <= 0) {
+    throw new HttpError(400, 'sensor_offset_cm puts the sensor below the bottom of the tank');
+  }
+  if (model.fullCm >= model.emptyCm) {
+    throw new HttpError(400, 'full_distance_cm must be less than the distance to the bottom of the tank');
+  }
+  if (model.blindCm >= model.emptyCm) {
+    throw new HttpError(400, 'The whole tank is closer to the sensor than dead_zone_cm, so nothing can be measured');
+  }
+}
+
 export async function upsertTankProfile(device: Device, input: TankProfileInput) {
   validateShapeFields(input);
+
+  // A client that does not know about the full line must not wipe it.
+  const existing =
+    input.full_distance_cm === undefined
+      ? await prisma.tankProfile.findUnique({ where: { deviceId: device.id }, select: { fullDistanceCm: true } })
+      : null;
+  const fullDistanceCm =
+    input.full_distance_cm === undefined ? (existing?.fullDistanceCm?.toNumber() ?? null) : input.full_distance_cm;
+  validateLevels(input, fullDistanceCm);
 
   const data = {
     shape: input.shape,
@@ -209,6 +223,7 @@ export async function upsertTankProfile(device: Device, input: TankProfileInput)
     nominalUnitVolumeL: input.nominal_unit_volume_l ?? null,
     sensorOffsetCm: input.sensor_offset_cm ?? 0,
     deadZoneCm: input.dead_zone_cm ?? 25,
+    fullDistanceCm,
   };
 
   const profile = await prisma.tankProfile.upsert({

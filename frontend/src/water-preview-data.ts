@@ -30,6 +30,7 @@ export function waterPreviewData(scenario: WaterScenario) {
     nominal_unit_volume_l: null,
     sensor_offset_cm: 0,
     dead_zone_cm: 20,
+    full_distance_cm: null,
     unit_capacity_l: 1145,
     total_capacity_l: 1145,
   };

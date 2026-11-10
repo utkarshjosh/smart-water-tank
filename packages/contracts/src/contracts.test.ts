@@ -40,6 +40,7 @@ describe('user: device summary', () => {
     last_seen: T,
     current_volume: 812.5,
     level_percent: 64,
+    level_too_close: false,
     level_percent_stale: false,
     level_percent_as_of: T,
     has_tank_profile: true,
@@ -49,6 +50,11 @@ describe('user: device summary', () => {
 
   it('parses a live row', () => {
     expect(deviceSummarySchema.parse(row)).toEqual(row);
+  });
+
+  it('a row from a server older than level_too_close reads as not too close', () => {
+    const { level_too_close: _dropped, ...older } = row;
+    expect(deviceSummarySchema.parse(older).level_too_close).toBe(false);
   });
 
   it('a never-reported device is all nulls, never zeros', () => {
