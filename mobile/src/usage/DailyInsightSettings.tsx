@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  insightSettingsSchema,
-  insightPreviewSchema,
-  insightsResponseSchema,
-} from '@aquamind/contracts';
-import { StyleSheet, Switch, View } from 'react-native';
+import { insightSettingsSchema, insightPreviewSchema } from '@aquamind/contracts';
+import { useRouter } from 'expo-router';
+import { CaretRight } from 'phosphor-react-native';
+import { Pressable, StyleSheet, Switch, View } from 'react-native';
 import { request } from '@/api/client';
+import { api } from '@/api/endpoints';
+import { queryKeys } from '@/api/queries';
 import { Card, Text, Button } from '@/ui/components';
 import { space, useTheme } from '@/ui/theme';
 
@@ -17,6 +17,7 @@ export function DailyInsightSettings({
   notificationsEnabled: boolean;
 }) {
   const { colors } = useTheme();
+  const router = useRouter();
   const client = useQueryClient();
   const settings = useQuery({
     queryKey: ['insight-settings'],
@@ -32,10 +33,8 @@ export function DailyInsightSettings({
         insightPreviewSchema,
       ),
   });
-  const insights = useQuery({
-    queryKey: ['insights'],
-    queryFn: () => request('/api/v1/user/me/insights', insightsResponseSchema),
-  });
+  // Same key and shape as the insights screen, so a rating made there shows here.
+  const insights = useQuery({ queryKey: queryKeys.insights, queryFn: () => api.listInsights() });
   const toggle = useMutation({
     mutationFn: (enabled: boolean) =>
       request('/api/v1/user/me/insight-settings', insightSettingsSchema, {
@@ -45,7 +44,7 @@ export function DailyInsightSettings({
     onSuccess: (data) => client.setQueryData(['insight-settings'], data),
   });
   const enabled = settings.data?.enabled ?? false;
-  const latest = insights.data?.insights[0];
+  const latest = insights.data?.[0];
   const sentToday = latest && latest.local_date === preview.data?.local_date;
   const status = !enabled
     ? 'Off · choose whether to receive it'
@@ -107,6 +106,19 @@ export function DailyInsightSettings({
           <Text variant="body">{latest.text}</Text>
         </View>
       )}
+      {latest && (
+        <Pressable
+          onPress={() => router.push('/insights')}
+          hitSlop={8}
+          accessibilityRole="link"
+          style={styles.link}
+        >
+          <Text variant="heading" color="primary">
+            Past insights
+          </Text>
+          <CaretRight size={16} color={colors.primary} />
+        </Pressable>
+      )}
     </Card>
   );
 }
@@ -114,4 +126,5 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   copy: { flex: 1, gap: space.xs },
   status: { borderRadius: 12, padding: space.md, gap: space.sm },
+  link: { alignItems: 'center', alignSelf: 'flex-end', flexDirection: 'row', gap: space.xs },
 });

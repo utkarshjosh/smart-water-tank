@@ -7,8 +7,8 @@ import { useEffect } from 'react';
 import { parseNotificationPayload } from '@/push/payload';
 
 /**
- * Opening the app from a notification lands on the tank it is about, not the
- * home screen.
+ * Opening the app from a notification lands on what it is about - the tank
+ * for an alert, the insight list for a daily insight - not the home screen.
  *
  * Three routes in, because Android delivers a tap differently depending on
  * what drew the notification and what state the app was in:
@@ -26,7 +26,9 @@ export function useNotificationRouting(enabled: boolean): void {
     const open = (data: unknown) => {
       const payload = parseNotificationPayload(data);
       if (!payload || cancelled) return;
-      router.push(`/device/${payload.device_id}`);
+      // An insight is something to read and rate, not a state of the tank.
+      if ('insight_id' in payload) router.push('/insights');
+      else router.push(`/device/${payload.device_id}`);
     };
 
     const unsubscribe = notifee.onForegroundEvent(({ type, detail }) => {

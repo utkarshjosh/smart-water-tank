@@ -16,7 +16,7 @@ import {
   formatVolts,
 } from '@/lib/format';
 import { METRICS, METRIC_BY_VALUE, RANGES, rangeToWindow, type Metric, type RangeKey } from '@/lib/metrics';
-import { Card, Divider, Label, Text } from '@/ui/components';
+import { Button, Card, Divider, Label, Text } from '@/ui/components';
 import { Screen } from '@/ui/Screen';
 import { radius, space, useTheme, type Colors } from '@/ui/theme';
 import { GlassTank } from '@/viz/GlassTank';
@@ -371,10 +371,17 @@ export default function DeviceDetailScreen() {
               <Row label="Tanks plumbed together" value={String(profile.data.parallel_unit_count)} />
             </>
           )}
-          <Divider />
-          <Row label="Sensor offset" value={formatCm(profile.data.sensor_offset_cm)} />
-          <Divider />
-          <Row label="Dead zone" value={formatCm(profile.data.dead_zone_cm)} />
+          <Pressable
+            onPress={() => router.push({ pathname: '/tank-setup', params: { device: id } })}
+            hitSlop={8}
+            accessibilityRole="link"
+            style={styles.link}
+          >
+            <Text variant="heading" color="primary">
+              Tank setup
+            </Text>
+            <CaretRight size={16} color={colors.primary} />
+          </Pressable>
         </Card>
       ) : (
         <Card accent="warn">
@@ -383,9 +390,10 @@ export default function DeviceDetailScreen() {
             Level percentage and volume are both derived from the tank&rsquo;s geometry. Until it is set,
             only the raw sensor distance is meaningful.
           </Text>
-          <Text variant="caption" color="mutedForeground">
-            The setup wizard lands in the next phase; the web app can set it in the meantime.
-          </Text>
+          <Button
+            title="Set up tank"
+            onPress={() => router.push({ pathname: '/tank-setup', params: { device: id } })}
+          />
         </Card>
       )}
 
